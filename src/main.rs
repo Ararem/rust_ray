@@ -1,8 +1,13 @@
 use shadow_rs::{shadow, Format};
+use color_eyre::eyre::{self, WrapErr};
+use tracing::instrument;
 
 shadow!(build); //Required for shadow-rs to work
 
-fn main() {
+#[instrument]
+fn main() -> eyre::Result<()> {
+    color_eyre::install()?; //Set up eyre (with colours) for error handling
+
     println!("Hello, world!");
 
     let local_time = shadow_rs::DateTime::now().human_format();
@@ -15,7 +20,8 @@ fn main() {
     println!("git_clean:{}", shadow_rs::git_clean());
     println!("git_status_file:{}", shadow_rs::git_status_file());
 
-    build::print_build_in();
+    print_build();
+    Ok(())
 }
 
 #[allow(dead_code)]
