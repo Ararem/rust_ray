@@ -1,10 +1,7 @@
 #![warn(missing_docs)]
 
-//!
-
 use std::io;
 
-use clap::*;
 use color_eyre::eyre::{self};
 use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
@@ -30,14 +27,8 @@ fn main() -> eyre::Result<()> {
     init_tracing()?;
     debug!("[tracing] and [eyre] initialised");
 
-    debug_span!("parse_cli_args").in_scope(|| {
-        let args = CliArgs::parse();
+    debug!("Skipping CLI args");
 
-        for _ in 0..args.count {
-            info!("Hello {}!", args.name)
-        }
-    });
-    //
     // info!("");
     //
     // let _span = info_span!("empty_span").entered();
@@ -54,26 +45,9 @@ fn main() -> eyre::Result<()> {
     // assert_eq!(5, 5, "5 is five");
     // assert_eq!(5, 69, "5 isn't 69");
 
+    info!("goodbye");
     return Ok(());
-    // return Err(eyre!("Test lol: {} {asd} {string}", 1, asd = 69420));
 }
-
-/// CLI Arguments for the program
-///
-/// Parsed by [clap] in [main]
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = )]
-#[command()]
-struct CliArgs {
-    /// Name of the person to greet
-    #[arg(short, long)]
-    name: String,
-
-    /// Number of times to greet
-    #[arg(short, long, default_value_t = 1)]
-    count: u8,
-}
-
 ///
 fn init_tracing() -> eyre::Result<(), TryInitError> {
     use tracing_error::*;
