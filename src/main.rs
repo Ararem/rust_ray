@@ -4,7 +4,9 @@
 
 use std::io;
 
+use clap::*;
 use color_eyre::eyre::{self};
+use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use pretty_assertions::{self, assert_eq, assert_ne, assert_str_eq};
 use shadow_rs::shadow;
@@ -15,27 +17,61 @@ use tracing_subscriber::util::TryInitError;
 
 shadow!(build); //Required for shadow-rs to work
 
+/// Main entrypoint for the program
+///
+/// Handles the important setup before handing control over to the actual program:
+/// * Initialises `eyre` (for panic/error handling)
+/// * Initialises `tracing` (for logging)
+/// * Processes command-line arguments
+/// * Runs the program for real
 fn main() -> eyre::Result<()> {
     //Init the important stuff
     init_eyre()?;
     init_tracing()?;
+    debug!("[tracing] and [eyre] initialised");
 
-    let _span = info_span!("empty_span").entered();
-    let _span = info_span!("test_span", test_prop = "HOLA").entered();
-    let _span = info_span!("child_span", i_am_a_child = "true").entered();
-    event!(Level::INFO, "something happened");
-    event!(Level::DEBUG, "something happened");
-    event!(Level::ERROR, "something happened");
-    event!(Level::TRACE, "something happened");
-    event!(Level::WARN, "something happened");
-    info!("TEST)");
+    debug_span!("parse_cli_args").in_scope(|| {
+        let args = CliArgs::parse();
 
-    let string = "string";
-    assert_eq!(5, 5, "5 is five");
-    assert_eq!(5, 69, "5 isn't 69");
+        for _ in 0..args.count {
+            info!("Hello {}!", args.name)
+        }
+    });
+    //
+    // info!("");
+    //
+    // let _span = info_span!("empty_span").entered();
+    // let _span = info_span!("test_span", test_prop = "HOLA").entered();
+    // let _span = info_span!("child_span", i_am_a_child = "true").entered();
+    // event!(Level::INFO, "something happened");
+    // event!(Level::DEBUG, "something happened");
+    // event!(Level::ERROR, "something happened");
+    // event!(Level::TRACE, "something happened");
+    // event!(Level::WARN, "something happened");
+    // info!("TEST)");
+    //
+    // let string = "string";
+    // assert_eq!(5, 5, "5 is five");
+    // assert_eq!(5, 69, "5 isn't 69");
 
-    // return Ok(());
-    return Err(eyre!("Test lol: {} {asd} {string}", 1, asd = 69420));
+    return Ok(());
+    // return Err(eyre!("Test lol: {} {asd} {string}", 1, asd = 69420));
+}
+
+/// CLI Arguments for the program
+///
+/// Parsed by [clap] in [main]
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = )]
+#[command()]
+struct CliArgs {
+    /// Name of the person to greet
+    #[arg(short, long)]
+    name: String,
+
+    /// Number of times to greet
+    #[arg(short, long, default_value_t = 1)]
+    count: u8,
 }
 
 ///
