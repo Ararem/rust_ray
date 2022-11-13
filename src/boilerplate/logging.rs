@@ -1,0 +1,44 @@
+use std::io;
+use color_eyre::eyre;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::fmt::{format, time};
+use tracing_subscriber::fmt::format::FmtSpan;
+
+pub fn init_tracing() -> eyre::Result<()> {
+    use tracing_error::*;
+    use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
+
+    let standard_format = format()
+        .compact()
+        .with_ansi(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_target(false)
+        .with_level(true)
+        .with_timer(time::time())
+        .with_source_location(false)
+        .with_level(true);
+
+    let standard_layer = fmt::layer()
+        .with_span_events(FmtSpan::ACTIVE)
+        .log_internal_errors(true)
+        .event_format(standard_format)
+        .with_writer(io::stdout)
+        .with_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::TRACE.into())
+                .from_env_lossy()
+        )
+        // .with_test_writer()
+        // .with_timer(time())
+        ;
+
+    let error_layer = ErrorLayer::default();
+
+    tracing_subscriber::registry()
+        .with(standard_layer)
+        .with(error_layer)
+        .try_init()?;
+
+    Ok(())
+}
