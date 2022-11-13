@@ -24,10 +24,10 @@ color-backtrace = "0.5.1"
 indoc = "1.0.7"
 # ImGUI dependencies
 clipboard = "0.5"
-glium = { version = "0.30.2", default-features = true }
-imgui = {version = "0.8.2", features = ["tables-api"]}
-imgui-glium-renderer = "0.8.2"
-imgui-winit-support = "0.8.2"
+glium = { version = "0.30", default-features = true } # DO NOT CHANGE TO >0.30 OR IT WILL BREAK (different winit versions)
+imgui = {version = "0.8", features = ["tables-api"]}
+imgui-glium-renderer = "0.8"
+imgui-winit-support = "0.8"
 
 [build-dependencies]
-shadow-rs = "0.17.1" #Needs to run at build-time, so include as build dependency
+shadow-rs = "0.17.1" # Needs to run at build-time, so include as build dependency

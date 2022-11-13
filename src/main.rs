@@ -2,37 +2,34 @@
 
 //! A little test raytracer project
 mod core;
-// mod core::clipboard_integration;
-
-use std::io;
-use std::process::Termination;
-
+use crate::core::clipboard_integration;
 use color_eyre::eyre;
 use color_eyre::eyre::WrapErr;
-use glium::{Display, glutin};
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
+use glium::{glutin, Display};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use pretty_assertions::{self, assert_eq, assert_ne, assert_str_eq};
 use shadow_rs::shadow;
+use std::io;
 use tracing::metadata::LevelFilter;
 use tracing::*;
 use tracing_subscriber::{
     fmt::{format::*, time},
     util::TryInitError,
 };
-use crate::core::clipboard_integration;
 
 shadow!(build); //Required for shadow-rs to work
 
-///Struct that encapsulates the UI system components
+/// Struct that encapsulates the UI system components
 pub struct UiSystem {
     pub display: Display,
     pub event_loop: EventLoop<()>,
     pub imgui_context: Context,
     pub platform: WinitPlatform,
+    /// The renderer that renders the current UI system
     pub renderer: Renderer,
 }
 
@@ -46,6 +43,7 @@ pub struct UiConfig {
 }
 
 impl UiConfig {
+    // Creates a new UI config object with default values
     pub fn new() -> UiConfig {
         UiConfig {
             hardware_acceleration: None,
@@ -54,7 +52,6 @@ impl UiConfig {
         }
     }
 }
-
 
 /// Main entrypoint for the program
 ///
@@ -70,52 +67,68 @@ fn main() -> eyre::Result<()> {
 
     debug!("Skipping CLI and Env args");
 
-    let mut ui_system = init_imgui("Test Title for the <APP>", UiConfig{multisampling: 1, vsync: true, hardware_acceleration: Some(false)})?;
+    let mut ui_system = init_imgui(
+        "Test Title for the <APP>",
+        UiConfig {
+            multisampling: 1,
+            vsync: true,
+            hardware_acceleration: Some(false),
+        },
+    )?;
 
     //Event loop
     info!("Running program");
-    let mut last_frame = std::time::Instant::now();
-    ui_system.event_loop.run(move |event, _, control_flow| match event {
-        glium::glutin::event::Event::NewEvents(_) => {
-            ui_system.imgui_context
-                .io_mut()
-                .update_delta_time(last_frame.elapsed());
-            last_frame = std::time::Instant::now();
-        }
+    let mut last_frame = time::Instant::now();
+    ui_system
+        .event_loop
+        .run(move |event, _, control_flow| match event {
+            glutin::event::Event::NewEvents(_) => {
+                ui_system
+                    .imgui_context
+                    .io_mut()
+                    .update_delta_time(last_frame.elapsed());
+                last_frame = time::Instant::now();
+            }
 
-        glium::glutin::event::Event::MainEventsCleared => {
-            let gl_window = ui_system.display.gl_window();
-            ui_system. platform
-                .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
-                .expect("Failed to prepare frame");
-            gl_window.window().request_redraw();
-        }
+            glutin::event::Event::MainEventsCleared => {
+                let gl_window = ui_system.display.gl_window();
+                ui_system
+                    .platform
+                    .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
+                    .expect("Failed to prepare frame");
+                gl_window.window().request_redraw();
+            }
 
-        glium::glutin::event::Event::RedrawRequested(_) => {
-            let ui = ui_system.imgui_context.frame();
+            glutin::event::Event::RedrawRequested(_) => {
+                let ui = ui_system.imgui_context.frame();
 
-            let gl_window = ui_system.display.gl_window();
-            let mut target = ui_system.display.draw();
-            ui_system.platform.prepare_render(&ui, gl_window.window());
-            let draw_data = ui.render();
-            ui_system. renderer
-                .render(&mut target, draw_data)
-                .expect("UI rendering failed");
-            target.finish().expect("Failed to swap buffers");
-        }
+                let gl_window = ui_system.display.gl_window();
+                let mut target = ui_system.display.draw();
+                ui_system.platform.prepare_render(&ui, gl_window.window());
+                let draw_data = ui.render();
+                ui_system
+                    .renderer
+                    .render(&mut target, draw_data)
+                    .expect("UI rendering failed");
+                target.finish().expect("Failed to swap buffers");
+            }
 
-        glium::glutin::event::Event::WindowEvent {
-            event: glium::glutin::event::WindowEvent::CloseRequested,
-            ..
-        } => {
-            *control_flow = glium::glutin::event_loop::ControlFlow::Exit;
-        }
+            glutin::event::Event::WindowEvent {
+                event: glutin::event::WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = glutin::event_loop::ControlFlow::Exit;
+            }
 
-        event => {
-            let gl_window = ui_system.display.gl_window();
-            ui_system.platform.handle_event(ui_system.imgui_context.io_mut(), gl_window.window(), &event);
-        }
-    });
+            event => {
+                let gl_window = ui_system.display.gl_window();
+                ui_system.platform.handle_event(
+                    ui_system.imgui_context.io_mut(),
+                    gl_window.window(),
+                    &event,
+                );
+            }
+        });
     info!("Ran to completion");
 
     info!("goodbye");
@@ -188,7 +201,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             .with_multisampling(config.multisampling);
         trace!("creating window builder");
         let window_builder = WindowBuilder::new().with_title(title); //TODO: Configure
-    trace!("creating display");
+        trace!("creating display");
         display = Display::new(window_builder, glutin_context_builder, &event_loop)
             .wrap_err("could not initialise display")?;
         trace!("Creating [imgui] context");
