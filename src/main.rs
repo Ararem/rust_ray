@@ -47,7 +47,7 @@ fn init_tracing() -> eyre::Result<()> {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
     let standard_format = format()
-        // .compact()
+        .compact()
         .with_ansi(true)
         .with_thread_ids(true)
         .with_thread_names(true)
