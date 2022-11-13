@@ -1,16 +1,22 @@
 #![warn(missing_docs)]
 
-use std::io;
+//! A little test raytracer project
 
-use color_eyre::eyre::{self};
-use color_eyre::owo_colors::OwoColorize;
-use eyre::eyre;
+mod core;
+
+use std::io;
+use std::process::Termination;
+
+use color_eyre::eyre;
+use color_eyre::eyre::WrapErr;
 use pretty_assertions::{self, assert_eq, assert_ne, assert_str_eq};
 use shadow_rs::shadow;
 use tracing::metadata::LevelFilter;
 use tracing::*;
-use tracing_subscriber::fmt::{format::*, time};
-use tracing_subscriber::util::TryInitError;
+use tracing_subscriber::{
+    fmt::{format::*, time},
+    util::TryInitError,
+};
 
 shadow!(build); //Required for shadow-rs to work
 
@@ -22,34 +28,21 @@ shadow!(build); //Required for shadow-rs to work
 /// * Processes command-line arguments
 /// * Runs the program for real
 fn main() -> eyre::Result<()> {
-    //Init the important stuff
     init_eyre()?;
     init_tracing()?;
     debug!("[tracing] and [eyre] initialised");
 
     debug!("Skipping CLI args");
 
-    // info!("");
-    //
-    // let _span = info_span!("empty_span").entered();
-    // let _span = info_span!("test_span", test_prop = "HOLA").entered();
-    // let _span = info_span!("child_span", i_am_a_child = "true").entered();
-    // event!(Level::INFO, "something happened");
-    // event!(Level::DEBUG, "something happened");
-    // event!(Level::ERROR, "something happened");
-    // event!(Level::TRACE, "something happened");
-    // event!(Level::WARN, "something happened");
-    // info!("TEST)");
-    //
-    // let string = "string";
-    // assert_eq!(5, 5, "5 is five");
-    // assert_eq!(5, 69, "5 isn't 69");
+    info!("Running program");
+    core::run_program()?;
+    info!("Ran to completion");
 
     info!("goodbye");
     return Ok(());
 }
 ///
-fn init_tracing() -> eyre::Result<(), TryInitError> {
+fn init_tracing() -> eyre::Result<()> {
     use tracing_error::*;
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
@@ -84,6 +77,7 @@ fn init_tracing() -> eyre::Result<(), TryInitError> {
         .with(standard_layer)
         .with(error_layer)
         .try_init()
+        .wrap_err("[tracing_subscriber::registry] failed to init")
 }
 
 fn init_eyre() -> eyre::Result<()> {
