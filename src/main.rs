@@ -1,8 +1,8 @@
 #![warn(missing_docs)]
 
 //! A little test raytracer project
-
-mod core::clipboard_integration;
+mod core;
+// mod core::clipboard_integration;
 
 use std::io;
 use std::process::Termination;
@@ -23,7 +23,7 @@ use tracing_subscriber::{
     fmt::{format::*, time},
     util::TryInitError,
 };
-use core::clipboard_integration;
+use crate::core::clipboard_integration;
 
 shadow!(build); //Required for shadow-rs to work
 
@@ -36,6 +36,7 @@ pub struct UiSystem {
     pub renderer: Renderer,
 }
 
+/// Struct used to configure the UI system
 #[derive(Debug)]
 pub struct UiConfig {
     pub vsync: bool,
@@ -69,10 +70,52 @@ fn main() -> eyre::Result<()> {
 
     debug!("Skipping CLI and Env args");
 
-    init_imgui("Test Title for the <APP>", UiConfig{multisampling: 1, vsync: true, hardware_acceleration: Some(false)})?;
+    let mut ui_system = init_imgui("Test Title for the <APP>", UiConfig{multisampling: 1, vsync: true, hardware_acceleration: Some(false)})?;
 
+    //Event loop
     info!("Running program");
-    core::run_program()?;
+    let mut last_frame = std::time::Instant::now();
+    ui_system.event_loop.run(move |event, _, control_flow| match event {
+        glium::glutin::event::Event::NewEvents(_) => {
+            ui_system.imgui_context
+                .io_mut()
+                .update_delta_time(last_frame.elapsed());
+            last_frame = std::time::Instant::now();
+        }
+
+        glium::glutin::event::Event::MainEventsCleared => {
+            let gl_window = ui_system.display.gl_window();
+            ui_system. platform
+                .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
+                .expect("Failed to prepare frame");
+            gl_window.window().request_redraw();
+        }
+
+        glium::glutin::event::Event::RedrawRequested(_) => {
+            let ui = ui_system.imgui_context.frame();
+
+            let gl_window = ui_system.display.gl_window();
+            let mut target = ui_system.display.draw();
+            ui_system.platform.prepare_render(&ui, gl_window.window());
+            let draw_data = ui.render();
+            ui_system. renderer
+                .render(&mut target, draw_data)
+                .expect("UI rendering failed");
+            target.finish().expect("Failed to swap buffers");
+        }
+
+        glium::glutin::event::Event::WindowEvent {
+            event: glium::glutin::event::WindowEvent::CloseRequested,
+            ..
+        } => {
+            *control_flow = glium::glutin::event_loop::ControlFlow::Exit;
+        }
+
+        event => {
+            let gl_window = ui_system.display.gl_window();
+            ui_system.platform.handle_event(ui_system.imgui_context.io_mut(), gl_window.window(), &event);
+        }
+    });
     info!("Ran to completion");
 
     info!("goodbye");
@@ -154,7 +197,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 
     {
         let log_span = debug_span!("trying to enable clipboard support").entered();
-        match clipboard::init() {
+        match clipboard_integration::init() {
             Ok(clipboard_backend) => {
                 trace!("have clipboard support");
                 imgui.set_clipboard_backend(clipboard_backend);
@@ -210,7 +253,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             config: Some(font_config),
             size_pixels: font_size,
             data: include_bytes!(
-                "../../resources/fonts/JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
+                "resources/fonts/JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
             ),
         };
 
