@@ -1,29 +1,16 @@
 #![warn(missing_docs)]
 
 //! A little test raytracer project
-mod core;
 mod boilerplate;
+mod program;
+
 use color_eyre::eyre;
-use color_eyre::eyre::WrapErr;
-use glium::glutin::event_loop::EventLoop;
-use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use glium::glutin::window::WindowBuilder;
-use glium::{glutin, Display, Surface};
-use imgui::{Context, FontConfig, FontSource};
-use imgui_glium_renderer::Renderer;
-use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use pretty_assertions::{self, assert_eq, assert_ne, assert_str_eq};
+use glium::{glutin, Surface};
+use pretty_assertions::{self};
 use shadow_rs::shadow;
-use std::io;
 use std::time::Instant;
-use tracing::metadata::LevelFilter;
 use tracing::*;
-use tracing_subscriber::{
-    fmt::{format::*, time},
-    util::TryInitError,
-};
-use boilerplate::{logging, ui_system, error_handling, clipboard_integration};
-use ui_system::init_imgui;
+use crate::boilerplate::ui_system::{init_imgui, UiConfig};
 use crate::boilerplate::error_handling::init_eyre;
 use crate::boilerplate::logging::init_tracing;
 
@@ -46,7 +33,7 @@ fn main() -> eyre::Result<()> {
 
     let mut ui_system = init_imgui(
         "Test Title for the <APP>",
-        ui_system::UiConfig {
+        UiConfig {
             vsync: true,
             hardware_acceleration: Some(true),
         },
@@ -79,7 +66,7 @@ fn main() -> eyre::Result<()> {
                     let ui = ui_system.imgui_context.frame();
 
                     //This is where we have to actually do the rendering
-                    core::program::tick(&ui);
+                    program::tick(&ui);
 
                     let gl_window = ui_system.display.gl_window();
                     let mut target = ui_system.display.draw();
