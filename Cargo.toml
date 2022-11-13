@@ -23,12 +23,13 @@ tracing-error = "0.2.0"
 color-backtrace = "0.5.1"
 indoc = "1.0.7"
 # Actual dependencies
-imgui = "0.8.2"
-image = "0.24.4"
-clipboard = "0.5.0"
-glium = "0.32.1"
-imgui-glium-renderer = "0.8.2"
-imgui-winit-support = "0.8.2"
+imgui = { version = "0.8.2", features = ["tables-api"] }
+image = "0.23"
+clipboard = "0.5"
+glium = { version = "0.30", default-features= true }
+imgui-glium-renderer = "0.8"
+winit = "0.27"
+imgui-winit-support = "0.8"
 
 [build-dependencies]
 shadow-rs = "0.17.1" #Needs to run at build-time, so include as build dependency

@@ -7,7 +7,7 @@ use glium::{glutin, Display};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use tracing::{debug, debug_span, instrument, trace, trace_span, warn};
+use tracing::{debug, debug_span, instrument, trace, trace_span, warn, Instrument};
 
 mod clipboard;
 
@@ -47,7 +47,9 @@ pub fn init(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     let display;
     let mut imgui;
     let event_loop;
-    debug_span!("creating basic objects").in_scope(|| {
+
+    {
+        let log_span = debug_span!("creating basic objects").entered();
         //TODO: More config options
         trace!("cloning title");
         let title = title.to_owned();
@@ -65,31 +67,35 @@ pub fn init(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             .wrap_err("could not initialise display")?;
         trace!("Creating [imgui] context");
         imgui = Context::create();
+    }
 
-        Ok(())
-    })?;
-
-    debug_span!("trying to enable clipboard support").in_scope(|| match clipboard::init() {
-        Ok(clipboard_backend) => {
-            trace!("have clipboard support");
-            imgui.set_clipboard_backend(clipboard_backend);
+    {
+        let log_span = debug_span!("trying to enable clipboard support").entered();
+        match clipboard::init() {
+            Ok(clipboard_backend) => {
+                trace!("have clipboard support");
+                imgui.set_clipboard_backend(clipboard_backend);
+            }
+            Err(error) => {
+                warn!("could not initialise clipboard: {error}")
+            }
         }
-        Err(error) => {
-            warn!("could not initialise clipboard: {error}")
-        }
-    });
+    }
 
     let mut platform;
-    trace_span!("creating WinitPlatform").in_scope(|| {
+    {
+        let log_span = debug_span!("initialising winit platform").entered();
         platform = WinitPlatform::init(&mut imgui);
         let gl_window = display.gl_window();
         let window = gl_window.window();
         //TODO: High DPI setting
         platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
-    });
+    }
 
     //TODO: Proper resource manager
-    debug_span!("adding fonts").in_scope(|| {
+    {
+        let log_span = debug_span!("adding fonts").entered();
+
         // Fixed font size. Note imgui_winit_support uses "logical
         // pixels", which are physical pixels scaled by the devices
         // scaling factor. Meaning, 13.0 pixels should look the same size
@@ -125,10 +131,10 @@ pub fn init(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             ),
         };
 
-        let fonts = &[standard_font, fallback_font];
         trace!("standard font: {standard_font:?}, fallback: {fallback_font:?}");
+        let fonts = &[standard_font, fallback_font];
         imgui.fonts().add_font(fonts);
-    });
+    }
 
     debug!("creating renderer");
     let renderer = Renderer::init(&mut imgui, &display).wrap_err("failed to create renderer")?;
