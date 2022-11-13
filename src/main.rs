@@ -6,14 +6,16 @@ use crate::core::clipboard_integration;
 use color_eyre::eyre;
 use color_eyre::eyre::WrapErr;
 use glium::glutin::event_loop::EventLoop;
+use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::glutin::window::WindowBuilder;
-use glium::{glutin, Display};
+use glium::{glutin, Display, Surface};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use pretty_assertions::{self, assert_eq, assert_ne, assert_str_eq};
 use shadow_rs::shadow;
 use std::io;
+use std::time::Instant;
 use tracing::metadata::LevelFilter;
 use tracing::*;
 use tracing_subscriber::{
@@ -38,19 +40,6 @@ pub struct UiSystem {
 pub struct UiConfig {
     pub vsync: bool,
     pub hardware_acceleration: Option<bool>,
-    /// Optional multisampling
-    pub multisampling: u16,
-}
-
-impl UiConfig {
-    // Creates a new UI config object with default values
-    pub fn new() -> UiConfig {
-        UiConfig {
-            hardware_acceleration: None,
-            vsync: true,
-            multisampling: 1,
-        }
-    }
 }
 
 /// Main entrypoint for the program
@@ -70,69 +59,70 @@ fn main() -> eyre::Result<()> {
     let mut ui_system = init_imgui(
         "Test Title for the <APP>",
         UiConfig {
-            multisampling: 1,
             vsync: true,
-            hardware_acceleration: Some(false),
+            hardware_acceleration: Some(true),
         },
     )?;
 
     //Event loop
-    info!("Running program");
-    let mut last_frame = time::Instant::now();
-    ui_system
-        .event_loop
-        .run(move |event, _, control_flow| match event {
-            glutin::event::Event::NewEvents(_) => {
-                ui_system
-                    .imgui_context
-                    .io_mut()
-                    .update_delta_time(last_frame.elapsed());
-                last_frame = time::Instant::now();
-            }
+    info_span!("run").in_scope(|| {
+        let mut last_frame = Instant::now();
+        ui_system.event_loop.run(move |event, _, control_flow| {
+            // trace!("[ui] event: {event:?}");
+            match event {
+                glutin::event::Event::NewEvents(_) => {
+                    ui_system
+                        .imgui_context
+                        .io_mut()
+                        .update_delta_time(last_frame.elapsed());
+                    last_frame = Instant::now();
+                }
 
-            glutin::event::Event::MainEventsCleared => {
-                let gl_window = ui_system.display.gl_window();
-                ui_system
-                    .platform
-                    .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
-                    .expect("Failed to prepare frame");
-                gl_window.window().request_redraw();
-            }
+                glutin::event::Event::MainEventsCleared => {
+                    let gl_window = ui_system.display.gl_window();
+                    ui_system
+                        .platform
+                        .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
+                        .expect("Failed to prepare frame");
+                    gl_window.window().request_redraw();
+                }
 
-            glutin::event::Event::RedrawRequested(_) => {
-                let ui = ui_system.imgui_context.frame();
+                glutin::event::Event::RedrawRequested(_) => {
+                    let ui = ui_system.imgui_context.frame();
 
-                let gl_window = ui_system.display.gl_window();
-                let mut target = ui_system.display.draw();
-                ui_system.platform.prepare_render(&ui, gl_window.window());
-                let draw_data = ui.render();
-                ui_system
-                    .renderer
-                    .render(&mut target, draw_data)
-                    .expect("UI rendering failed");
-                target.finish().expect("Failed to swap buffers");
-            }
+                    //This is where we have to actually do the rendering
+                    core::program::tick(&ui);
 
-            glutin::event::Event::WindowEvent {
-                event: glutin::event::WindowEvent::CloseRequested,
-                ..
-            } => {
-                *control_flow = glutin::event_loop::ControlFlow::Exit;
-            }
+                    let gl_window = ui_system.display.gl_window();
+                    let mut target = ui_system.display.draw();
+                    target.clear_color_srgb(0.0, 0.0, 0.0, 0.0); //Clear
+                    ui_system.platform.prepare_render(&ui, gl_window.window());
+                    let draw_data = ui.render();
+                    ui_system
+                        .renderer
+                        .render(&mut target, draw_data)
+                        .expect("UI rendering failed");
+                    target.finish().expect("Failed to swap buffers");
+                }
 
-            event => {
-                let gl_window = ui_system.display.gl_window();
-                ui_system.platform.handle_event(
-                    ui_system.imgui_context.io_mut(),
-                    gl_window.window(),
-                    &event,
-                );
+                glutin::event::Event::WindowEvent {
+                    event: glutin::event::WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    *control_flow = glutin::event_loop::ControlFlow::Exit;
+                }
+
+                event => {
+                    let gl_window = ui_system.display.gl_window();
+                    ui_system.platform.handle_event(
+                        ui_system.imgui_context.io_mut(),
+                        gl_window.window(),
+                        &event,
+                    );
+                }
             }
         });
-    info!("Ran to completion");
-
-    info!("goodbye");
-    return Ok(());
+    })
 }
 
 fn init_tracing() -> eyre::Result<()> {
@@ -169,8 +159,9 @@ fn init_tracing() -> eyre::Result<()> {
     tracing_subscriber::registry()
         .with(standard_layer)
         .with(error_layer)
-        .try_init()
-        .wrap_err("[tracing_subscriber::registry] failed to init")
+        .try_init()?;
+
+    Ok(())
 }
 
 fn init_eyre() -> eyre::Result<()> {
@@ -197,13 +188,12 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         trace!("creating glutin context builder");
         let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
             .with_vsync(config.vsync)
-            .with_hardware_acceleration(config.hardware_acceleration)
-            .with_multisampling(config.multisampling);
+            .with_hardware_acceleration(config.hardware_acceleration);
         trace!("creating window builder");
         let window_builder = WindowBuilder::new().with_title(title); //TODO: Configure
         trace!("creating display");
         display = Display::new(window_builder, glutin_context_builder, &event_loop)
-            .wrap_err("could not initialise display")?;
+            .expect("could not initialise display");
         trace!("Creating [imgui] context");
         imgui = Context::create();
     }
@@ -270,13 +260,13 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             ),
         };
 
-        trace!("standard font: {standard_font:?}, fallback: {fallback_font:?}");
         let fonts = &[standard_font, fallback_font];
         imgui.fonts().add_font(fonts);
+        trace!("added fonts");
     }
 
     debug!("creating renderer");
-    let renderer = Renderer::init(&mut imgui, &display).wrap_err("failed to create renderer")?;
+    let renderer = Renderer::init(&mut imgui, &display).expect("failed to create renderer");
 
     Ok(UiSystem {
         event_loop,
