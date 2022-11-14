@@ -1,6 +1,6 @@
-use std::error::Error;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use imgui::ClipboardBackend;
+use std::error::Error;
 use tracing::*;
 
 /// Wrapper struct for [ClipboardContext] that allows integration with [imgui]
@@ -11,11 +11,10 @@ pub struct ImguiClipboardSupport {
 }
 
 /// (Tries to) initialise clipboard support
-pub fn init() ->  Result<ImguiClipboardSupport, Box<dyn Error>> {
-    ClipboardContext::new()
-        .map(|val| ImguiClipboardSupport {
-            backing_context: val,
-        })
+pub fn init() -> Result<ImguiClipboardSupport, Box<dyn Error>> {
+    ClipboardContext::new().map(|val| ImguiClipboardSupport {
+        backing_context: val,
+    })
 }
 
 impl ClipboardBackend for ImguiClipboardSupport {

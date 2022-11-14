@@ -1,13 +1,14 @@
-use std::io;
 use color_eyre::eyre;
+use std::io;
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt::{format, time};
 use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::{format, time};
 
 pub fn init_tracing() -> eyre::Result<()> {
     use tracing_error::*;
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
+    //This is all simple config stuff, not much to explain
     let standard_format = format()
         .compact()
         .with_ansi(true)

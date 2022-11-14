@@ -2,20 +2,21 @@
 
 //! A little test raytracer project
 mod boilerplate;
+mod engine;
 mod program;
 
+use crate::boilerplate::error_handling::init_eyre;
+use crate::boilerplate::logging::init_tracing;
+use crate::boilerplate::ui_system::{init_imgui, UiConfig};
 use color_eyre::eyre;
+use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::{glutin, Surface};
 use pretty_assertions::{self};
 use shadow_rs::shadow;
 use std::time::Instant;
 use tracing::*;
-use crate::boilerplate::ui_system::{init_imgui, UiConfig};
-use crate::boilerplate::error_handling::init_eyre;
-use crate::boilerplate::logging::init_tracing;
 
 shadow!(build); //Required for shadow-rs to work
-
 
 /// Main entrypoint for the program
 ///
@@ -32,7 +33,13 @@ fn main() -> eyre::Result<()> {
     debug!("Skipping CLI and Env args");
 
     let mut ui_system = init_imgui(
-        "Test Title for the <APP>",
+        std::format!(
+            "{} v{} - {}",
+            build::PROJECT_NAME,
+            build::PKG_VERSION,
+            build::BUILD_TARGET
+        )
+        .as_str(),
         UiConfig {
             vsync: true,
             hardware_acceleration: Some(true),
@@ -40,9 +47,17 @@ fn main() -> eyre::Result<()> {
     )?;
 
     //Event loop
-    info_span!("run").in_scope(|| {
-        let mut last_frame = Instant::now();
-        ui_system.event_loop.run(move |event, _, control_flow| {
+    let program = program::Program { test: true };
+    let mut last_frame = Instant::now();
+
+    let run_span = info_span!("run");
+    let imgui_internal_span = debug_span!("imgui_internal");
+    let _run_span_entered = run_span.enter();
+    let _imgui_internal_span_entered = imgui_internal_span.enter();
+
+    let exit_code:i32 = ui_system
+        .event_loop
+        .run_return(|event, _window_target, control_flow| {
             // trace!("[ui] event: {event:?}");
             match event {
                 glutin::event::Event::NewEvents(_) => {
@@ -66,7 +81,9 @@ fn main() -> eyre::Result<()> {
                     let ui = ui_system.imgui_context.frame();
 
                     //This is where we have to actually do the rendering
-                    program::tick(&ui);
+                    // imgui_trace_span.exit();
+                    program.tick(&ui);
+                    // imgui_trace_span.enter();
 
                     let gl_window = ui_system.display.gl_window();
                     let mut target = ui_system.display.draw();
@@ -97,6 +114,9 @@ fn main() -> eyre::Result<()> {
                 }
             }
         });
-    })
-}
 
+    drop(_run_span_entered);
+
+    info!("exit_code: {exit_code}");
+    exit_code
+}

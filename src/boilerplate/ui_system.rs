@@ -1,12 +1,13 @@
+use std::path::{Path, PathBuf};
+use crate::boilerplate::clipboard_integration;
 use color_eyre::eyre;
-use glium::{Display, glutin};
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
+use glium::{glutin, Display};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use tracing::{debug, debug_span, instrument, trace, warn};
-use crate::boilerplate::clipboard_integration;
 
 /// Struct that encapsulates the UI system components
 pub struct UiSystem {
@@ -25,7 +26,6 @@ pub struct UiConfig {
     pub hardware_acceleration: Option<bool>,
 }
 
-
 ///Initialises the UI system and returns it
 ///
 /// * `title` - Title of the created window
@@ -37,7 +37,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     let event_loop;
 
     {
-        let log_span = debug_span!("creating basic objects").entered();
+        let _span = debug_span!("creating basic objects").entered();
         //TODO: More config options
         trace!("cloning title");
         let title = title.to_owned();
@@ -49,15 +49,17 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             .with_hardware_acceleration(config.hardware_acceleration);
         trace!("creating window builder");
         let window_builder = WindowBuilder::new().with_title(title); //TODO: Configure
-    trace!("creating display");
+        trace!("creating display");
         display = Display::new(window_builder, glutin_context_builder, &event_loop)
             .expect("could not initialise display");
         trace!("Creating [imgui] context");
         imgui = Context::create();
+        // imgui.set_ini_filename(Some(PathBuf::from("./imgui.ini")));
+        // imgui.set_log_filename()
     }
 
     {
-        let log_span = debug_span!("trying to enable clipboard support").entered();
+        let _span = debug_span!("trying to enable clipboard support").entered();
         match clipboard_integration::init() {
             Ok(clipboard_backend) => {
                 trace!("have clipboard support");
@@ -71,7 +73,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 
     let mut platform;
     {
-        let log_span = debug_span!("initialising winit platform").entered();
+        let _span = debug_span!("initialising winit platform").entered();
         platform = WinitPlatform::init(&mut imgui);
         let gl_window = display.gl_window();
         let window = gl_window.window();
@@ -81,7 +83,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 
     //TODO: Proper resource manager
     {
-        let log_span = debug_span!("adding fonts").entered();
+        let _span = debug_span!("adding fonts").entered();
 
         // Fixed font size. Note imgui_winit_support uses "logical
         // pixels", which are physical pixels scaled by the devices
