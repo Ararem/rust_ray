@@ -1,4 +1,3 @@
-use std::path::{Path, PathBuf};
 use crate::boilerplate::clipboard_integration;
 use color_eyre::eyre;
 use glium::glutin::event_loop::EventLoop;
@@ -7,7 +6,14 @@ use glium::{glutin, Display};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use log_expr;
+use std::path::{Path, PathBuf};
 use tracing::{debug, debug_span, instrument, trace, warn};
+
+/*
+TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
+        Should probably add an enum selection to [UiConfig]. Also see if it's possible to change hotly or requires a reload
+*/
 
 /// Struct that encapsulates the UI system components
 pub struct UiSystem {
@@ -37,7 +43,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     let event_loop;
 
     {
-        let _span = debug_span!("creating basic objects").entered();
+        debug!("creating basic objects");
         //TODO: More config options
         trace!("cloning title");
         let title = title.to_owned();
@@ -59,7 +65,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     }
 
     {
-        let _span = debug_span!("trying to enable clipboard support").entered();
+        debug!("trying to enable clipboard support");
         match clipboard_integration::init() {
             Ok(clipboard_backend) => {
                 trace!("have clipboard support");
@@ -73,24 +79,27 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 
     let mut platform;
     {
-        let _span = debug_span!("initialising winit platform").entered();
-        platform = WinitPlatform::init(&mut imgui);
-        let gl_window = display.gl_window();
-        let window = gl_window.window();
         //TODO: High DPI setting
-        platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
+        debug!("creating winit platform");
+        platform = log_expr!(WinitPlatform::init(&mut imgui));
+        trace!("attaching window");
+        platform.attach_window(
+            imgui.io_mut(),
+            display.gl_window().window(),
+            HiDpiMode::Default,
+        );
     }
 
     //TODO: Proper resource manager
     {
-        let _span = debug_span!("adding fonts").entered();
+        debug!("adding fonts");
 
         // Fixed font size. Note imgui_winit_support uses "logical
         // pixels", which are physical pixels scaled by the devices
-        // scaling factor. Meaning, 13.0 pixels should look the same size
+        // scaling factor. Meaning, 15.0 pixels should look the same size
         // on two different screens, and thus we do not need to scale this
         // value (as the scaling is handled by winit)
-        let font_size = 13.0;
+        let font_size = 15.0;
         let font_config = FontConfig {
             //TODO: Configure
             // Oversampling font helps improve text rendering at
@@ -110,18 +119,26 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         };
 
         let fallback_font = FontSource::DefaultFontData {
-            config: Some(font_config.clone()),
+            config: Some(FontConfig {
+                name: "Proggy Clean".to_string().into(),
+                ..font_config.clone()
+            }),
         };
         let standard_font = FontSource::TtfData {
-            config: Some(font_config),
+            config: Some(FontConfig {
+                name: "JetBrains Mono v2.242".to_string().into(),
+                ..font_config.clone()
+            }),
             size_pixels: font_size,
             data: include_bytes!(
-                "../resources/fonts/JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
+                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
             ),
         };
 
-        let fonts = &[standard_font, fallback_font];
-        imgui.fonts().add_font(fonts);
+        imgui.fonts().clear_fonts();
+        imgui.fonts().add_font(&[fallback_font]);
+        imgui.fonts().add_font(&[standard_font]);
+        imgui.fonts().build_rgba32_texture();
         trace!("added fonts");
     }
 

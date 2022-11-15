@@ -1,21 +1,23 @@
 #![warn(missing_docs)]
 
 //! A little test raytracer project
+extern crate core;
+
 mod boilerplate;
+mod build_config;
 mod engine;
 mod program;
 
 use crate::boilerplate::error_handling::init_eyre;
 use crate::boilerplate::logging::init_tracing;
 use crate::boilerplate::ui_system::{init_imgui, UiConfig};
-use color_eyre::eyre::eyre;
-use color_eyre::{eyre};
+use color_eyre::eyre;
+use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
+use glium::{glutin, Surface};
 use shadow_rs::shadow;
 use std::process::ExitCode;
 use std::time::Instant;
-use glium::glutin;
-use glium::glutin::event_loop::{ControlFlow, EventLoopWindowTarget};
 use tracing::*;
 
 shadow!(build); //Required for shadow-rs to work
@@ -54,26 +56,75 @@ fn main() -> eyre::Result<ExitCode> {
 
     let run_span = info_span!("run");
     let imgui_internal_span = debug_span!("imgui_internal");
-    let _run_span_entered = run_span.enter();
-    let _imgui_internal_span_entered = imgui_internal_span.enter();
 
-    let exit_code:i32 = ui_system
+    //Enter the imgui_internal span so that any logs will be inside that span by default
+    let guard_imgui_internal_span = imgui_internal_span.enter();
+    ui_system
         .event_loop
-        .run_return(event_loop_run);
+        .run_return(move |event, _window_target, control_flow| {
+            if build_config::tracing::ENABLE_UI_TRACE {
+                trace!("ui event: {event:?}");
+            } //Log UI event if required
+            match event {
+                //We have new events, but we don't care what they are, just need to update frame timings
+                glutin::event::Event::NewEvents(_) => {
+                    ui_system
+                        .imgui_context
+                        .io_mut()
+                        .update_delta_time(last_frame.elapsed());
+                    last_frame = Instant::now();
+                }
 
-    drop(_run_span_entered);
+                glutin::event::Event::MainEventsCleared => {
+                    let gl_window = ui_system.display.gl_window();
+                    ui_system
+                        .platform
+                        .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
+                        .expect("Failed to prepare frame");
+                    gl_window.window().request_redraw();
+                }
 
-    info!("exit_code: {exit_code}");
+                //This only gets called when something changes (not constantly), but it doesn't matter too much since it should be real-time
+                glutin::event::Event::RedrawRequested(_) => {
+                    let ui = ui_system.imgui_context.frame();
 
-    return match exit_code {
-        0 => Ok(ExitCode::SUCCESS),
-        code => Err(eyre!(
-            "run loop returned non-zero exit code {:?}",
-            code
-        )),
-    };
-}
+                    //This is where we have to actually do the rendering
+                    program.tick(&ui);
 
-fn event_loop_run(event: glium::glutin::event::Event<()>, window_target: &EventLoopWindowTarget<()>, control_flow: &mut ControlFlow){
+                    let gl_window = ui_system.display.gl_window();
+                    let mut target = ui_system.display.draw();
+                    target.clear_color_srgb(0.0, 0.0, 0.0, 0.0); //Clear
+                    ui_system.platform.prepare_render(&ui, gl_window.window());
+                    let draw_data = ui.render();
+                    ui_system
+                        .renderer
+                        .render(&mut target, draw_data)
+                        .expect("UI rendering failed");
+                    target.finish().expect("Failed to swap buffers");
+                }
 
+                //Handle window events, we just do close events
+                glutin::event::Event::WindowEvent {
+                    event: glutin::event::WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    *control_flow = ControlFlow::Exit;
+                }
+
+                //Catch-all passes onto the glutin backend
+                event => {
+                    let gl_window = ui_system.display.gl_window();
+                    ui_system.platform.handle_event(
+                        ui_system.imgui_context.io_mut(),
+                        gl_window.window(),
+                        &event,
+                    );
+                }
+            }
+        });
+
+    drop(guard_imgui_internal_span);
+
+    info!("Goodbye");
+    return Ok(ExitCode::SUCCESS);
 }

@@ -4,6 +4,16 @@ use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::{format, time};
 
+/// Logs an expression, then inserts the expression into the block so that the value can still be used
+#[macro_export] macro_rules! log_expr {
+    ($e:expr) => {
+        {
+            tracing::trace!(stringify!($e));
+            $e
+        }
+    };
+}
+
 pub fn init_tracing() -> eyre::Result<()> {
     use tracing_error::*;
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};

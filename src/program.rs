@@ -9,7 +9,11 @@ pub(crate) struct Program{
 
 impl Program {
     /// Called every frame, only place where rendering can occur
-    pub(crate) fn tick(mut self, ui: &Ui) {
+    pub(crate) fn tick(mut self, ui: &Ui)
+    {
         ui.show_demo_window(&mut self.test);
+        if ui.button("Crash") {
+            panic!("Test");
+        }
     }
 }

@@ -1,4 +1,4 @@
 pub mod clipboard_integration;
 pub mod error_handling;
-pub mod logging;
+#[macro_use] pub mod logging;
 pub mod ui_system;
