@@ -99,7 +99,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         // scaling factor. Meaning, 15.0 pixels should look the same size
         // on two different screens, and thus we do not need to scale this
         // value (as the scaling is handled by winit)
-        let font_size = 15.0;
+        let font_size = 50.0;
         let font_config = FontConfig {
             //TODO: Configure
             // Oversampling font helps improve text rendering at
@@ -111,33 +111,69 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             // it's font rendering, we apply an arbitrary
             // multiplier to make the font a bit "heavier". With
             // default imgui-glow-renderer this is unnecessary.
-            rasterizer_multiply: 1.5,
+            // rasterizer_multiply: 1.5,
             //Sets everything to default
             //Except the stuff we overrode before
             //SO COOOL!!
             ..FontConfig::default()
         };
 
-        let fallback_font = FontSource::DefaultFontData {
-            config: Some(FontConfig {
-                name: "Proggy Clean".to_string().into(),
-                ..font_config.clone()
-            }),
-        };
-        let standard_font = FontSource::TtfData {
-            config: Some(FontConfig {
-                name: "JetBrains Mono v2.242".to_string().into(),
-                ..font_config.clone()
-            }),
-            size_pixels: font_size,
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
-            ),
-        };
+        //TODO: Multiple families of a font
 
-        imgui.fonts().clear_fonts();
-        imgui.fonts().add_font(&[fallback_font]);
-        imgui.fonts().add_font(&[standard_font]);
+        macro_rules! font {
+            ($name:literal, $path:literal) => {{
+                //Yes i did write these all by hand
+                font_sized!($name, 8f32, $path);
+                font_sized!($name, 10f32, $path);
+                font_sized!($name, 12f32, $path);
+                font_sized!($name, 14f32, $path);
+                font_sized!($name, 16f32, $path);
+                font_sized!($name, 18f32, $path);
+                font_sized!($name, 20f32, $path);
+                font_sized!($name, 22f32, $path);
+                font_sized!($name, 24f32, $path);
+                font_sized!($name, 26f32, $path);
+                font_sized!($name, 28f32, $path);
+                font_sized!($name, 30f32, $path);
+                font_sized!($name, 32f32, $path);
+                font_sized!($name, 34f32, $path);
+                font_sized!($name, 36f32, $path);
+                font_sized!($name, 38f32, $path);
+                font_sized!($name, 40f32, $path);
+                font_sized!($name, 42f32, $path);
+                font_sized!($name, 44f32, $path);
+                font_sized!($name, 46f32, $path);
+                font_sized!($name, 48f32, $path);
+                font_sized!($name, 50f32, $path);
+                font_sized!($name, 52f32, $path);
+                font_sized!($name, 54f32, $path);
+                font_sized!($name, 56f32, $path);
+                font_sized!($name, 58f32, $path);
+                font_sized!($name, 60f32, $path);
+                font_sized!($name, 62f32, $path);
+                font_sized!($name, 64f32, $path);
+            }};
+        }
+        macro_rules! font_sized {
+            //TODO: Make the macro accept a path not just any old expression
+            ($name:literal, $size:expr, $path:literal) => {{
+                let font = FontSource::TtfData {
+                    config: Some(FontConfig {
+                        name: format!("{name} ({size}px)", name = $name, size = $size).into(),
+                        ..font_config.clone()
+                    }),
+                    size_pixels: $size,
+                    data: include_bytes!($path),
+                };
+                imgui.fonts().add_font(&[font]);
+            }};
+        }
+imgui.fonts().add_font()
+        imgui.fonts().clear();
+        font!(
+            "Jetbrains Mono v2.242",
+            "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
+        );
         imgui.fonts().build_rgba32_texture();
         trace!("added fonts");
     }
