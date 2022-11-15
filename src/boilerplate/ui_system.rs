@@ -157,17 +157,18 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         macro_rules! font_sized {
             //TODO: Make the macro accept a path not just any old expression
             ($name:literal, $size:expr, $($path:literal),+) => {{
+                imgui.fonts().add_font(&[
                 $(
-                let font = FontSource::TtfData {
+                    FontSource::TtfData {
                     config: Some(FontConfig {
                         name: format!("{name} ({size}px)", name = $name, size = $size).into(),
                         ..font_config.clone()
                     }),
                     size_pixels: $size,
                     data: include_bytes!($path),
-                };
-                imgui.fonts().add_font(&[font]);
-                )+
+                }
+                ),+
+                ]);
             }};
         }
 
