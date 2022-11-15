@@ -121,42 +121,43 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         //TODO: Multiple families of a font
 
         macro_rules! font {
-            ($name:literal, $path:literal) => {{
+            ($name:literal, $($path:literal),+) => {{
                 //Yes i did write these all by hand
-                font_sized!($name, 8f32, $path);
-                font_sized!($name, 10f32, $path);
-                font_sized!($name, 12f32, $path);
-                font_sized!($name, 14f32, $path);
-                font_sized!($name, 16f32, $path);
-                font_sized!($name, 18f32, $path);
-                font_sized!($name, 20f32, $path);
-                font_sized!($name, 22f32, $path);
-                font_sized!($name, 24f32, $path);
-                font_sized!($name, 26f32, $path);
-                font_sized!($name, 28f32, $path);
-                font_sized!($name, 30f32, $path);
-                font_sized!($name, 32f32, $path);
-                font_sized!($name, 34f32, $path);
-                font_sized!($name, 36f32, $path);
-                font_sized!($name, 38f32, $path);
-                font_sized!($name, 40f32, $path);
-                font_sized!($name, 42f32, $path);
-                font_sized!($name, 44f32, $path);
-                font_sized!($name, 46f32, $path);
-                font_sized!($name, 48f32, $path);
-                font_sized!($name, 50f32, $path);
-                font_sized!($name, 52f32, $path);
-                font_sized!($name, 54f32, $path);
-                font_sized!($name, 56f32, $path);
-                font_sized!($name, 58f32, $path);
-                font_sized!($name, 60f32, $path);
-                font_sized!($name, 62f32, $path);
-                font_sized!($name, 64f32, $path);
+                font_sized!($name, 8f32,  $($path),+);
+                font_sized!($name, 10f32, $($path),+);
+                font_sized!($name, 12f32, $($path),+);
+                font_sized!($name, 14f32, $($path),+);
+                font_sized!($name, 16f32, $($path),+);
+                font_sized!($name, 18f32, $($path),+);
+                font_sized!($name, 20f32, $($path),+);
+                font_sized!($name, 22f32, $($path),+);
+                font_sized!($name, 24f32, $($path),+);
+                font_sized!($name, 26f32, $($path),+);
+                font_sized!($name, 28f32, $($path),+);
+                font_sized!($name, 30f32, $($path),+);
+                font_sized!($name, 32f32, $($path),+);
+                font_sized!($name, 34f32, $($path),+);
+                font_sized!($name, 36f32, $($path),+);
+                font_sized!($name, 38f32, $($path),+);
+                font_sized!($name, 40f32, $($path),+);
+                font_sized!($name, 42f32, $($path),+);
+                font_sized!($name, 44f32, $($path),+);
+                font_sized!($name, 46f32, $($path),+);
+                font_sized!($name, 48f32, $($path),+);
+                font_sized!($name, 50f32, $($path),+);
+                font_sized!($name, 52f32, $($path),+);
+                font_sized!($name, 54f32, $($path),+);
+                font_sized!($name, 56f32, $($path),+);
+                font_sized!($name, 58f32, $($path),+);
+                font_sized!($name, 60f32, $($path),+);
+                font_sized!($name, 62f32, $($path),+);
+                font_sized!($name, 64f32, $($path),+);
             }};
         }
         macro_rules! font_sized {
             //TODO: Make the macro accept a path not just any old expression
-            ($name:literal, $size:expr, $path:literal) => {{
+            ($name:literal, $size:expr, $($path:literal),+) => {{
+                $(
                 let font = FontSource::TtfData {
                     config: Some(FontConfig {
                         name: format!("{name} ({size}px)", name = $name, size = $size).into(),
@@ -166,13 +167,15 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
                     data: include_bytes!($path),
                 };
                 imgui.fonts().add_font(&[font]);
+                )+
             }};
         }
-imgui.fonts().add_font()
+
         imgui.fonts().clear();
         font!(
             "Jetbrains Mono v2.242",
-            "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Medium.ttf"
+            "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Medium.ttf",
+            "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Regular.ttf"
         );
         imgui.fonts().build_rgba32_texture();
         trace!("added fonts");
