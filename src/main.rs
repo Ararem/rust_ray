@@ -1,16 +1,14 @@
 #![warn(missing_docs)]
 
-//! A little test raytracer project
-extern crate core;
-
-mod boilerplate;
+//! # A little test raytracer project
+mod core;
 mod build_config;
 mod engine;
 mod program;
 
-use crate::boilerplate::error_handling::init_eyre;
-use crate::boilerplate::logging::init_tracing;
-use crate::boilerplate::ui_system::{init_imgui, UiConfig};
+use crate::core::error_handling::init_eyre;
+use crate::core::logging::init_tracing;
+use crate::core::ui_system::{init_imgui, UiConfig};
 use color_eyre::eyre;
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
@@ -51,7 +49,11 @@ fn main() -> eyre::Result<ExitCode> {
     )?;
 
     //Event loop
-    let program = program::Program { test: true };
+    debug!("init complete, starting");
+
+    trace!("creating new program instance");
+    let program = log_expr_val!(program::Program { test: true }, Debug);
+    let add_two_numbers = log_expr!(f64::from(5+5) * 3.21f64, custom_expression_name, "Adding numbers: {custom_expression_name}");
     let mut last_frame = Instant::now();
 
     let run_span = info_span!("run");
