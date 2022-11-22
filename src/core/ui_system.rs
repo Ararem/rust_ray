@@ -141,7 +141,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
                 // font_sized!($name, 26f32, $path);
                 // font_sized!($name, 28f32, $path);
                 // font_sized!($name, 30f32, $path);
-                font_sized!($name, 32f32, $path);
+                font_sized!($name, 32f32, $path);1
                 // font_sized!($name, 34f32, $path);
                 // font_sized!($name, 36f32, $path);
                 // font_sized!($name, 38f32, $path);
@@ -170,7 +170,6 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
                         ..font_config.clone()
                     }),
                     size_pixels: $size,
-                    data: include_bytes!($path),
                 }]);
             }};
         }

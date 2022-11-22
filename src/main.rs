@@ -52,15 +52,13 @@ fn main() -> eyre::Result<ExitCode> {
     debug!("init complete, starting");
 
     trace!("creating new program instance");
-    let program = log_expr_val!(program::Program { test: true }, Debug);
-    let add_two_numbers = log_expr!(f64::from(5+5) * 3.21f64, custom_expression_name, "Adding numbers: {custom_expression_name}");
+    let program = log_expr!(program::Program { test: true });
     let mut last_frame = Instant::now();
 
-    let run_span = info_span!("run");
     let imgui_internal_span = debug_span!("imgui_internal");
 
     //Enter the imgui_internal span so that any logs will be inside that span by default
-    let guard_imgui_internal_span = imgui_internal_span.enter();
+    let guard_imgui_internal_span = imgui_internal_span.entered();
     ui_system
         .event_loop
         .run_return(move |event, _window_target, control_flow| {
@@ -83,7 +81,7 @@ fn main() -> eyre::Result<ExitCode> {
                         .platform
                         .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
                         .expect("Failed to prepare frame");
-                    gl_window.window().request_redraw();
+                    gl_window.window().request_redraw(); //Pretty sure this makes us render constantly
                 }
 
                 //This only gets called when something changes (not constantly), but it doesn't matter too much since it should be real-time
@@ -91,8 +89,8 @@ fn main() -> eyre::Result<ExitCode> {
                     let ui = ui_system.imgui_context.frame();
 
                     //This is where we have to actually do the rendering
-                    program.tick(&ui);
-
+                    program.render(&ui);
+                    
                     let gl_window = ui_system.display.gl_window();
                     let mut target = ui_system.display.draw();
                     target.clear_color_srgb(0.0, 0.0, 0.0, 0.0); //Clear

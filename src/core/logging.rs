@@ -4,7 +4,7 @@ use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::{format, time};
 
-/// Logs an expression's string representation and returns the original expression. The format string can also be customised in the second overload
+/// Logs an expression's string representation and returns the original expression. The format string can also be customised in the second overload (with custom arguments)
 ///
 /// ### Examples:
 ///
@@ -28,6 +28,7 @@ use tracing_subscriber::fmt::{format, time};
         }
     };
 }
+/// Same as [log_expr] but includes the value of the evaluated expression
 #[macro_export] macro_rules! log_expr_val {
     ($expression:expr) => {
         log_expr_val!($expression, expr, val, "eval `{expr}` => {val}")
