@@ -1,10 +1,4 @@
-use color_eyre::eyre;
-use std::io;
-use tracing::field::{Field, Visit};
-use tracing::Value;
-use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::fmt::{format, time};
+pub(crate) mod event_targets;
 
 /// Logs an expression's string representation and returns the original expression. The format string can also be customised in the second overload (with custom arguments)
 ///

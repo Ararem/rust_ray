@@ -7,37 +7,44 @@ macro_rules! flag {
         pub static $name: bool = $value;
     };
 }
+macro_rules! string {
+    ($name:ident, $value:expr, $documentation:literal) => {
+        #[doc=$documentation]
+        pub static $name: bool = $value;
+    };
+}
 // /// Macro that generates a config flag with a given [name] and [value]. Same as [flag] but generates a `const` field not a `static` one
 // macro_rules! const_flag {
 //     ($name:ident, $value:expr) => {pub const $name:bool = $value;};
 // }
 
-pub(crate) mod tracing {
+pub mod tracing {
     use lazy_static::lazy_static;
     use regex::Regex;
-    use super::super::helper::event_targets::*;
+    use super::super::helper::logging::event_targets::*;
 
-    flag!(ENABLE_UI_TRACE, false, r"Flag to enable UI trace logging. ");
-
-    pub(crate) struct LogFilter {
-        pub(crate) regex: Regex,
-        pub(crate) enabled: bool,
+    /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
+    pub struct LogTargetFilter {
+        pub regex: Regex,
+        pub enabled: bool,
     }
-    impl LogFilter {
-        pub fn starts_with(start: &str, enabled: bool) -> LogFilter {
-            LogFilter::new(format!("{}.*", start).as_str(), enabled)
+    impl LogTargetFilter {
+        /// Creates a filter that matches if the target starts with a specified string. The input can be regex
+        pub fn starts_with(start: &str, enabled: bool) -> LogTargetFilter {
+            LogTargetFilter::new(format!("{}.*", start).as_str(), enabled)
         }
-        pub fn new(regex: &str, enabled: bool) -> LogFilter {
-            LogFilter {
+        /// Creates a new filter from a regex string
+        pub fn new(regex: &str, enabled: bool) -> LogTargetFilter {
+            LogTargetFilter {
                 regex: Regex::new(regex).expect("regex failed to parse"),
                 enabled,
             }
         }
     }
     lazy_static! {
-        pub(crate) static ref LOG_FILTERS: Vec<LogFilter> = vec![
-            LogFilter::starts_with(UI_SPAMMY, false),
-            // LogFilter::starts_with(PROGRAM_RENDER, false)
+        /// Vec of log filters. The first matching filter will affect if the event is logged or not, and if no match then the event will be logged.
+        pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
+            // LogTargetFilter::starts_with(UI_SPAMMY, false),
         ];
     }
 }

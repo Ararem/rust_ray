@@ -1,7 +1,7 @@
-mod font_manager;
 mod clipboard_integration;
+mod font_manager;
 
-use std::fmt::Formatter;
+use crate::log_expr;
 use color_eyre::eyre;
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
@@ -9,10 +9,7 @@ use glium::{glutin, Display};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use crate::helper::logging;
-use std::path::{Path, PathBuf};
 use tracing::{debug, debug_span, instrument, trace, warn};
-use crate::log_expr;
 
 /*
 TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
@@ -41,57 +38,58 @@ pub struct UiConfig {
 /// * `title` - Title of the created window
 /// * `config` - Struct that modifies how the ui system is initialised
 #[instrument]
-pub fn init_imgui_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
+pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     let display;
     let mut imgui;
     let event_loop;
+    let mut platform;
+    let renderer;
 
     {
-        debug!("creating basic objects");
+        debug_span!("window_internals");
         //TODO: More config options
         trace!("cloning title");
         let title = title.to_owned();
-        trace!("creating event loop");
+        trace!("creating [winit] event loop");
         event_loop = EventLoop::new();
-        trace!("creating glutin context builder");
+        trace!("creating [glutin] context builder");
         let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
             .with_vsync(config.vsync)
             .with_hardware_acceleration(config.hardware_acceleration);
-        trace!("creating window builder");
+        trace!("creating [winit] window builder");
         let window_builder = WindowBuilder::new().with_title(title); //TODO: Configure
-    trace!("creating display");
+        trace!("creating display");
         display = Display::new(window_builder, glutin_context_builder, &event_loop)
             .expect("could not initialise display");
         trace!("Creating [imgui] context");
         imgui = Context::create();
         // imgui.set_ini_filename(Some(PathBuf::from("./imgui.ini")));
         // imgui.set_log_filename()
-    }
-
-    {
-        debug!("trying to enable clipboard support");
-        match clipboard_integration::init() {
-            Ok(clipboard_backend) => {
-                trace!("have clipboard support");
-                imgui.set_clipboard_backend(clipboard_backend);
-            }
-            Err(error) => {
-                warn!("could not initialise clipboard: {error}")
-            }
-        }
-    }
-
-    let mut platform;
-    {
         //TODO: High DPI setting
-        debug!("creating winit platform");
-        platform = log_expr!(WinitPlatform::init(&mut imgui));
+        trace!("creating [winit] platform");
+        platform = WinitPlatform::init(&mut imgui);
         trace!("attaching window");
         platform.attach_window(
             imgui.io_mut(),
             display.gl_window().window(),
             HiDpiMode::Default,
         );
+
+        debug!("creating [glium] renderer");
+        renderer = Renderer::init(&mut imgui, &display).expect("failed to create renderer");
+    }
+
+    {
+        debug_span!("clipboard_init");
+        match clipboard_integration::init() {
+            Ok(clipboard_backend) => {
+                trace!("have clipboard support: {clipboard_backend:?}");
+                imgui.set_clipboard_backend(clipboard_backend);
+            }
+            Err(error) => {
+                warn!("could not initialise clipboard: {error}")
+            }
+        }
     }
 
     //TODO: Proper resource manager
@@ -165,14 +163,13 @@ pub fn init_imgui_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSys
         macro_rules! font_sized {
             //TODO: Make the macro accept a path not just any old expression
             ($name:literal, $size:expr, $path:literal) => {{
-                imgui.fonts().add_font(&[
-                    FontSource::TtfData {
-                        data: include_bytes!($path),
-                        config: Some(FontConfig {
-                            name: format!("{name} ({size}px)", name = $name, size = $size).into(),
-                            ..font_config.clone()
-                        }),
-                        size_pixels: $size,
+                imgui.fonts().add_font(&[FontSource::TtfData {
+                    data: include_bytes!($path),
+                    config: Some(FontConfig {
+                        name: format!("{name} ({size}px)", name = $name, size = $size).into(),
+                        ..font_config.clone()
+                    }),
+                    size_pixels: $size,
                 }]);
             }};
         }
@@ -187,8 +184,6 @@ pub fn init_imgui_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSys
         trace!("added fonts");
     }
 
-    debug!("creating renderer");
-    let renderer = Renderer::init(&mut imgui, &display).expect("failed to create renderer");
 
     Ok(UiSystem {
         event_loop,

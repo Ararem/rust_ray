@@ -7,22 +7,15 @@ mod helper;
 mod program;
 
 use color_eyre::eyre;
-use helper::event_targets::*;
-use regex::Regex;
+use helper::logging::event_targets::*;
 use shadow_rs::shadow;
-use std::collections::{HashMap, HashSet};
 use std::io;
 use std::process::ExitCode;
-use structx::*;
-use tracing::callsite::Identifier;
-use tracing::field::AsField;
 use tracing::level_filters::LevelFilter;
 use tracing::*;
-use tracing_subscriber::filter::{Directive, FilterFn};
+use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::{format, time};
-use tracing_subscriber::Layer;
-use lazy_static::lazy_static;
 
 shadow!(build); //Required for shadow-rs to work
 
@@ -36,17 +29,17 @@ shadow!(build); //Required for shadow-rs to work
 fn main() -> eyre::Result<ExitCode> {
     init_eyre()?;
     init_tracing()?;
-    debug!("Initialised [tracing] and [eyre]");
+    debug!(target: PROGRAM_CORE, "initialised [tracing] and [eyre]");
 
-    debug!("Skipping CLI and Env args");
+    debug!(target: PROGRAM_CORE, "skipping CLI and Env args");
 
     //Event loop
-    debug!("Main init complete, starting");
+    debug!(target: PROGRAM_CORE, "main init complete, starting");
 
-    trace!("Running program");
+    trace!(target: PROGRAM_CORE, "running program");
     program::run()?;
 
-    info!("Goodbye");
+    info!(target: PROGRAM_CORE, "goodbye");
     return Ok(ExitCode::SUCCESS);
 }
 
@@ -79,8 +72,7 @@ fn init_tracing() -> eyre::Result<()> {
         .with_writer(io::stdout)
         .with_filter(
             EnvFilter::builder()
-                .with_default_directive("".parse().unwrap_or(Directive::from(LevelFilter::TRACE)))
-                .with_regex(false)
+                .with_default_directive(LevelFilter::TRACE.into())
                 .from_env_lossy()
         )
         .with_filter(
