@@ -21,6 +21,10 @@ tracing-subscriber = { version = "0.3.16", features = ["json", "env-filter", "fm
 tracing-error = "0.2.0"
 pretty_assertions = "1.3.0"
 indoc = "1.0.7"
+structx = "0.1"
+regex = "1.7"
+lazy_static = "1.4"
+chrono = "0.4"
 # ImGUI dependencies
 clipboard = "0.5"
 glium = { version = "0.30", default-features = true } # DO NOT CHANGE TO >0.30 OR IT WILL BREAK (different winit versions)
@@ -30,3 +34,6 @@ imgui-winit-support = "0.8"
 
 [build-dependencies]
 shadow-rs = "0.17.1" # Needs to run at build-time, so include as build dependency
+
+[package.metadata.inwelling]
+structx = true

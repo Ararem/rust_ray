@@ -1,6 +1,7 @@
 mod font_manager;
+mod clipboard_integration;
 
-use crate::core::clipboard_integration;
+use std::fmt::Formatter;
 use color_eyre::eyre;
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
@@ -8,9 +9,10 @@ use glium::{glutin, Display};
 use imgui::{Context, FontConfig, FontSource};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use log_expr;
+use crate::helper::logging;
 use std::path::{Path, PathBuf};
 use tracing::{debug, debug_span, instrument, trace, warn};
+use crate::log_expr;
 
 /*
 TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
@@ -28,7 +30,7 @@ pub struct UiSystem {
 }
 
 /// Struct used to configure the UI system
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct UiConfig {
     pub vsync: bool,
     pub hardware_acceleration: Option<bool>,
@@ -39,7 +41,7 @@ pub struct UiConfig {
 /// * `title` - Title of the created window
 /// * `config` - Struct that modifies how the ui system is initialised
 #[instrument]
-pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
+pub fn init_imgui_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     let display;
     let mut imgui;
     let event_loop;
@@ -57,7 +59,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             .with_hardware_acceleration(config.hardware_acceleration);
         trace!("creating window builder");
         let window_builder = WindowBuilder::new().with_title(title); //TODO: Configure
-        trace!("creating display");
+    trace!("creating display");
         display = Display::new(window_builder, glutin_context_builder, &event_loop)
             .expect("could not initialise display");
         trace!("Creating [imgui] context");
@@ -141,7 +143,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
                 // font_sized!($name, 26f32, $path);
                 // font_sized!($name, 28f32, $path);
                 // font_sized!($name, 30f32, $path);
-                font_sized!($name, 32f32, $path);1
+                font_sized!($name, 32f32, $path);
                 // font_sized!($name, 34f32, $path);
                 // font_sized!($name, 36f32, $path);
                 // font_sized!($name, 38f32, $path);
@@ -165,11 +167,12 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             ($name:literal, $size:expr, $path:literal) => {{
                 imgui.fonts().add_font(&[
                     FontSource::TtfData {
-                    config: Some(FontConfig {
-                        name: format!("{name} ({size}px)", name = $name, size = $size).into(),
-                        ..font_config.clone()
-                    }),
-                    size_pixels: $size,
+                        data: include_bytes!($path),
+                        config: Some(FontConfig {
+                            name: format!("{name} ({size}px)", name = $name, size = $size).into(),
+                            ..font_config.clone()
+                        }),
+                        size_pixels: $size,
                 }]);
             }};
         }
@@ -177,7 +180,7 @@ pub fn init_imgui(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         imgui.fonts().clear();
         font!(
             "Jetbrains Mono v2.242",
-            "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMonoNL-Medium.ttf"
+            "..\\..\\resources\\fonts\\JetBrains Mono v2.242\\fonts\\ttf\\JetBrainsMonoNL-Medium.ttf"
         );
 
         imgui.fonts().build_rgba32_texture();

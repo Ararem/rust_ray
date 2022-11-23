@@ -1,130 +1,109 @@
 #![warn(missing_docs)]
 
 //! # A little test raytracer project
-mod core;
 mod build_config;
 mod engine;
+mod helper;
 mod program;
 
-use crate::core::error_handling::init_eyre;
-use crate::core::logging::init_tracing;
-use crate::core::ui_system::{init_imgui, UiConfig};
 use color_eyre::eyre;
-use glium::glutin::event_loop::ControlFlow;
-use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use glium::{glutin, Surface};
+use helper::event_targets::*;
+use regex::Regex;
 use shadow_rs::shadow;
+use std::collections::{HashMap, HashSet};
+use std::io;
 use std::process::ExitCode;
-use std::time::Instant;
+use structx::*;
+use tracing::callsite::Identifier;
+use tracing::field::AsField;
+use tracing::level_filters::LevelFilter;
 use tracing::*;
+use tracing_subscriber::filter::{Directive, FilterFn};
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::{format, time};
+use tracing_subscriber::Layer;
+use lazy_static::lazy_static;
 
 shadow!(build); //Required for shadow-rs to work
 
 /// Main entrypoint for the program
 ///
 /// Handles the important setup before handing control over to the actual program:
-/// * Initialises `eyre` (for panic/error handling)
-/// * Initialises `tracing` (for logging)
+/// * Initialises [eyre] (for panic/error handling)
+/// * Initialises [tracing] (for logging)
 /// * Processes command-line arguments
-/// * Runs the program for real
+/// * Runs the [program] for real
 fn main() -> eyre::Result<ExitCode> {
     init_eyre()?;
     init_tracing()?;
-    debug!("[tracing] and [eyre] initialised");
+    debug!("Initialised [tracing] and [eyre]");
 
     debug!("Skipping CLI and Env args");
 
-    let mut ui_system = init_imgui(
-        std::format!(
-            "{} v{} - {}",
-            build::PROJECT_NAME,
-            build::PKG_VERSION,
-            build::BUILD_TARGET
-        )
-        .as_str(),
-        UiConfig {
-            vsync: true,
-            hardware_acceleration: Some(true),
-        },
-    )?;
-
     //Event loop
-    debug!("init complete, starting");
+    debug!("Main init complete, starting");
 
-    trace!("creating new program instance");
-    let program = log_expr!(program::Program { test: true });
-    let mut last_frame = Instant::now();
-
-    let imgui_internal_span = debug_span!("imgui_internal");
-
-    //Enter the imgui_internal span so that any logs will be inside that span by default
-    let guard_imgui_internal_span = imgui_internal_span.entered();
-    ui_system
-        .event_loop
-        .run_return(move |event, _window_target, control_flow| {
-            if build_config::tracing::ENABLE_UI_TRACE {
-                trace!("ui event: {event:?}");
-            } //Log UI event if required
-            match event {
-                //We have new events, but we don't care what they are, just need to update frame timings
-                glutin::event::Event::NewEvents(_) => {
-                    ui_system
-                        .imgui_context
-                        .io_mut()
-                        .update_delta_time(last_frame.elapsed());
-                    last_frame = Instant::now();
-                }
-
-                glutin::event::Event::MainEventsCleared => {
-                    let gl_window = ui_system.display.gl_window();
-                    ui_system
-                        .platform
-                        .prepare_frame(ui_system.imgui_context.io_mut(), gl_window.window())
-                        .expect("Failed to prepare frame");
-                    gl_window.window().request_redraw(); //Pretty sure this makes us render constantly
-                }
-
-                //This only gets called when something changes (not constantly), but it doesn't matter too much since it should be real-time
-                glutin::event::Event::RedrawRequested(_) => {
-                    let ui = ui_system.imgui_context.frame();
-
-                    //This is where we have to actually do the rendering
-                    program.render(&ui);
-                    
-                    let gl_window = ui_system.display.gl_window();
-                    let mut target = ui_system.display.draw();
-                    target.clear_color_srgb(0.0, 0.0, 0.0, 0.0); //Clear
-                    ui_system.platform.prepare_render(&ui, gl_window.window());
-                    let draw_data = ui.render();
-                    ui_system
-                        .renderer
-                        .render(&mut target, draw_data)
-                        .expect("UI rendering failed");
-                    target.finish().expect("Failed to swap buffers");
-                }
-
-                //Handle window events, we just do close events
-                glutin::event::Event::WindowEvent {
-                    event: glutin::event::WindowEvent::CloseRequested,
-                    ..
-                } => {
-                    *control_flow = ControlFlow::Exit;
-                }
-
-                //Catch-all passes onto the glutin backend
-                event => {
-                    let gl_window = ui_system.display.gl_window();
-                    ui_system.platform.handle_event(
-                        ui_system.imgui_context.io_mut(),
-                        gl_window.window(),
-                        &event,
-                    );
-                }
-            }
-        });
-
-    drop(guard_imgui_internal_span);
+    trace!("Running program");
+    program::run()?;
 
     info!("Goodbye");
     return Ok(ExitCode::SUCCESS);
+}
+
+/// Initialises [eyre]. Called as part of the core init
+pub fn init_eyre() -> eyre::Result<()> {
+    color_eyre::install()
+}
+
+/// Initialises the [tracing] system. Called as part of the core init
+fn init_tracing() -> eyre::Result<()> {
+    use tracing_error::*;
+    use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
+
+    //This is all simple config stuff, not much to explain
+    let standard_format = format()
+        .compact()
+        .with_ansi(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_target(false)
+        .with_level(true)
+        .with_timer(time::time())
+        .with_source_location(false)
+        .with_level(true);
+
+    let standard_layer = fmt::layer()
+        .with_span_events(FmtSpan::ACTIVE)
+        .log_internal_errors(true)
+        .event_format(standard_format)
+        .with_writer(io::stdout)
+        .with_filter(
+            EnvFilter::builder()
+                .with_default_directive("".parse().unwrap_or(Directive::from(LevelFilter::TRACE)))
+                .with_regex(false)
+                .from_env_lossy()
+        )
+        .with_filter(
+            FilterFn::new(|meta|{
+                let target = meta.target();
+                for filter in build_config::tracing::LOG_FILTERS.iter() {
+                    if filter.regex.is_match(target) {
+                        return filter.enabled
+                    }
+                }
+                return true;
+            })
+        )
+        // .with_test_writer()
+        // .with_timer(time())
+        ;
+
+    let error_layer = ErrorLayer::default();
+
+    tracing_subscriber::registry()
+        .with(standard_layer)
+        .with(error_layer)
+        .try_init()?;
+
+    Ok(())
 }
