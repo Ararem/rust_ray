@@ -1,16 +1,38 @@
 //! Manages fonts for the UI system
 
-use imgui::{FontConfig, FontId, FontSource, Ui};
-use crate::config::ui_config::DEFAULT_FONT_SIZE;
+use crate::config::ui_config::{base_font_config, DEFAULT_FONT_SIZE};
 use crate::helper::logging::event_targets;
+use imgui::{Context, FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, Ui};
+use std::env::var;
+use color_eyre::eyre::eyre;
 use tracing::instrument;
 use tracing::trace;
+use crate::helper::logging::event_targets::UI_SPAMMY;
 
+#[derive(Debug, Clone)]
 pub struct FontManager {
     /// Fonts available for the UI
     pub fonts: Vec<Font>,
+    /// Index for which font we want to use (see [fonts])
+    selected_font_index: usize,
+    /// Index for which [FontVariant] from the selected font (see [font_index]) we want
+    selected_variant_index: usize,
+    /// Size in pixels for the selected font
+    selected_font_size: f32,
+    /// Cached [FontId] for the currently selected font. May not exist
+    cached_font_id: Option<FontId>,
+    /// Flag for if the [cached_font_id] is dirty (out of sync with the target selected values)
+    dirty: bool,
 }
+
 impl FontManager {
+    pub fn get_current_font(&self) -> color_eyre::Result<FontId> {
+        match self.cached_font_id {
+            Some(font) => return Ok(font),
+            None => return Err(eyre!("attempted to get current font when no value was stored (bad) - rebuild_font_if_necessary() should have already been called"))
+        }
+    }
+
     pub fn new() -> Self {
         FontManager{
             fonts: vec![
@@ -18,10 +40,6 @@ impl FontManager {
                 //JB Mono has a no-ligatures version, but we like ligatures so ignore that one
                 name: "JetBrains Mono",
                 variants: vec![
-                    FontVariant{
-                        name: "Regular",
-                        data: include_bytes!("../../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Regular.ttf")
-                    },
                     FontVariant{
                         name: "Thin",
                         data: include_bytes!("../../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Thin.ttf")
@@ -35,6 +53,10 @@ impl FontManager {
                         data: include_bytes!("../../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Light.ttf")
                     },
                     FontVariant{
+                        name: "Regular",
+                        data: include_bytes!("../../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Regular.ttf")
+                    },
+                    FontVariant{
                         name: "Bold",
                         data: include_bytes!("../../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Bold.ttf")
                     },
@@ -44,71 +66,89 @@ impl FontManager {
                     }
                 ]
             }
-        ]}
+        ],
+        // Indices corresponding to the default font, in this case JB Mono @ Regular
+        selected_font_index:0,
+        selected_variant_index:3,
+        selected_font_size: 20f32,
+
+        cached_font_id: None,
+        dirty: true,
+        }
     }
 
-    #[instrument(level = "debug", skip_all)]
-    pub fn add_fonts(&self, imgui: &mut imgui::Context) {
-        // Fixed font size. Note imgui_winit_support uses "logical
-        // pixels", which are physical pixels scaled by the devices
-        // scaling factor. Meaning, 15.0 pixels should look the same size
-        // on two different screens, and thus we do not need to scale this
-        // value (as the scaling is handled by winit)
-        let font_config = FontConfig {
-            //TODO: Configure
-            // Oversampling font helps improve text rendering at
-            // expense of larger font atlas texture.
-            oversample_h: 4,
-            oversample_v: 4,
-            // As imgui-glium-renderer isn't gamma-correct with
-            // it's font rendering, we apply an arbitrary
-            // multiplier to make the font a bit "heavier". With
-            // default imgui-glow-renderer this is unnecessary.
-            // rasterizer_multiply: 1.5,
-            //Sets everything to default
-            //Except the stuff we overrode before
-            //SO COOOL!!
-            ..FontConfig::default()
-        };
-        trace!("clearing builtin fonts");
-        imgui.fonts().clear();
-        for font in self.fonts.iter() {
-            trace!("processing font {font}", font = font.name);
-            for variant in font.variants.iter() {
-                trace!("processing variant {variant}", variant = variant.name);
-                trace!(
-                    target: event_targets::DATA_DUMP,
-                    "font data is {:?}",
-                    variant.data
-                );
-
-                let full_name = format!(
-                    "{name} - {variant} ({size}px)",
-                    name = font.name,
-                    variant = variant.name,
-                    size = DEFAULT_FONT_SIZE
-                )
-                .into();
-                imgui.fonts().add_font(&[FontSource::TtfData {
-                    data: variant.data,
-                    config: Some(FontConfig {
-                        name: full_name,
-                        ..font_config.clone()
-                    }),
-                    size_pixels: DEFAULT_FONT_SIZE,
-                }]);
-            }
+    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlasRefMut) {
+        if !self.dirty && self.cached_font_id != None {
+            trace!(target: UI_SPAMMY, "no need to rebuild font");
+            return;
         }
+        trace!("cached font dirty or non-existent, rebuilding");
+        let base_font = &self.fonts[self.selected_font_index];
+        let font = &base_font.variants[self.selected_variant_index];
+        let font_size = self.selected_font_size;
+        trace!(
+            "font is [{f_index}] ({f_name}), variant [{v_index}] ({v_name}), size {size}",
+            f_index = self.selected_font_index,
+            f_name = base_font.name,
+            v_index = self.selected_variant_index,
+            v_name = font.name,
+            size = font_size
+        );
+
+        trace!(
+            target: event_targets::DATA_DUMP,
+            "font data is {:?}",
+            font.data
+        );
+
+        // trace!("clearing builtin fonts");
+        // imgui.fonts().clear();
+
+        let full_name = format!(
+            "{name} - {variant} ({size}px)",
+            name = base_font.name,
+            variant = font.name,
+            size = font_size
+        )
+        .into();
+
+        let font_id = font_atlas
+            .add_font(&[FontSource::TtfData {
+                data: font.data,
+                config: Some(FontConfig {
+                    name: full_name,
+                    ..base_font_config()
+                }),
+                size_pixels: font_size,
+            }])
+            .into();
 
         //Not sure what the difference is between RGBA32 and Alpha8 atlases, other than channel count
         trace!("building font atlas");
         // imgui.fonts().build_rgba32_texture();
-        imgui.fonts().build_alpha8_texture();
+        font_atlas.build_alpha8_texture();
+
+        trace!("done rebuilding font atlas");
+        self.cached_font_id = font_id;
+        self.dirty = false;
     }
 
     /// Renders the font selector, and returns the selected font
-    pub fn render_font_selector(&mut self, ui: &Ui, font: &mut FontId) {}
+    pub fn render_font_selector(&mut self, ui: &Ui) {
+        ui.text("FONT SELECTOR GOES HERE");
+
+        let font_index = self.selected_font_index;
+        let variant_index = self.selected_variant_index;
+        //Do nothing if we aren't making any changes
+        if self.selected_font_index == font_index && self.selected_variant_index == variant_index {
+            return self.dirty = false;
+        }
+        self.selected_font_index = font_index;
+        self.selected_variant_index = variant_index;
+    }
 }
+
+#[derive(Debug, Clone)]
 pub struct Font {
     /// Name of the base font, e.g. JetBrains Mono
     name: &'static str,
@@ -117,6 +157,7 @@ pub struct Font {
 }
 
 /// A variant a font can have (i.e. bold, light, regular)
+#[derive(Debug, Copy, Clone)]
 pub struct FontVariant {
     /// Name of the variant (i.e. "light")
     name: &'static str,
