@@ -1571,6 +1571,7 @@ dependencies = [
  "chrono",
  "clipboard",
  "color-eyre",
+ "const_format",
  "glium",
  "imgui",
  "imgui-glium-renderer",

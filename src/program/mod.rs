@@ -1,37 +1,37 @@
-use crate::build;
+use crate::config::program_config::APP_TITLE;
 use crate::helper::logging::event_targets::*;
-use crate::program::ui_system::{init_ui_system, UiConfig};
+use crate::program::ui_system::init_ui_system;
 use chrono::Local;
 use color_eyre::eyre;
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use glium::{glutin, program, Surface};
-use imgui::Ui;
-use tracing::{debug_span, event, instrument, span, trace, trace_span, Level};
+use glium::{glutin, Surface};
+use imgui::{FontId, Ui};
+use tracing::{debug_span, error, instrument, trace, trace_span, warn};
+
 pub(crate) mod ui_system;
 
 #[derive(Debug, Copy, Clone)]
 struct Program {
     pub demo_window_opened: bool,
+    current_font: Option<FontId>,
+}
+
+impl Program {
+    pub fn new() -> Self {
+        Program {
+            demo_window_opened: false,
+            current_font: None,
+        }
+    }
 }
 
 ///Creates and runs the program, returning once it has completed (probably when main window is closed)
 #[instrument(ret)]
 pub(crate) fn run() -> eyre::Result<()> {
-    let mut ui_system = init_ui_system(
-        std::format!(
-            "{} v{} - {}",
-            build::PROJECT_NAME,
-            build::PKG_VERSION,
-            build::BUILD_TARGET
-        )
-        .as_str(),
-        crate::config::ui_config::UI_CONFIG,
-    )?;
+    let mut ui_system = init_ui_system(&APP_TITLE, crate::config::ui_config::UI_CONFIG)?;
     trace!("creating program instance");
-    let mut instance = Program {
-        demo_window_opened: false,
-    };
+    let mut instance = Program::new();
     trace!(?instance, "program instance created");
     let mut last_frame = Local::now();
 
@@ -71,12 +71,13 @@ pub(crate) fn run() -> eyre::Result<()> {
                 //This only gets called when something changes (not constantly), but it doesn't matter too much since it should be real-time
                 glutin::event::Event::RedrawRequested(_) => {
                     trace!(target: UI_SPAMMY, "redraw requested");
-                    let mut ctx = &mut ui_system.imgui_context;
+                    let ctx = &mut ui_system.imgui_context;
                     let ui = ctx.frame();
 
                     //This is where we have to actually do the rendering
                     let render_span =
-                        trace_span!(target: UI_SPAMMY, "render", frame = ui.frame_count()).entered();
+                        trace_span!(target: UI_SPAMMY, "render", frame = ui.frame_count())
+                            .entered();
                     render(&mut instance, &ui);
                     render_span.exit();
 
@@ -117,8 +118,18 @@ pub(crate) fn run() -> eyre::Result<()> {
 
 /// Called every frame, only place where rendering can occur
 fn render(program: &mut Program, ui: &Ui) {
+    let font_token;
+    if let Some(f) = program.current_font {
+        font_token = Some(ui.push_font(f));
+    } else {
+        warn!("program.current_font was `None`, expected to have a font");
+        font_token = None;
+    }
+
     ui.show_demo_window(&mut program.demo_window_opened);
-    if ui.button("Panic (crash)") {
-        panic!("Crashed by user manually clicking panic button");
+    font_manager::render_font_selector();
+
+    if let Some(f) = font_token {
+        f.pop();
     }
 }

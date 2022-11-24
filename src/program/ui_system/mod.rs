@@ -1,15 +1,14 @@
 mod clipboard_integration;
 mod font_manager;
 
-use crate::log_expr;
 use color_eyre::eyre;
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
 use glium::{glutin, Display};
-use imgui::{Context, FontConfig, FontSource};
+use imgui::Context;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use tracing::{debug, debug_span, instrument, trace, warn};
+use tracing::{debug_span, instrument, trace, warn};
 
 /*
 TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
@@ -24,6 +23,7 @@ pub struct UiSystem {
     pub platform: WinitPlatform,
     /// The renderer that renders the current UI system
     pub renderer: Renderer,
+    pub font_manager: FontManager
 }
 
 /// Struct used to configure the UI system

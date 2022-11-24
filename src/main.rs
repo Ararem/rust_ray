@@ -1,10 +1,10 @@
 #![warn(missing_docs)]
 
 //! # A little test raytracer project
-mod config;
 mod engine;
 mod helper;
 mod program;
+mod config;
 
 use color_eyre::eyre;
 use helper::logging::event_targets::*;
@@ -15,7 +15,7 @@ use tracing::level_filters::LevelFilter;
 use tracing::*;
 use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::fmt::{format, time};
+use crate::config::tracing_config::STANDARD_FORMAT;
 
 shadow!(build); //Required for shadow-rs to work
 
@@ -53,22 +53,10 @@ fn init_tracing() -> eyre::Result<()> {
     use tracing_error::*;
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
-    //This is all simple config stuff, not much to explain
-    let standard_format = format()
-        .compact()
-        .with_ansi(true)
-        .with_thread_ids(true)
-        .with_thread_names(true)
-        .with_target(false)
-        .with_level(true)
-        .with_timer(time::time())
-        .with_source_location(false)
-        .with_level(true);
-
     let standard_layer = fmt::layer()
         .with_span_events(FmtSpan::ACTIVE)
         .log_internal_errors(true)
-        .event_format(standard_format)
+        .event_format(STANDARD_FORMAT.clone())
         .with_writer(io::stdout)
         .with_filter(
             EnvFilter::builder()
@@ -85,10 +73,7 @@ fn init_tracing() -> eyre::Result<()> {
                 }
                 return true;
             })
-        )
-        // .with_test_writer()
-        // .with_timer(time())
-        ;
+        );
 
     let error_layer = ErrorLayer::default();
 

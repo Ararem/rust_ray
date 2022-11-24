@@ -4,6 +4,7 @@
 macro_rules! target {
     ($name:ident, $docs:literal) => {
         #[doc=$docs]
+        #[allow(dead_code)]
         pub const $name: &str = stringify!(rust_ray::$name);
     };
 }

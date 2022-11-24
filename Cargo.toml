@@ -25,6 +25,7 @@ structx = "0.1"
 regex = "1.7"
 lazy_static = "1.4"
 chrono = "0.4"
+const_format = "0.2"
 # ImGUI dependencies
 clipboard = "0.5"
 glium = { version = "0.30", default-features = true } # DO NOT CHANGE TO >0.30 OR IT WILL BREAK (different winit versions)
