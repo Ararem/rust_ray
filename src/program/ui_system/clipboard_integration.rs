@@ -22,7 +22,8 @@ impl Debug for ImguiClipboardSupport {
 }
 
 /// (Tries to) initialise clipboard support
-pub fn init() -> Result<ImguiClipboardSupport, Box<dyn Error>> {
+#[instrument(ret, level="trace")]
+pub fn clipboard_init() -> Result<ImguiClipboardSupport, Box<dyn Error>> {
     ClipboardContext::new().map(|val| ImguiClipboardSupport {
         backing_context: val,
     })

@@ -1,7 +1,7 @@
 #![warn(missing_docs)]
 
 //! # A little test raytracer project
-mod build_config;
+mod config;
 mod engine;
 mod helper;
 mod program;
@@ -78,7 +78,7 @@ fn init_tracing() -> eyre::Result<()> {
         .with_filter(
             FilterFn::new(|meta|{
                 let target = meta.target();
-                for filter in build_config::tracing::LOG_FILTERS.iter() {
+                for filter in config::tracing_config::LOG_FILTERS.iter() {
                     if filter.regex.is_match(target) {
                         return filter.enabled
                     }

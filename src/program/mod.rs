@@ -8,7 +8,7 @@ use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::{glutin, program, Surface};
 use imgui::Ui;
 use tracing::{debug_span, event, instrument, span, trace, trace_span, Level};
-mod ui_system;
+pub(crate) mod ui_system;
 
 #[derive(Debug, Copy, Clone)]
 struct Program {
@@ -16,7 +16,7 @@ struct Program {
 }
 
 ///Creates and runs the program, returning once it has completed (probably when main window is closed)
-#[instrument(fields(return))]
+#[instrument(ret)]
 pub(crate) fn run() -> eyre::Result<()> {
     let mut ui_system = init_ui_system(
         std::format!(
@@ -26,10 +26,7 @@ pub(crate) fn run() -> eyre::Result<()> {
             build::BUILD_TARGET
         )
         .as_str(),
-        UiConfig {
-            vsync: true,
-            hardware_acceleration: Some(true),
-        },
+        crate::config::ui_config::UI_CONFIG,
     )?;
     trace!("creating program instance");
     let mut instance = Program {
@@ -44,7 +41,7 @@ pub(crate) fn run() -> eyre::Result<()> {
     ui_system
         .event_loop
         .run_return(move |event, _window_target, control_flow| {
-            let _ = span!(target: UI_SPAMMY, Level::TRACE, "process_ui_event", ?event).entered();
+            let _ = trace_span!(target: UI_SPAMMY, "process_ui_event", ?event).entered();
             match event {
                 //We have new events, but we don't care what they are, just need to update frame timings
                 glutin::event::Event::NewEvents(_) => {
@@ -79,7 +76,7 @@ pub(crate) fn run() -> eyre::Result<()> {
 
                     //This is where we have to actually do the rendering
                     let render_span =
-                        trace_span!(target: UI_SPAMMY, parent: None, "render", frame = ui.frame_count()).entered();
+                        trace_span!(target: UI_SPAMMY, "render", frame = ui.frame_count()).entered();
                     render(&mut instance, &ui);
                     render_span.exit();
 

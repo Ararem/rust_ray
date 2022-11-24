@@ -18,7 +18,7 @@ macro_rules! string {
 //     ($name:ident, $value:expr) => {pub const $name:bool = $value;};
 // }
 
-pub mod tracing {
+pub mod tracing_config {
     use lazy_static::lazy_static;
     use regex::Regex;
     use super::super::helper::logging::event_targets::*;
@@ -44,7 +44,16 @@ pub mod tracing {
     lazy_static! {
         /// Vec of log filters. The first matching filter will affect if the event is logged or not, and if no match then the event will be logged.
         pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
-            // LogTargetFilter::starts_with(UI_SPAMMY, false),
+            LogTargetFilter::starts_with(UI_SPAMMY, false),
         ];
     }
+}
+
+pub mod ui_config{
+    use lazy_static::lazy_static;
+    use crate::program::ui_system::UiConfig;
+        pub static UI_CONFIG: UiConfig = UiConfig {
+            vsync: false,
+            hardware_acceleration: Some(true),
+        };
 }

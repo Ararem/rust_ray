@@ -10,7 +10,7 @@
     <option name="buildTarget" value="REMOTE" />
     <option name="backtrace" value="FULL" />
     <envs>
-      <env name="COLORBT_SHOW_HIDDEN" value="0" />
+      <env name="COLORBT_SHOW_HIDDEN" value="1" />
     </envs>
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
