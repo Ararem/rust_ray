@@ -38,7 +38,7 @@ fn render(
     //Build the UI
     {
         //Try to set our custom font
-        let maybe_font_token = match managers.font_manager.get_font_id(&mut ui) {
+        let maybe_font_token = match managers.font_manager.get_font_id() {
             Err(err) => {
                 warn!(
                 target: UI_SPAMMY,

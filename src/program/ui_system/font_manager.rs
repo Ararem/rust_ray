@@ -78,10 +78,10 @@ impl FontManager {
         trace!("clearing builtin fonts");
         font_atlas.clear();
 
-        for font in self.fonts.iter() {
+        for (font_index,font) in self.fonts.iter().enumerate() {
             trace!("processing font {font}", font = font.name);
             self.font_ids.insert(self.selected_font_index, vec![]);
-            for variant in font.variants.iter() {
+            for (variant_index,variant) in font.variants.iter().enumerate() {
                 trace!("processing variant {variant}", variant = variant.name);
                 trace!(
                     target: event_targets::DATA_DUMP,
@@ -104,8 +104,8 @@ impl FontManager {
                     }),
                     size_pixels: RENDERED_FONT_SIZE,
                 }]);
-                self.font_ids[self.selected_font_index]
-                    .insert(self.selected_variant_index, font_id);
+                self.font_ids[font_index]
+                    .insert(variant_index, font_id);
             }
         }
 
@@ -115,7 +115,7 @@ impl FontManager {
         font_atlas.build_alpha8_texture();
     }
 
-    pub fn get_font_id(&mut self, ui: &mut Ui) -> eyre::Result<&FontId>{
+    pub fn get_font_id(&mut self) -> eyre::Result<&FontId>{
         //TODO: Better error handling (actually try to get the index then fail, rather than failing early - we might be wrong)
         //Check that we have at least one FontId stored as a fallback
         if self.font_ids.len() == 0 {
