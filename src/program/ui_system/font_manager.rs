@@ -4,10 +4,11 @@ use crate::config::ui_config::{base_font_config, DEFAULT_FONT_SIZE, RENDERED_FON
 use crate::helper::logging::event_targets;
 use crate::helper::logging::event_targets::UI_SPAMMY;
 use color_eyre::eyre::eyre;
-use imgui::{Context, FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, Ui};
+use imgui::{Context, FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, Ui};
 use std::env::var;
-use tracing::instrument;
+use color_eyre::eyre;
 use tracing::trace;
+use tracing::{instrument, warn};
 
 #[derive(Debug, Clone)]
 pub struct FontManager {
@@ -18,7 +19,7 @@ pub struct FontManager {
     /// Index for which [FontVariant] from the selected font (see [font_index]) we want
     selected_variant_index: usize,
     /// Size in pixels for the selected font
-    selected_font_size: f32,
+    selected_font_size: f32, //TODO: Implement sizing
     /// Flag for if the [cached_font_id] is dirty (out of sync with the target selected values)
     dirty: bool,
     ///
@@ -26,15 +27,8 @@ pub struct FontManager {
 }
 
 impl FontManager {
-    pub fn get_current_font(&self) -> color_eyre::Result<FontId> {
-        match self.cached_font_id {
-            Some(font) => return Ok(font),
-            None => return Err(eyre!("attempted to get current font when no value was stored (bad) - rebuild_font_if_necessary() should have already been called"))
-        }
-    }
-
     pub fn new() -> Self {
-        FontManager{
+        let manager = FontManager{
             fonts: vec![
             Font{
                 //JB Mono has a no-ligatures version, but we like ligatures so ignore that one
@@ -70,11 +64,13 @@ impl FontManager {
         // Indices corresponding to the default font, in this case JB Mono @ Regular
         selected_font_index:0,
         selected_variant_index:3,
-        selected_font_size: 20f32,
+        selected_font_size: DEFAULT_FONT_SIZE,
 
         dirty: true,
         font_ids: vec![]
-        }
+        };
+        trace!("new font manager instance initialised with {} fonts and {} variants", manager.fonts.len(), manager.fonts.iter().flat_map(|font| &font.variants).count());
+        return manager;
     }
 
     #[instrument(skip_all)]
@@ -119,61 +115,36 @@ impl FontManager {
         font_atlas.build_alpha8_texture();
     }
 
-    pub fn update_font(&mut self, font_atlas: &mut FontAtlasRefMut) {
-        font_atlas.tex_id; // <============!!!!!!
-        if !self.dirty && self.cached_font_id != None {
-            trace!(target: UI_SPAMMY, "no need to rebuild font");
-            return;
+    pub fn get_font_id(&mut self, ui: &mut Ui) -> eyre::Result<&FontId>{
+        //TODO: Better error handling (actually try to get the index then fail, rather than failing early - we might be wrong)
+        //Check that we have at least one FontId stored as a fallback
+        if self.font_ids.len() == 0 {
+            warn!("cannot update selected font: font_ids is empty");
+            return Err(eyre!("cannot update selected font: font_ids.len() == 0"));
+        } else if self.font_ids[0].len() == 0 {
+            warn!("cannot update selected font: font_ids[0] is empty");
+            return Err(eyre!("cannot update selected font: font_ids[0].len() == 0"));
         }
-        trace!("cached font dirty or non-existent, rebuilding");
-        let base_font = &self.fonts[self.selected_font_index];
-        let font = &base_font.variants[self.selected_variant_index];
-        let font_size = self.selected_font_size;
-        trace!(
-            "font is [{f_index}] ({f_name}), variant [{v_index}] ({v_name}), size {size}",
-            f_index = self.selected_font_index,
-            f_name = base_font.name,
-            v_index = self.selected_variant_index,
-            v_name = font.name,
-            size = font_size
-        );
 
-        trace!(
-            target: event_targets::DATA_DUMP,
-            "font data is {:?}",
-            font.data
-        );
+        let id;
+        {
+            let font_index = &mut self.selected_font_index;
+            let variant_index = &mut self.selected_variant_index;
+            let font_len = self.font_ids.len();
+            if *font_index >= font_len {
+                warn!("selected font index {font_index} was out of bounds for fonts size {font_len}. Setting to 0");
+                *font_index = 0;
+            }
+            let variants = &self.font_ids[*font_index];
+             let variant_len = variants.len();
+            if *variant_index>= variant_len {
+                warn!("selected variant index {variant_index} was out of bounds for variants vec size {variant_len}. Setting to 0");
+                *variant_index = 0;
+            }
+            id = &variants[*variant_index];
+        }
 
-        // trace!("clearing builtin fonts");
-        // imgui.fonts().clear();
-
-        let full_name = format!(
-            "{name} - {variant} ({size}px)",
-            name = base_font.name,
-            variant = font.name,
-            size = font_size
-        )
-        .into();
-
-        let font_id = font_atlas
-            .add_font(&[FontSource::TtfData {
-                data: font.data,
-                config: Some(FontConfig {
-                    name: full_name,
-                    ..base_font_config()
-                }),
-                size_pixels: font_size,
-            }])
-            .into();
-
-        //Not sure what the difference is between RGBA32 and Alpha8 atlases, other than channel count
-        trace!("building font atlas");
-        // imgui.fonts().build_rgba32_texture();
-        font_atlas.build_alpha8_texture();
-
-        trace!("done rebuilding font atlas");
-        self.cached_font_id = font_id;
-        self.dirty = false;
+        return Ok(id);
     }
 
     /// Renders the font selector, and returns the selected font

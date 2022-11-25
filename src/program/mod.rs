@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-use std::ops::Deref;
 use crate::config::program_config::APP_TITLE;
 use crate::helper::logging::event_targets::*;
 use crate::program::ui_system::font_manager::FontManager;
@@ -12,6 +10,8 @@ use glium::{glutin, Display, Surface};
 use imgui::{Context, DrawData, FontId, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::WinitPlatform;
+use std::borrow::Borrow;
+use std::ops::Deref;
 use tracing::{debug_span, error, instrument, trace, trace_span, warn};
 
 pub(crate) mod ui_system;
@@ -23,7 +23,7 @@ fn render(
     platform: &mut WinitPlatform,
     renderer: &mut Renderer,
     managers: &mut UiManagers,
-) -> color_eyre::Result<()>{
+) -> color_eyre::Result<()> {
     //Graphics stuff
     let _ = trace_span!(
         target: UI_SPAMMY,
@@ -32,15 +32,31 @@ fn render(
     )
     .entered();
 
-    managers
-        .font_manager
-        .update_font(&mut imgui_context.fonts());
-
     // Create a new imgui frame to render to
-    let ui = imgui_context.frame();
+    let mut ui = imgui_context.frame();
 
-    // Create stuff for our newly-created frame
-    managers.render_ui_window(&ui);
+    //Build the UI
+    {
+        //Try to set our custom font
+        let maybe_font_token = match managers.font_manager.get_font_id(&mut ui) {
+            Err(err) => {
+                warn!(
+                target: UI_SPAMMY,
+                "font manager failed to return font: {err}"
+            );
+                None
+            }
+            Ok(font_id) => Some(ui.push_font(*font_id)),
+        };
+
+        // Create stuff for our newly-created frame
+        managers.render_ui_window(&ui);
+
+        if let Some(token) = maybe_font_token {
+            token.pop();
+        }
+    }
+
 
     // Start drawing to our OpenGL context (via glium/glutin)
     let gl_window = display.gl_window();
@@ -120,7 +136,7 @@ pub(crate) fn run() -> eyre::Result<()> {
                     &mut managers,
                 );
 
-                if let Err(err) = result{
+                if let Err(err) = result {
                     error!("encountered error while rendering: {err}. program should now exit");
                     *control_flow = ControlFlow::Exit;
                 }
