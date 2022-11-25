@@ -6,6 +6,7 @@ pub const UI_CONFIG: UiConfig = UiConfig {
     hardware_acceleration: Some(true),
 };
 
+pub const RENDERED_FONT_SIZE:f32 = 64f32;
 pub const DEFAULT_FONT_SIZE: f32 = 24f32;
 
 // Fixed font size. Note imgui_winit_support uses "logical

@@ -34,15 +34,13 @@ fn render(
 
     managers
         .font_manager
-        .rebuild_font_if_needed(&mut imgui_context.fonts());
+        .update_font(&mut imgui_context.fonts());
 
     // Create a new imgui frame to render to
     let ui = imgui_context.frame();
 
     // Create stuff for our newly-created frame
-    // let font_token = ui.push_font(managers.font_manager.get_current_font()?); //Overrides the default font
     managers.render_ui_window(&ui);
-    // font_token.pop();
 
     // Start drawing to our OpenGL context (via glium/glutin)
     let gl_window = display.gl_window();
