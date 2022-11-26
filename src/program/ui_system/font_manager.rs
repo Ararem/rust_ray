@@ -1,6 +1,5 @@
 //! Manages fonts for the UI system
 
-use std::borrow::Borrow;
 use crate::config::ui_config::{
     base_font_config, BUILTIN_FONTS, DEFAULT_FONT_INDEX, DEFAULT_FONT_SIZE_INDEX,
     DEFAULT_FONT_VARIANT_INDEX, FONT_SIZES,
@@ -9,11 +8,15 @@ use crate::helper::logging::event_targets;
 use color_eyre::eyre;
 use color_eyre::eyre::eyre;
 use color_eyre::owo_colors::OwoColorize;
-use glium::CapabilitiesSource;
 use glium::vertex::MultiVerticesSource;
+use glium::CapabilitiesSource;
+use imgui::FontAtlasRef::Owned;
 use imgui::{FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, Ui};
+use std::borrow::{Borrow, Cow};
 use tracing::{error, trace};
 use tracing::{instrument, warn};
+use tracing_subscriber::fmt::format;
+use Cow::Borrowed;
 
 #[derive(Debug, Clone)]
 pub struct FontManager {
@@ -45,7 +48,10 @@ impl FontManager {
         trace!(
             "new font manager instance initialised with {} fonts, {} variants",
             manager.fonts.len(),
-            (*manager.fonts).iter().flat_map(|font| (*font.variants).into_iter()).count()
+            (*manager.fonts)
+                .iter()
+                .flat_map(|font| (*font.variants).into_iter())
+                .count()
         );
         return manager;
     }
@@ -100,13 +106,21 @@ impl FontManager {
         //Check that we have at least one FontId stored as a fallback
         if self.font_ids.len() == 0 {
             error!("cannot update selected font: font_ids is empty (`font_ids.len() == 0`)");
-            return Err(eyre!("cannot update selected font: font_ids is empty (`font_ids.len() == 0`)"));
+            return Err(eyre!(
+                "cannot update selected font: font_ids is empty (`font_ids.len() == 0`)"
+            ));
         } else if self.font_ids[0].len() == 0 {
             error!("cannot update selected font: variants is empty (`font_ids[0].len() == 0`)");
-            return Err(eyre!("cannot update selected font: variants is empty (`font_ids[0].len() == 0`)"));
-        }else if self.font_ids[0][0].len() == 0 {
-            error!("cannot update selected font: sizes is empty (`self.font_ids[0][0].len() == 0`)");
-            return Err(eyre!("cannot update selected font: sizes is empty (`self.font_ids[0][0].len() == 0`)"));
+            return Err(eyre!(
+                "cannot update selected font: variants is empty (`font_ids[0].len() == 0`)"
+            ));
+        } else if self.font_ids[0][0].len() == 0 {
+            error!(
+                "cannot update selected font: sizes is empty (`self.font_ids[0][0].len() == 0`)"
+            );
+            return Err(eyre!(
+                "cannot update selected font: sizes is empty (`self.font_ids[0][0].len() == 0`)"
+            ));
         }
 
         let id;
@@ -144,14 +158,18 @@ impl FontManager {
     pub fn render_font_selector(&mut self, ui: &Ui) {
         ui.text("FONT SELECTOR GOES HERE");
 
-        let font_index = self.selected_font_index;
-        let variant_index = self.selected_variant_index;
-        //Do nothing if we aren't making any changes
-        if self.selected_font_index == font_index && self.selected_variant_index == variant_index {
-            return self.dirty = false;
-        }
-        self.selected_font_index = font_index;
-        self.selected_variant_index = variant_index;
+        ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| {
+            Borrowed(f.name)
+        });
+        ui.combo(
+            "Variant",
+            &mut self.selected_variant_index,
+            &self.fonts[self.selected_font_index].variants,
+            |v| Borrowed(v.name),
+        );
+        ui.combo("Size", &mut self.selected_size_index, &FONT_SIZES, |s| {
+            Cow::Owned(format!("{s} px"))
+        });
     }
 }
 

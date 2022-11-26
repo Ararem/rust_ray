@@ -122,16 +122,7 @@ impl UiManagers {
         imgui::Window::new("UI Management")
             .size([300.0, 110.0], Condition::FirstUseEver)
             .build(ui, || {
-                ui.text_wrapped("Hello world!");
-                ui.text_wrapped("こんにちは世界！");
-
-                ui.button("This...is...imgui-rs!");
-                ui.separator();
-                let mouse_pos = ui.io().mouse_pos;
-                ui.text(format!(
-                    "Mouse Position: ({:.1},{:.1})",
-                    mouse_pos[0], mouse_pos[1]
-                ));
+                self.font_manager.render_font_selector(ui);
             });
     }
 }

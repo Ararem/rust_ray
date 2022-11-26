@@ -10,48 +10,76 @@ pub const UI_CONFIG: UiConfig = UiConfig {
 pub const FONT_SIZES: [f32; 8] = [10f32, 12f32, 16f32, 24f32, 32f32, 40f32, 48f32, 64f32];
 pub const DEFAULT_FONT_SIZE_INDEX: usize = 3;
 
-pub const BUILTIN_FONTS: &[Font] = &[Font {
-    //JB Mono has a no-ligatures version, but we like ligatures so ignore that one
-    name: "JetBrains Mono",
-    variants: &[
-        FontVariant {
-            name: "Thin",
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Thin.ttf"
-            ),
-        },
-        FontVariant {
-            name: "Extra Light",
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-ExtraLight.ttf"
-            ),
-        },
-        FontVariant {
-            name: "Light",
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Light.ttf"
-            ),
-        },
-        FontVariant {
-            name: "Regular",
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Regular.ttf"
-            ),
-        },
-        FontVariant {
-            name: "Bold",
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-Bold.ttf"
-            ),
-        },
-        FontVariant {
-            name: "Extra Bold",
-            data: include_bytes!(
-                "../resources/fonts/JetBrains Mono v2.242/fonts/ttf/JetBrainsMono-ExtraBold.ttf"
-            ),
-        },
-    ],
-}];
+pub const BUILTIN_FONTS: &[Font] = &[
+    Font {
+        //JB Mono has a no-ligatures version, but we like ligatures so ignore that one
+        name: "JetBrains Mono",
+        variants: &[
+            FontVariant {
+                name: "Thin",
+                data: include_bytes!(
+                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Thin.ttf"
+                ),
+            },
+            FontVariant {
+                name: "Extra Light",
+                data: include_bytes!(
+                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-ExtraLight.ttf"
+                ),
+            },
+            FontVariant {
+                name: "Light",
+                data: include_bytes!(
+                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Light.ttf"
+                ),
+            },
+            FontVariant {
+                name: "Regular",
+                data: include_bytes!(
+                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Regular.ttf"
+                ),
+            },
+            FontVariant {
+                name: "Bold",
+                data: include_bytes!(
+                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Bold.ttf"
+                ),
+            },
+            FontVariant {
+                name: "Extra Bold",
+                data: include_bytes!(
+                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-ExtraBold.ttf"
+                ),
+            },
+        ],
+    },
+    Font {
+        name: "Consolas",
+        variants: &[
+            FontVariant {
+                name: "Regular",
+                data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas.ttf"),
+            },
+            FontVariant {
+                name: "Bold",
+                data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas Bold.ttf"),
+            },
+        ],
+    },
+    Font {
+        name: "Fira Code",
+        variants: &[
+            FontVariant {
+                name: "Regular",
+                data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas.ttf"),
+            },
+            FontVariant {
+                name: "Bold",
+                data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas Bold.ttf"),
+            },
+        ],
+    },
+];
 // Indices corresponding to the default font, in this case JB Mono @ Regular
 pub const DEFAULT_FONT_INDEX: usize = 0;
 pub const DEFAULT_FONT_VARIANT_INDEX: usize = 3;

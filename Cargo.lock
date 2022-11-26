@@ -878,7 +878,6 @@ checksum = "286f5338bd8281e3203de29cc317d123b178f2e565eca5aee770a2048074fdf7"
 dependencies = [
  "cc",
  "chlorine",
- "pkg-config",
 ]
 
 [[package]]
