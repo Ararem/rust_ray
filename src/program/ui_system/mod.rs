@@ -1,6 +1,7 @@
 mod clipboard_integration;
 pub mod font_manager;
 
+use std::path::PathBuf;
 use crate::program::ui_system::font_manager::FontManager;
 use color_eyre::eyre;
 use glium::glutin::event_loop::EventLoop;
@@ -10,6 +11,7 @@ use imgui::{Condition, Context, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use tracing::{debug_span, instrument, trace, warn};
+use crate::config::program_config::{IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 
 /*
 TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
@@ -70,8 +72,8 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         .expect("could not initialise display");
     trace!("Creating [imgui] context");
     imgui_context = Context::create();
-    // imgui.set_ini_filename(Some(PathBuf::from("./imgui.ini")));
-    // imgui.set_log_filename()
+    imgui_context.set_ini_filename(PathBuf::from(IMGUI_SETTINGS_FILE_PATH));
+    imgui_context.set_log_filename(PathBuf::from(IMGUI_LOG_FILE_PATH));
 
     trace!("creating font manager");
     let mut font_manager = FontManager::new();
@@ -116,8 +118,8 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 }
 
 impl UiManagers {
-    pub fn render_ui_window(&mut self, ui: &Ui) {
-        imgui::Window::new("Hello World")
+    pub fn render_ui_managers_window(&mut self, ui: &Ui) {
+        imgui::Window::new("UI Management")
             .size([300.0, 110.0], Condition::FirstUseEver)
             .build(ui, || {
                 ui.text_wrapped("Hello world!");

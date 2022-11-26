@@ -33,11 +33,10 @@ fn render(
     .entered();
 
     // Create a new imgui frame to render to
-    let mut ui = imgui_context.frame();
-
+    let ui = imgui_context.frame();
     //Build the UI
     {
-        //Try to set our custom font
+        // Try to set our custom font
         let maybe_font_token = match managers.font_manager.get_font_id() {
             Err(err) => {
                 warn!(
@@ -49,14 +48,15 @@ fn render(
             Ok(font_id) => Some(ui.push_font(*font_id)),
         };
 
+        ui.show_demo_window(&mut false);
+
         // Create stuff for our newly-created frame
-        managers.render_ui_window(&ui);
+        managers.render_ui_managers_window(&ui);
 
         if let Some(token) = maybe_font_token {
             token.pop();
         }
     }
-
 
     // Start drawing to our OpenGL context (via glium/glutin)
     let gl_window = display.gl_window();
