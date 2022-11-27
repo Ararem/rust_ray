@@ -27,12 +27,12 @@ pub const BUILTIN_FONTS: &[Font] = &[
             //         "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-ExtraLight.ttf"
             //     ),
             // },
-            FontWeight {
-                name: "Light",
-                data: include_bytes!(
-                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Light.ttf"
-                ),
-            },
+            // FontWeight {
+            //     name: "Light",
+            //     data: include_bytes!(
+            //         "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Light.ttf"
+            //     ),
+            // },
             FontWeight {
                 name: "Regular",
                 data: include_bytes!(
@@ -95,6 +95,19 @@ pub const BUILTIN_FONTS: &[Font] = &[
             // },
         ],
     },
+    Font {
+        name: "Source Code Pro",
+        weights: &[
+            FontWeight {
+                name: "Regular",
+                data: include_bytes!("../resources/fonts/Scientifica v2.3/scientifica.ttf"),
+            },
+            FontWeight {
+                name: "Bold",
+                data: include_bytes!("../resources/fonts/Scientifica v2.3/scientificaBold.ttf"),
+            }
+        ]
+    }
 ];
 // Indices corresponding to the default font, in this case JB Mono @ Regular
 pub const DEFAULT_FONT_INDEX: usize = 0;
