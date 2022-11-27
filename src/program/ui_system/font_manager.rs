@@ -1,22 +1,25 @@
 //! Manages fonts for the UI system
 
+use Cow::Borrowed;
+use std::borrow::{Borrow, Cow};
+
+use color_eyre::eyre;
+use color_eyre::eyre::eyre;
+use color_eyre::owo_colors::OwoColorize;
+use glium::CapabilitiesSource;
+use glium::vertex::MultiVerticesSource;
+use imgui::{FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, ItemHoveredFlags, TreeNodeFlags, Ui};
+use imgui::FontAtlasRef::Owned;
+use tracing::{error, trace};
+use tracing::{instrument, warn};
+use tracing_subscriber::fmt::format;
+
 use crate::config::ui_config::{
     base_font_config, BUILTIN_FONTS, DEFAULT_FONT_INDEX, DEFAULT_FONT_SIZE_INDEX,
     DEFAULT_FONT_VARIANT_INDEX, FONT_SIZES,
 };
 use crate::helper::logging::event_targets;
-use color_eyre::eyre;
-use color_eyre::eyre::eyre;
-use color_eyre::owo_colors::OwoColorize;
-use glium::vertex::MultiVerticesSource;
-use glium::CapabilitiesSource;
-use imgui::FontAtlasRef::Owned;
-use imgui::{FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, Ui};
-use std::borrow::{Borrow, Cow};
-use tracing::{error, trace};
-use tracing::{instrument, warn};
-use tracing_subscriber::fmt::format;
-use Cow::Borrowed;
+use crate::helper::logging::event_targets::UI_USER_EVENT;
 
 #[derive(Debug, Clone)]
 pub struct FontManager {
@@ -46,11 +49,11 @@ impl FontManager {
             font_ids: vec![],
         };
         trace!(
-            "new font manager instance initialised with {} fonts, {} variants",
+            "new font manager instance initialised with {} fonts, {} weights",
             manager.fonts.len(),
             (*manager.fonts)
                 .iter()
-                .flat_map(|font| (*font.variants).into_iter())
+                .flat_map(|font| (*font.weights).into_iter())
                 .count()
         );
         return manager;
@@ -64,7 +67,7 @@ impl FontManager {
         for (font_index, font) in self.fonts.iter().enumerate() {
             trace!("processing font {font}", font = font.name);
             self.font_ids.insert(font_index, vec![]);
-            for (variant_index, variant) in font.variants.iter().enumerate() {
+            for (variant_index, variant) in font.weights.iter().enumerate() {
                 trace!("processing variant {variant}", variant = variant.name);
                 trace!(
                     target: event_targets::DATA_DUMP,
@@ -81,7 +84,7 @@ impl FontManager {
                         name = font.name,
                         variant = variant.name
                     )
-                    .into();
+                        .into();
                     let font_id = font_atlas.add_font(&[FontSource::TtfData {
                         data: variant.data,
                         config: Some(FontConfig {
@@ -156,20 +159,29 @@ impl FontManager {
 
     /// Renders the font selector, and returns the selected font
     pub fn render_font_selector(&mut self, ui: &Ui) {
-        ui.text("FONT SELECTOR GOES HERE");
-
-        ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| {
-            Borrowed(f.name)
-        });
-        ui.combo(
-            "Variant",
-            &mut self.selected_variant_index,
-            &self.fonts[self.selected_font_index].variants,
-            |v| Borrowed(v.name),
-        );
-        ui.combo("Size", &mut self.selected_size_index, &FONT_SIZES, |s| {
-            Cow::Owned(format!("{s} px"))
-        });
+        if ui.collapsing_header("Font Manager", TreeNodeFlags::empty()) {
+            if ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| Borrowed(f.name)) {
+                trace!(target: UI_USER_EVENT, "Changed font to [{new_font_index}]: {new_font}", new_font_index = self.selected_font_index, new_font = self.fonts[self.selected_font_index].name);
+            }
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Select a font to use for the user interface (UI)");
+            }
+            ui.combo(
+                "Weight",
+                &mut self.selected_variant_index,
+                &self.fonts[self.selected_font_index].weights,
+                |v| Borrowed(v.name),
+            );
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
+            }
+            ui.combo("Size", &mut self.selected_size_index, &FONT_SIZES, |s| {
+                Cow::Owned(format!("{s} px"))
+            });
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Change the size of the font (in pixels)");
+            }
+        }
     }
 }
 
@@ -177,13 +189,13 @@ impl FontManager {
 pub struct Font {
     /// Name of the base font, e.g. JetBrains Mono
     pub(crate) name: &'static str,
-    /// Vec of font variants
-    pub(crate) variants: &'static [FontVariant],
+    /// Vec of font weights
+    pub(crate) weights: &'static [FontWeight],
 }
 
-/// A variant a font can have (i.e. bold, light, regular)
+/// A weight a font can have (i.e. bold, light, regular)
 #[derive(Debug, Copy, Clone)]
-pub struct FontVariant {
+pub struct FontWeight {
     /// Name of the variant (i.e. "light")
     pub(crate) name: &'static str,
     /// Binary font data for this variant

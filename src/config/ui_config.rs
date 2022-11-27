@@ -1,9 +1,9 @@
-use crate::program::ui_system::font_manager::{Font, FontVariant};
+use crate::program::ui_system::font_manager::{Font, FontWeight};
 use crate::program::ui_system::UiConfig;
 use imgui::FontConfig;
 
 pub const UI_CONFIG: UiConfig = UiConfig {
-    vsync: false,
+    vsync: true,
     hardware_acceleration: Some(true),
 };
 
@@ -14,38 +14,38 @@ pub const BUILTIN_FONTS: &[Font] = &[
     Font {
         //JB Mono has a no-ligatures version, but we like ligatures so ignore that one
         name: "JetBrains Mono",
-        variants: &[
-            FontVariant {
-                name: "Thin",
-                data: include_bytes!(
-                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Thin.ttf"
-                ),
-            },
-            FontVariant {
-                name: "Extra Light",
-                data: include_bytes!(
-                    "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-ExtraLight.ttf"
-                ),
-            },
-            FontVariant {
+        weights: &[
+            // FontVariant {
+            //     name: "Thin",
+            //     data: include_bytes!(
+            //         "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Thin.ttf"
+            //     ),
+            // },
+            // FontVariant {
+            //     name: "Extra Light",
+            //     data: include_bytes!(
+            //         "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-ExtraLight.ttf"
+            //     ),
+            // },
+            FontWeight {
                 name: "Light",
                 data: include_bytes!(
                     "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Light.ttf"
                 ),
             },
-            FontVariant {
+            FontWeight {
                 name: "Regular",
                 data: include_bytes!(
                     "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Regular.ttf"
                 ),
             },
-            FontVariant {
+            FontWeight {
                 name: "Bold",
                 data: include_bytes!(
                     "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-Bold.ttf"
                 ),
             },
-            FontVariant {
+            FontWeight {
                 name: "Extra Bold",
                 data: include_bytes!(
                     "../resources/fonts/JetBrains Mono v2.242/JetBrainsMono-ExtraBold.ttf"
@@ -55,12 +55,12 @@ pub const BUILTIN_FONTS: &[Font] = &[
     },
     Font {
         name: "Consolas",
-        variants: &[
-            FontVariant {
+        weights: &[
+            FontWeight {
                 name: "Regular",
                 data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas.ttf"),
             },
-            FontVariant {
+            FontWeight {
                 name: "Bold",
                 data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas Bold.ttf"),
             },
@@ -68,15 +68,31 @@ pub const BUILTIN_FONTS: &[Font] = &[
     },
     Font {
         name: "Fira Code",
-        variants: &[
-            FontVariant {
+        weights: &[
+            // FontVariant {
+            //     name: "Light",
+            //     data: include_bytes!("../resources/fonts/Fira Code v6.2/FiraCode-Light.ttf"),
+            // },
+            FontWeight {
                 name: "Regular",
-                data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas.ttf"),
+                data: include_bytes!("../resources/fonts/Fira Code v6.2/FiraCode-Regular.ttf"),
             },
-            FontVariant {
-                name: "Bold",
-                data: include_bytes!("../resources/fonts/Consolas v5.53/Consolas Bold.ttf"),
+            // FontVariant {
+            //     name: "Retina",
+            //     data: include_bytes!("../resources/fonts/Fira Code v6.2/FiraCode-Retina.ttf"),
+            // },
+            FontWeight {
+                name: "Medium",
+                data: include_bytes!("../resources/fonts/Fira Code v6.2/FiraCode-Medium.ttf"),
             },
+            // FontVariant {
+            //     name: "Semi Bold",
+            //     data: include_bytes!("../resources/fonts/Fira Code v6.2/FiraCode-SemiBold.ttf"),
+            // },
+            // FontVariant {
+            //     name: "Bold",
+            //     data: include_bytes!("../resources/fonts/Fira Code v6.2/FiraCode-Bold.ttf"),
+            // },
         ],
     },
 ];
@@ -94,8 +110,8 @@ pub fn base_font_config() -> FontConfig {
         //TODO: Configure
         // Oversampling font helps improve text rendering at
         // expense of larger font atlas texture.
-        oversample_h: 4,
-        oversample_v: 4,
+        oversample_h: 3,
+        oversample_v: 3,
         ..FontConfig::default()
     }
 }
