@@ -14,10 +14,7 @@ use tracing::{error, trace};
 use tracing::{instrument, warn};
 use tracing_subscriber::fmt::format;
 
-use crate::config::ui_config::{
-    base_font_config, BUILTIN_FONTS, DEFAULT_FONT_INDEX, DEFAULT_FONT_SIZE_INDEX,
-    DEFAULT_FONT_VARIANT_INDEX, FONT_SIZES,
-};
+use crate::config::ui_config::*;
 use crate::helper::logging::event_targets;
 use crate::helper::logging::event_targets::UI_USER_EVENT;
 
