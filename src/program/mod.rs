@@ -24,13 +24,14 @@ fn render(
     renderer: &mut Renderer,
     managers: &mut UiManagers,
 ) -> color_eyre::Result<()> {
-    //Graphics stuff
     let _ = trace_span!(
         target: UI_SPAMMY,
         "render",
         frame = imgui_context.frame_count()
     )
     .entered();
+
+    managers.font_manager.rebuild_font_if_needed(&mut imgui_context.fonts());
 
     // Create a new imgui frame to render to
     let ui = imgui_context.frame();
@@ -94,6 +95,10 @@ pub(crate) fn run() -> eyre::Result<()> {
     } = backend;
     let mut last_frame = Local::now();
 
+    let mut result = Ok(());
+
+    let result_ref = &mut result;
+
     //Enter the imgui_internal span so that any logs will be inside that span by default
     let imgui_internal_span = debug_span!("imgui_internal");
     let _guard_imgui_internal_span = imgui_internal_span.enter();
@@ -136,8 +141,10 @@ pub(crate) fn run() -> eyre::Result<()> {
                     &mut managers,
                 );
 
-                if let Err(err) = result {
-                    error!("encountered error while rendering: {err}. program should now exit");
+                if let Err(e) = result {
+                    let error = Report::wrap_err(e, "encountered error while rendering: {err}. program should now exit");
+                    error!("{error}");
+                    *result_ref = Err(error);
                     *control_flow = ControlFlow::Exit;
                 }
             }
@@ -158,5 +165,5 @@ pub(crate) fn run() -> eyre::Result<()> {
         }
     });
 
-    return Ok(());
+    return result;
 }

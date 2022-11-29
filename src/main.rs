@@ -5,6 +5,7 @@ mod engine;
 mod helper;
 mod program;
 mod config;
+mod resources;
 
 use color_eyre::eyre;
 use helper::logging::event_targets::*;

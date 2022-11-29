@@ -22,18 +22,19 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 ## Credits
-### Original Code
+
+### Original Code (aka Authors)
+* @Ararem <48875125+ararem@users.noreply.github.com> - Original author/owner
 
 ### Fonts
 
-| Name |     |
-|------|-----|
-|      |     |
-|      |     |
-|      |     |
-|      |     |
-|      |     |
+These are the default fonts provided with the application. They are copied to the output directory and loaded at runtime
 
+* Consolas
+* Fira Code
+* JetBrains Mono
+* Roboto
+* Source Code Pro
 
 ### Crates
 
@@ -49,7 +50,10 @@ dual licensed as above, without any additional terms or conditions.
 | [`glium`][glium]                                                                                         | OpenGL wrapper (used to create an OpenGL context for the ImGUI)                                                                                                              |
 | [`imgui-glium-renderer`][imgui-glium-renderer]                                                           | Provides a renderer for [`imgui`][imgui] (does the actual rendering of stuff)                                                                                                |
 | [`imgui-winit-support`][imgui-winit-support]                                                             | Provides a backend for [`imgui`][imgui] (handles window management, IO, etc)                                                                                                 |
-|                                                                                                          |                                                                                                                                                                              |
+| [`lazy_static`][lazy_static]                                                                             | Supplies a macro that enables `static` variables to be given proper initialisers                                                                                             |
+| [`chrono`][chrono]                                                                                       | Time handling library                                                                                                                                                        |
+| [`regex`][regex]                                                                                         | Provides support for...... Regex!!                                                                                                                                           |
+| [`fs_extra`][fs_extra]                                                                                   | Extends the standard library support for filesystem stuff                                                                                                                    |
 
 [shadow-rs]: https://docs.rs/crate/shadow-rs
 [color-eyre]: https://docs.rs/crate/color-eyre
@@ -64,3 +68,6 @@ dual licensed as above, without any additional terms or conditions.
 [imgui-glium-renderer]: https://docs.rs/crate/imgui-glium-renderer
 [imgui-winit-support]: https://docs.rs/crate/imgui-winit
 [dear-imgui]: https://github.com/ocornut/imgui
+[lazy_static]: https://docs.rs/crate/lazy_static
+[regex]: https://docs.rs/crate/regex
+[fs_extra]: https://docs.rs/crate/fs_extra

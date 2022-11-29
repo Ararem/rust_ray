@@ -1434,6 +1434,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "path-clean"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecba01bf2678719532c5e3059e0b5f0811273d94b397088b82e3bd0a78c78fdd"
+
+[[package]]
 name = "percent-encoding"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1583,7 +1589,6 @@ dependencies = [
  "chrono",
  "clipboard",
  "color-eyre",
- "const_format",
  "fs_extra",
  "glium",
  "glob",
@@ -1592,6 +1597,7 @@ dependencies = [
  "imgui-winit-support",
  "indoc",
  "lazy_static",
+ "path-clean",
  "pretty_assertions",
  "regex",
  "shadow-rs",

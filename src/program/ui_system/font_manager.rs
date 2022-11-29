@@ -1,50 +1,74 @@
 //! Manages fonts for the UI system
 
 use Cow::Borrowed;
-use std::borrow::{Borrow, Cow};
-
-use color_eyre::eyre;
+use std::borrow::Cow;
+use std::env;
+use std::path::{Path, PathBuf};
+use fs_extra::*;
+use path_clean::PathClean;
+use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::eyre;
-use color_eyre::owo_colors::OwoColorize;
-use glium::CapabilitiesSource;
-use glium::vertex::MultiVerticesSource;
-use imgui::{FontAtlasRef, FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, ItemHoveredFlags, TreeNodeFlags, Ui};
-use imgui::FontAtlasRef::Owned;
-use tracing::{error, trace};
+use imgui::{FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, InputFloat, InputTextFlags, ItemHoveredFlags, TreeNodeFlags, Ui};
+use tracing::{debug, error, info, trace};
 use tracing::{instrument, warn};
-use tracing_subscriber::fmt::format;
-
+use crate::config::resources_config::FONTS_PATH;
 use crate::config::ui_config::*;
+use crate::config::ui_config::colours::ERROR;
 use crate::helper::logging::event_targets;
-use crate::helper::logging::event_targets::UI_USER_EVENT;
+use crate::helper::logging::event_targets::{DATA_DUMP, UI_USER_EVENT};
+use crate::resources::resource_manager::get_main_resource_folder_path;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FontManager {
     /// Fonts available for the UI
-    fonts: &'static [Font],
+    fonts: Vec<Font>,
     /// Index for which font we want to use (see [fonts])
     selected_font_index: usize,
-    /// Index for which [FontVariant] from the selected font (see [font_index]) we want
-    selected_variant_index: usize,
+    /// Index for which [FontWeight] from the selected font (see [font_index]) we want
+    selected_weight_index: usize,
     /// Index for the selected font size (see [FONT_SIZES])
-    selected_size_index: usize,
-    /// Flag for if the [cached_font_id] is dirty (out of sync with the target selected values)
+    selected_size: f32,
+    /// The currently selected font's [FontId]
+    current_font: Option<FontId>,
+    /// Whether the font needs to be rebuilt because of a change
     dirty: bool,
-    /// [FontId]'s for the built [fonts]. Indexing order is [selected_font_index] -> [selected_variant_index] -> [selected_size_index]
-    font_ids: Vec<Vec<Vec<FontId>>>,
 }
 
 impl FontManager {
-    pub fn new() -> Self {
-        let manager = FontManager {
-            fonts: BUILTIN_FONTS,
-            selected_font_index: DEFAULT_FONT_INDEX,
-            selected_variant_index: DEFAULT_FONT_VARIANT_INDEX,
-            selected_size_index: DEFAULT_FONT_SIZE_INDEX,
+    /// Reloads the list of available fonts, from the resources folder (in the build directory)
+    #[instrument(skip_all, level="trace")]
+    pub fn reload_list_from_resources(&mut self) -> eyre::Result<()> {
+        let path =
+            get_main_resource_folder_path()?.join(FONTS_PATH);
 
+        debug!("reloading fonts from resources folder {:?}", &path);
+        let directory;
+        match dir::get_dir_content(&path) {
+            Err(e) => {
+                let error = Report::wrap_err(e.into(), format!("could not load fonts directory {:?}", &path));
+                error!("{error:#}");
+                return Err(error);
+            }
+            Ok(dir) => directory = dir,
+        }
+
+        debug!(target:DATA_DUMP,"fonts folder directories: {:#?}", directory.directories);
+        debug!(target:DATA_DUMP,"fonts folder files:{:#?}", directory.files);
+
+        return Ok(());
+    }
+
+    pub fn new() -> eyre::Result<Self> {
+        let mut manager = FontManager {
+            fonts: vec![],
+            selected_font_index: 0,
+            selected_weight_index: 0,
+            selected_size: DEFAULT_FONT_SIZE,
+
+            current_font: None,
             dirty: true,
-            font_ids: vec![],
         };
+        manager.reload_list_from_resources()?;
         trace!(
             "new font manager instance initialised with {} fonts, {} weights",
             manager.fonts.len(),
@@ -53,47 +77,61 @@ impl FontManager {
                 .flat_map(|font| (*font.weights).into_iter())
                 .count()
         );
-        return manager;
+        return Ok(manager);
     }
 
-    #[instrument(skip_all)]
-    pub fn build_fonts(&mut self, font_atlas: &mut FontAtlasRefMut) {
-        trace!("clearing builtin fonts");
-        font_atlas.clear();
+    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlasRefMut) {
+        // trace!("clearing builtin fonts");
+        // font_atlas.clear();
 
-        for (font_index, font) in self.fonts.iter().enumerate() {
-            trace!("processing font {font}", font = font.name);
-            self.font_ids.insert(font_index, vec![]);
-            for (variant_index, variant) in font.weights.iter().enumerate() {
-                trace!("processing variant {variant}", variant = variant.name);
-                trace!(
+        // Don't need to update if we already have a font and we're not dirty
+        if !self.dirty && self.current_font != None {
+            return;
+        }
+
+
+        let fonts = &mut self.fonts;
+        let font_index = &mut self.selected_font_index;
+
+        if fonts.len() == 0 {
+            //TODO: eyre
+            warn!("could not rebuild font: no fonts loaded.\ntry calling {}", stringify!(self.reload_list_from_resources));
+            return;
+        }
+
+        // Check our indices are in the correct range
+        *font_index = (*font_index).clamp(0usize, fonts.len() - 1usize);
+        let base_font = &mut fonts[*font_index];
+
+        let weights = &mut base_font.weights;
+        let weight_index = &mut self.selected_weight_index;
+        *weight_index = (*weight_index).clamp(0usize, weights.len() - 1usize);
+        let weight = weights[*weight_index];
+
+        let size = &self.selected_size;
+
+        trace!("processing font {font_name} ({weight}) @ {size}px", font_name = base_font.name, weight = weight.name);
+        trace!(
                     target: event_targets::DATA_DUMP,
                     "font data is {:?}",
-                    variant.data
+                    weight.data
                 );
-                self.font_ids[font_index].insert(variant_index, vec![]);
 
-                for (size_index, size) in FONT_SIZES.iter().enumerate() {
-                    trace!("processing size {size}px");
-
-                    let full_name = format!(
-                        "{name} - {variant} ({size}px)",
-                        name = font.name,
-                        variant = variant.name
-                    )
-                        .into();
-                    let font_id = font_atlas.add_font(&[FontSource::TtfData {
-                        data: variant.data,
-                        config: Some(FontConfig {
-                            name: full_name,
-                            ..base_font_config()
-                        }),
-                        size_pixels: *size,
-                    }]);
-                    self.font_ids[font_index][variant_index].insert(size_index, font_id);
-                }
-            }
-        }
+        let full_name = format!(
+            "{name} - {weight} ({size}px)",
+            name = base_font.name,
+            weight = weight.name
+        )
+            .into();
+        let font_id = font_atlas.add_font(&[FontSource::TtfData {
+            data: weight.data,
+            config: Some(FontConfig {
+                name: full_name,
+                ..base_font_config()
+            }),
+            size_pixels: *size,
+        }]);
+        self.current_font = Some(font_id);
 
         //Not sure what the difference is between RGBA32 and Alpha8 atlases, other than channel count
         trace!("building font atlas");
@@ -103,80 +141,49 @@ impl FontManager {
 
     pub fn get_font_id(&mut self) -> eyre::Result<&FontId> {
         //TODO: Better error handling (actually try to get the index then fail, rather than failing early - we might be wrong)
-        //Check that we have at least one FontId stored as a fallback
-        if self.font_ids.len() == 0 {
-            error!("cannot update selected font: font_ids is empty (`font_ids.len() == 0`)");
-            return Err(eyre!(
-                "cannot update selected font: font_ids is empty (`font_ids.len() == 0`)"
-            ));
-        } else if self.font_ids[0].len() == 0 {
-            error!("cannot update selected font: variants is empty (`font_ids[0].len() == 0`)");
-            return Err(eyre!(
-                "cannot update selected font: variants is empty (`font_ids[0].len() == 0`)"
-            ));
-        } else if self.font_ids[0][0].len() == 0 {
-            error!(
-                "cannot update selected font: sizes is empty (`self.font_ids[0][0].len() == 0`)"
-            );
-            return Err(eyre!(
-                "cannot update selected font: sizes is empty (`self.font_ids[0][0].len() == 0`)"
-            ));
-        }
 
-        let id;
-        {
-            let font_index = &mut self.selected_font_index;
-            let ids_by_font = &self.font_ids;
-            let fonts_len = ids_by_font.len();
-            if *font_index >= fonts_len {
-                warn!("selected font index {font_index} was out of bounds for fonts len {fonts_len}. Setting to 0");
-                *font_index = 0;
-            }
-
-            let variant_index = &mut self.selected_variant_index;
-            let ids_by_variant = &ids_by_font[*font_index];
-            let variants_len = ids_by_variant.len();
-            if *variant_index >= variants_len {
-                warn!("selected variant index {variant_index} was out of bounds for variants vec len {variants_len}. Setting to 0");
-                *variant_index = 0;
-            }
-
-            let size_index = &mut self.selected_size_index;
-            let ids_by_size = &ids_by_variant[*variant_index];
-            let sizes_len = ids_by_size.len();
-            if *size_index >= sizes_len {
-                warn!("selected size index {size_index} was out of bounds for sizes vec len {sizes_len}. Setting to 0");
-                *size_index = 0;
-            }
-            id = &ids_by_size[*size_index];
-        }
-
-        return Ok(id);
+        return match &self.current_font {
+            Some(font) => Ok(font),
+            None => Err(eyre!("could not get [FontId]: self.current_font was [None]; should have already been set by [update_font_if_needed()]")),
+        };
     }
 
     /// Renders the font selector, and returns the selected font
     pub fn render_font_selector(&mut self, ui: &Ui) {
         if ui.collapsing_header("Font Manager", TreeNodeFlags::empty()) {
-            if ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| Borrowed(f.name)) {
-                trace!(target: UI_USER_EVENT, "Changed font to [{new_font_index}]: {new_font}", new_font_index = self.selected_font_index, new_font = self.fonts[self.selected_font_index].name);
+            if ui.button("Reload fonts list") {
+                self.reload_list_from_resources();
             }
-            if ui.is_item_hovered() {
-                ui.tooltip_text("Select a font to use for the user interface (UI)");
-            }
-            ui.combo(
-                "Weight",
-                &mut self.selected_variant_index,
-                &self.fonts[self.selected_font_index].weights,
-                |v| Borrowed(v.name),
-            );
-            if ui.is_item_hovered() {
-                ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
-            }
-            ui.combo("Size", &mut self.selected_size_index, &FONT_SIZES, |s| {
-                Cow::Owned(format!("{s} px"))
-            });
-            if ui.is_item_hovered() {
-                ui.tooltip_text("Change the size of the font (in pixels)");
+            if self.fonts.len() == 0 {
+                ui.text_colored(ERROR, "No fonts loaded");
+            } else {
+                if ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| Borrowed(f.name)) {
+                    trace!(target: UI_USER_EVENT, "Changed font to [{new_font_index}]: {new_font}", new_font_index = self.selected_font_index, new_font = self.fonts[self.selected_font_index].name);
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text("Select a font to use for the user interface (UI)");
+                }
+                if self.fonts[self.selected_font_index].weights.len() == 0 {
+                    ui.text_colored(ERROR, "No weights loaded");
+                } else {
+                    ui.combo(
+                        "Weight",
+                        &mut self.selected_weight_index,
+                        &self.fonts[self.selected_font_index].weights,
+                        |v| Borrowed(v.name),
+                    );
+                    if ui.is_item_hovered() {
+                        ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
+                    }
+                }
+                InputFloat::new(
+                    ui,
+                    "Size (px)",
+                    &mut self.selected_size
+                ).build();
+                if ui.is_item_hovered() {
+                    ui.tooltip_text("Change the size of the font (in pixels)");
+                }
             }
         }
     }
@@ -193,8 +200,8 @@ pub struct Font {
 /// A weight a font can have (i.e. bold, light, regular)
 #[derive(Debug, Copy, Clone)]
 pub struct FontWeight {
-    /// Name of the variant (i.e. "light")
+    /// Name of the weight (i.e. "light")
     pub(crate) name: &'static str,
-    /// Binary font data for this variant
+    /// Binary font data for this weight
     pub(crate) data: &'static [u8],
 }
