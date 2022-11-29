@@ -31,7 +31,9 @@ fn render(
     )
     .entered();
 
-    managers.font_manager.rebuild_font_if_needed(&mut imgui_context.fonts());
+    if let Err(err) = managers.font_manager.rebuild_font_if_needed(&mut imgui_context.fonts()) {
+        warn!("font manager was not able to rebuild font: {err}");
+    }
 
     // Create a new imgui frame to render to
     let ui = imgui_context.frame();
