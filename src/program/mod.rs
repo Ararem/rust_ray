@@ -24,7 +24,7 @@ fn render(
     renderer: &mut Renderer,
     managers: &mut UiManagers,
 ) -> color_eyre::Result<()> {
-    let _ = trace_span!(
+    let _guard = trace_span!(
         target: UI_SPAMMY,
         "render",
         frame = imgui_context.frame_count()
@@ -76,7 +76,8 @@ fn render(
         .expect("UI rendering failed");
     target.finish().expect("Failed to swap buffers");
 
-    Ok(())
+    drop(_guard);
+    return Ok(());
 }
 
 ///Creates and runs the program, returning once it has completed (probably when main window is closed)
@@ -105,7 +106,7 @@ pub(crate) fn run() -> eyre::Result<()> {
     let imgui_internal_span = debug_span!("imgui_internal");
     let _guard_imgui_internal_span = imgui_internal_span.enter();
     event_loop.run_return(move |event, _window_target, control_flow| {
-        let _ = trace_span!(target: UI_SPAMMY, "process_ui_event", ?event).entered();
+        let _span = trace_span!(target: UI_SPAMMY, "process_ui_event", ?event).entered();
         match event {
             //We have new events, but we don't care what they are, just need to update frame timings
             glutin::event::Event::NewEvents(_) => {
@@ -165,6 +166,8 @@ pub(crate) fn run() -> eyre::Result<()> {
                 platform.handle_event(imgui_context.io_mut(), gl_window.window(), &event);
             }
         }
+
+        _span.exit();
     });
 
     return result;

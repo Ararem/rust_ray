@@ -69,13 +69,15 @@ impl FontManager {
         let mut font_data_buffer = Vec::with_capacity(512 * 1024 /*512kb default*/);
 
         // Nested hashmaps store data
+        // First layer is [base font name]
+        // Second layer contains [weight name] and font data
         let mut fonts: HashMap<&str, HashMap<&str, Vec<u8>>> = HashMap::new();
         for file_path in directory.files.iter() {
             if !filter_regex.is_match(file_path) {
-                trace!("file path {file_path} does not match filter, skipping");
+                trace!("skipping non-matching file path at {file_path}");
                 continue;
             }
-            trace!("file at {file_path} matches filter, reading");
+            trace!("reading matching file at {file_path}");
 
             let mut file = match fs::File::open(file_path) {
                 Ok(file) => { file },
@@ -220,7 +222,7 @@ impl FontManager {
             }),
             size_pixels: *size,
         }]);
-        self.current_font = Some(font_id);
+        // self.current_font = Some(font_id);
 
         //Not sure what the difference is between RGBA32 and Alpha8 atlases, other than channel count
         trace!("building font atlas");
