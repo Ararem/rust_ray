@@ -58,10 +58,11 @@ impl DockNode {
     }
 }
 
+//TODO: Find out what's necessary in these files. May be able to remove UiDockingArea struct completetely
 /// # Docking
-pub struct UiDocking {}
+pub struct UiDockingArea {}
 
-impl UiDocking {
+impl UiDockingArea {
     #[doc(alias = "IsWindowDocked")]
     pub fn is_window_docked(&self) -> bool {
         unsafe { sys::igIsWindowDocked() }

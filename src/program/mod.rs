@@ -7,13 +7,16 @@ use color_eyre::{eyre, Report};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::{glutin, Display, Surface};
-use imgui::{Condition, Context, DrawData, FontId, Ui};
+use imgui::{Condition, Context, DrawData, FontId, Ui, WindowFlags};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::WinitPlatform;
 use std::borrow::Borrow;
 use std::ops::Deref;
+use color_eyre::owo_colors::OwoColorize;
+use imgui::Condition::Always;
 use tracing::{debug_span, error, instrument, trace, trace_span, warn};
-use crate::program::ui_system::docking::UiDocking;
+use crate::main;
+use crate::program::ui_system::docking::UiDockingArea;
 
 pub(crate) mod ui_system;
 
@@ -70,9 +73,33 @@ fn render(
             Ok(font_id) => Some(ui.push_font(*font_id)),
         };
 
+        let main_window_flags =
+            // No borders etc for top-level window
+            WindowFlags::NO_DECORATION | WindowFlags::NO_MOVE
+                // Show menu bar
+                | WindowFlags::MENU_BAR
+                // Don't raise window on focus (as it'll clobber floating windows)
+                | WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS | WindowFlags::NO_NAV_FOCUS
+                // Don't want the dock area's parent to be dockable!
+                | WindowFlags::NO_DOCKING
+            ;
 
 
-        ui.show_demo_window(&mut false);
+        let main_window_token = ui.window("Main Window")
+                                  .flags(main_window_flags)
+                                  .position([0.0, 0.0], Always) // These two make it always fill the whole screen
+                                  .size(ui.io().display_size, Always).begin();
+        match main_window_token {
+            None => trace!(target:UI_SPAMMY, "warning: main window is not visible"),
+            Some(token) => {
+                let docking_area = UiDockingArea {};
+                let dock_node = docking_area.dockspace("Main Dock Area");
+
+                ui.show_demo_window(&mut false);
+
+                token.end();
+            }
+        }
 
         // Create stuff for our newly-created frame
         managers.render_ui_managers_window(&ui);
