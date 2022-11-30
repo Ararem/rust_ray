@@ -12,6 +12,7 @@ use path_clean::PathClean;
 use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::{ErrReport, eyre};
 use imgui::{FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, InputFloat, InputTextFlags, ItemHoveredFlags, TreeNodeFlags, Ui};
+use imgui_glium_renderer::Renderer;
 use regex::Regex;
 use tracing::{debug, error, info, trace, trace_span};
 use tracing::{instrument, warn};
@@ -171,15 +172,21 @@ impl FontManager {
         return Ok(manager);
     }
 
-    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlasRefMut) -> eyre::Result<()> {
+    /// Rebuilds the font texture if required
+    ///
+    /// Return value when [`Ok`] is [`true`] if the font was rebuilt, otherwise [`false`] if it was not rebuilt.
+    ///
+    /// Note:
+    /// If this returns `Ok(true)`, you ***MUST*** call `renderer.reload_font_texture(imgui_context)` or the app will crash
+    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlasRefMut) -> eyre::Result<bool> {
         // Don't need to update if we already have a font and we're not dirty
         if !self.dirty && self.current_font != None {
-            return Ok(());
+            return Ok(false);
         }
 
         let _guard = trace_span!("rebuild_font_if_needed").entered();
-        // trace!("clearing builtin fonts");
-        // font_atlas.clear();
+        trace!("clearing font atlas");
+        font_atlas.clear();
 
         let fonts = &mut self.fonts;
         let font_index = &mut self.selected_font_index;
@@ -222,7 +229,7 @@ impl FontManager {
             }),
             size_pixels: *size,
         }]);
-        // self.current_font = Some(font_id);
+        self.current_font = Some(font_id);
 
         //Not sure what the difference is between RGBA32 and Alpha8 atlases, other than channel count
         trace!("building font atlas");
@@ -230,7 +237,7 @@ impl FontManager {
         font_atlas.build_alpha8_texture();
 
         _guard.exit();
-        return Ok(());
+        return Ok(true);
     }
 
     pub fn get_font_id(&mut self) -> eyre::Result<&FontId> {

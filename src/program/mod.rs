@@ -29,10 +29,28 @@ fn render(
         "render",
         frame = imgui_context.frame_count()
     )
-    .entered();
+        .entered();
 
-    if let Err(err) = managers.font_manager.rebuild_font_if_needed(&mut imgui_context.fonts()) {
-        warn!("font manager was not able to rebuild font: {err}");
+    {
+        let mut fonts = imgui_context.fonts();
+        match managers.font_manager.rebuild_font_if_needed(&mut fonts) {
+            Err(err) => warn!("font manager was not able to rebuild font: {err}"),
+            // Font atlas was rebuilt
+            Ok(true) => {
+                drop(fonts);
+                //Have to drop because it references imgui_context, and we need to borrow as mut here
+                trace!("font was rebuilt, reloading renderer texture");
+                let result = renderer.reload_font_texture(imgui_context);
+                match result {
+                    Ok(_) => trace!("renderer font texture reloaded successfully"),
+                    Err(err) => {
+                        let report = Report::new(err);
+                        error!("{report}");
+                    }
+                }
+            }
+            Ok(false) => { trace!(target:UI_SPAMMY, "font not rebuilt (probably not dirty)") }
+        }
     }
 
     // Create a new imgui frame to render to
