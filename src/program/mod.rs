@@ -13,6 +13,7 @@ use imgui_winit_support::WinitPlatform;
 use std::borrow::Borrow;
 use std::ops::Deref;
 use tracing::{debug_span, error, instrument, trace, trace_span, warn};
+use crate::program::ui_system::docking::UiDocking;
 
 pub(crate) mod ui_system;
 
@@ -54,7 +55,7 @@ fn render(
     }
 
     // Create a new imgui frame to render to
-    let ui = imgui_context.frame();
+    let ui = imgui_context.new_frame();
     //Build the UI
     {
         // Try to set our custom font
@@ -154,7 +155,7 @@ fn render(
 
     // Render our imgui frame now we've written to it
     platform.prepare_render(&ui, gl_window.window());
-    let draw_data = ui.render();
+    let draw_data = imgui_context.render();
 
     // Copy the imgui rendered frame to our OpenGL surface (so we can see it)
     renderer

@@ -1,6 +1,6 @@
-mod clipboard_integration;
+pub mod clipboard_integration;
 pub mod font_manager;
-mod docking;
+pub mod docking;
 
 use std::path::PathBuf;
 use crate::program::ui_system::font_manager::FontManager;
@@ -77,7 +77,7 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     imgui_context.set_ini_filename(PathBuf::from(log_expr_val!(IMGUI_SETTINGS_FILE_PATH)));
     imgui_context.set_log_filename(PathBuf::from(log_expr_val!(IMGUI_LOG_FILE_PATH)));
     trace!("enabling docking config flag");
-    system.imgui.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
+    imgui_context.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
 
     trace!("creating font manager");
     let font_manager = FontManager::new()?;
@@ -122,9 +122,9 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 
 impl UiManagers {
     pub fn render_ui_managers_window(&mut self, ui: &Ui) {
-        imgui::Window::new("UI Management")
+        ui.window("UI Management")
             .size([300.0, 110.0], Condition::FirstUseEver)
-            .build(ui, || {
+            .build(|| {
                 self.font_manager.render_font_selector(ui);
             });
     }

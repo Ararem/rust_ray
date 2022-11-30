@@ -1,4 +1,3 @@
-use crate::program::ui_system::font_manager::{Font, FontWeight};
 use crate::program::ui_system::UiConfig;
 use imgui::FontConfig;
 
