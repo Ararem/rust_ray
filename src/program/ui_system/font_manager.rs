@@ -2,18 +2,14 @@
 
 use Cow::Borrowed;
 use std::borrow::Cow;
-use std::{env, fs};
+use std::fs;
 use std::collections::HashMap;
 use std::io::Read;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use fs_extra::*;
-use path_clean::PathClean;
 use color_eyre::{eyre, Help, Report};
-use color_eyre::eyre::{ErrReport, eyre};
-use imgui::{FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, InputFloat, InputTextFlags, ItemHoveredFlags, Slider, TreeNodeFlags, Ui};
-use imgui_glium_renderer::Renderer;
-use regex::Regex;
+use color_eyre::eyre::eyre;
+use imgui::{FontAtlas, FontConfig, FontId, FontSource, TreeNodeFlags, Ui};
 use tracing::{debug, error, info, trace, trace_span};
 use tracing::{instrument, warn};
 use crate::config::resources_config::{FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER, FONTS_PATH};
@@ -184,7 +180,7 @@ impl FontManager {
     ///
     /// Note:
     /// If this returns `Ok(true)`, you ***MUST*** call `renderer.reload_font_texture(imgui_context)` or the app will crash
-    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlasRefMut) -> eyre::Result<bool> {
+    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlas) -> eyre::Result<bool> {
         // Don't need to update if we already have a font and we're not dirty
         if !self.dirty && self.current_font != None {
             return Ok(false);
@@ -300,7 +296,7 @@ impl FontManager {
                         ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
                     }
                 }
-                if Slider::new("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE).build(ui, &mut self.selected_size) {
+                if ui.slider("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE, &mut self.selected_size) {
                     trace!(target: UI_USER_EVENT, "Changed font size to {new_size} px", new_size=self.selected_size);
                     *dirty = true;
                 }

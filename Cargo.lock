@@ -1540,7 +1540,6 @@ dependencies = [
  "glob",
  "imgui",
  "imgui-glium-renderer",
- "imgui-sys",
  "imgui-winit-support",
  "indoc",
  "lazy_static",
