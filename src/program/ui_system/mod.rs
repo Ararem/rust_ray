@@ -1,5 +1,6 @@
 mod clipboard_integration;
 pub mod font_manager;
+mod docking;
 
 use std::path::PathBuf;
 use crate::program::ui_system::font_manager::FontManager;
@@ -12,6 +13,7 @@ use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use tracing::{debug_span, instrument, trace, warn};
 use crate::config::program_config::{IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
+use crate::log_expr_val;
 
 /*
 TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
@@ -72,8 +74,10 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         .expect("could not initialise display");
     trace!("Creating [imgui] context");
     imgui_context = Context::create();
-    imgui_context.set_ini_filename(PathBuf::from(IMGUI_SETTINGS_FILE_PATH));
-    imgui_context.set_log_filename(PathBuf::from(IMGUI_LOG_FILE_PATH));
+    imgui_context.set_ini_filename(PathBuf::from(log_expr_val!(IMGUI_SETTINGS_FILE_PATH)));
+    imgui_context.set_log_filename(PathBuf::from(log_expr_val!(IMGUI_LOG_FILE_PATH)));
+    trace!("enabling docking config flag");
+    system.imgui.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
 
     trace!("creating font manager");
     let font_manager = FontManager::new()?;
