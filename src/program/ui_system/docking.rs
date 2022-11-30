@@ -2,7 +2,6 @@
 
 use std::os::raw::c_char;
 use imgui::{sys, Direction};
-use imgui::*;
 
 pub struct DockNode {
     id: u32,

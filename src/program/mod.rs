@@ -70,73 +70,7 @@ fn render(
             Ok(font_id) => Some(ui.push_font(*font_id)),
         };
 
-        let flags =
-            // No borders etc for top-level window
-            imgui::WindowFlags::NO_DECORATION | imgui::WindowFlags::NO_MOVE
-                // Show menu bar
-                | imgui::WindowFlags::MENU_BAR
-                // Don't raise window on focus (as it'll clobber floating windows)
-                | imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS | imgui::WindowFlags::NO_NAV_FOCUS
-                // Don't want the dock area's parent to be dockable!
-                | imgui::WindowFlags::NO_DOCKING
-            ;
 
-        // Remove padding/rounding on main container window
-        let mw_style_tweaks = {
-            let padding = ui.push_style_var(imgui::StyleVar::WindowPadding([0.0, 0.0]));
-            let rounding = ui.push_style_var(imgui::StyleVar::WindowRounding(0.0));
-            (padding, rounding)
-        };
-
-        // Create top-level window which occuplies full screen
-        ui.window("Main Window")
-          .flags(flags)
-          .position([0.0, 0.0], imgui::Condition::Always)
-          .size(ui.io().display_size, imgui::Condition::Always)
-          .build(|| {
-
-              // Create top-level docking area, needs to be made early (before docked windows)
-              let ui_d = UiDocking {};
-              let space = ui_d.dockspace("MainDockArea");
-
-              // Set up splits, docking windows. This can be done conditionally,
-              // or calling it every time is also mostly fine
-              space.split(
-                  imgui::Direction::Left,
-                  0.7,
-                  |left| {
-                      left.dock_window("Window 1");
-                  },
-                  |right| {
-                      // Further subdivide right-hand split
-                      right.split(
-                          imgui::Direction::Up,
-                          0.5,
-                          |up| {
-                              up.dock_window("Window 2");
-                          },
-                          |down| {
-                              down.dock_window("Window 3");
-                          },
-                      );
-                  },
-              );
-
-              // Create application windows as normal
-              ui.window("Window 1")
-                .size([300.0, 110.0], Condition::FirstUseEver)
-                .build(|| {
-                    ui.text("Window 1");
-                });
-              ui.window("Window 2")
-                .size([300.0, 110.0], Condition::FirstUseEver)
-                .build(|| {
-                    ui.text("Window 2");
-                });
-              ui.window("Window 3").build(|| {
-                  ui.text("Window 3");
-              });
-          });
 
         ui.show_demo_window(&mut false);
 
