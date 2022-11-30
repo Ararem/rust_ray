@@ -76,7 +76,7 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
     imgui_context.set_log_filename(PathBuf::from(IMGUI_LOG_FILE_PATH));
 
     trace!("creating font manager");
-    let mut font_manager = FontManager::new()?;
+    let font_manager = FontManager::new()?;
 
     //TODO: High DPI setting
     trace!("creating [winit] platform");

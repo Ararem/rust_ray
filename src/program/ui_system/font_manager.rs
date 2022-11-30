@@ -11,7 +11,7 @@ use fs_extra::*;
 use path_clean::PathClean;
 use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::{ErrReport, eyre};
-use imgui::{FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, InputFloat, InputTextFlags, ItemHoveredFlags, TreeNodeFlags, Ui};
+use imgui::{FontAtlasRefMut, FontConfig, FontId, FontSource, FontStackToken, InputFloat, InputTextFlags, ItemHoveredFlags, Slider, TreeNodeFlags, Ui};
 use imgui_glium_renderer::Renderer;
 use regex::Regex;
 use tracing::{debug, error, info, trace, trace_span};
@@ -103,8 +103,10 @@ impl FontManager {
             }
 
             // Extract font names from the file path using Regex
-            let mut base_font_name = "<Unknown Font>";
-            let mut weight_name = "<Unknown Weight>";
+            let mut base_font_name = "Unknown Fonts"; // Should be overwritten unless something goes wrong, this value is fallback
+            let mut weight_name = file_path.as_str(); // Should be overwritten unless something goes wrong, this value is fallback
+            // Try trim the file_path default value so it's not as long. Should always complete but just to be sure
+            if let Some(pat) = fonts_directory.to_str() { weight_name = weight_name.trim_start_matches(pat).trim_start_matches(&['/', '\\']); }
             for capture in name_extractor_regex.captures_iter(file_path) {
                 if let Some(_match) = capture.name("base_font_name") {
                     base_font_name = _match.as_str();
@@ -123,6 +125,7 @@ impl FontManager {
         }
 
         // Now we have loaded file data, process into Font{} structs
+        self.fonts.clear();
         for font_entry in fonts {
             let base_font_name = font_entry.0;
             trace!("processing base font {base_font_name}");
@@ -136,12 +139,15 @@ impl FontManager {
                 trace!("processing font {base_font_name} weight {weight_name}");
                 let data = weight_entry.1;
 
-                let weight = FontWeight{
+                let weight = FontWeight {
                     name: weight_name.to_string(),
                     data
                 };
                 font.weights.push(weight);
             }
+
+            //Sort the fonts by their name
+            font.weights.sort_unstable_by(|w1, w2| w1.name.cmp(&w2.name));
 
             // Push the font once it's complete
             self.fonts.push(font);
@@ -183,8 +189,8 @@ impl FontManager {
         if !self.dirty && self.current_font != None {
             return Ok(false);
         }
-
         let _guard = trace_span!("rebuild_font_if_needed").entered();
+
         trace!("clearing font atlas");
         font_atlas.clear();
 
@@ -206,7 +212,10 @@ impl FontManager {
         *weight_index = (*weight_index).clamp(0usize, weights.len() - 1usize);
         let weight = &weights[*weight_index];
 
-        let size = &self.selected_size;
+        let size = &mut self.selected_size;
+
+        // Important: having a negative size is __BAD__
+        *size = (*size).clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
 
         trace!("building font {font_name} ({weight}) @ {size}px", font_name = base_font.name, weight = weight.name);
         trace!(
@@ -236,6 +245,8 @@ impl FontManager {
         // font_atlas.build_rgba32_texture();
         font_atlas.build_alpha8_texture();
 
+        self.dirty = false;
+
         _guard.exit();
         return Ok(true);
     }
@@ -253,7 +264,7 @@ impl FontManager {
     pub fn render_font_selector(&mut self, ui: &Ui) {
         if ui.collapsing_header("Font Manager", TreeNodeFlags::empty()) {
             if ui.button("Reload fonts list") {
-                match self.reload_list_from_resources(){
+                match self.reload_list_from_resources() {
                     Ok(_) => info!("font list reloaded"),
                     Err(err) => {
                         let report = err.note("called manually by user in font manager UI");
@@ -264,30 +275,35 @@ impl FontManager {
             if self.fonts.len() == 0 {
                 ui.text_colored(ERROR, "No fonts loaded");
             } else {
+                let dirty = &mut self.dirty;
                 if ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| Borrowed(&f.name)) {
                     trace!(target: UI_USER_EVENT, "Changed font to [{new_font_index}]: {new_font}", new_font_index = self.selected_font_index, new_font = self.fonts[self.selected_font_index].name);
+                    *dirty = true;
                 }
                 if ui.is_item_hovered() {
                     ui.tooltip_text("Select a font to use for the user interface (UI)");
                 }
                 if self.fonts[self.selected_font_index].weights.len() == 0 {
-                    ui.text_colored(ERROR, "No weights loaded");
+                    ui.text_colored(ERROR, "No weights loaded for the selected font.");
+                    /*
+                     * The way it's done is by getting the font and weight name from font file, and then placing the file into nested hashmaps (`fonts[base_font].insert(weight)`).
+                     * We should never get an empty font, since the entry for a font only ever gets created when we have to insert a weight and don't have a parent font entry already
+                     * If we get to here, something has gone seriously wrong
+                     */
+                    error!("had no weights loaded for the selected font. this shouldn't happen because of how the font and weight names are calculated, so something probably went wrong");
                 } else {
-                    ui.combo(
-                        "Weight",
-                        &mut self.selected_weight_index,
-                        &self.fonts[self.selected_font_index].weights,
-                        |v| Borrowed(&v.name),
-                    );
+                    if ui.combo("Weight", &mut self.selected_weight_index, &self.fonts[self.selected_font_index].weights, |v| Borrowed(&v.name), ) {
+                        trace!(target: UI_USER_EVENT, "Changed font weight to [{new_weight_index}]: {new_weight}", new_weight_index = self.selected_weight_index, new_weight = self.fonts[self.selected_font_index].weights[self.selected_weight_index].name);
+                        *dirty = true;
+                    }
                     if ui.is_item_hovered() {
                         ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
                     }
                 }
-                InputFloat::new(
-                    ui,
-                    "Size (px)",
-                    &mut self.selected_size
-                ).build();
+                if Slider::new("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE).build(ui, &mut self.selected_size) {
+                    trace!(target: UI_USER_EVENT, "Changed font size to {new_size} px", new_size=self.selected_size);
+                    *dirty = true;
+                }
                 if ui.is_item_hovered() {
                     ui.tooltip_text("Change the size of the font (in pixels)");
                 }

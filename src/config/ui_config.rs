@@ -8,6 +8,8 @@ pub const UI_CONFIG: UiConfig = UiConfig {
 };
 
 pub const DEFAULT_FONT_SIZE:f32 = 20f32;
+pub const MIN_FONT_SIZE:f32 = 8f32;
+pub const MAX_FONT_SIZE:f32 = 128f32;
 
 pub fn base_font_config() -> FontConfig {
     FontConfig {
