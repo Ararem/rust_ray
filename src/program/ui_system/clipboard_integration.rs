@@ -1,8 +1,9 @@
-use std::any::{type_name};
-use clipboard::{ClipboardContext, ClipboardProvider};
-use imgui::ClipboardBackend;
+use std::any::type_name;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};
+
+use clipboard::{ClipboardContext, ClipboardProvider};
+use imgui::ClipboardBackend;
 use tracing::*;
 
 /// Wrapper struct for [ClipboardContext] that allows integration with [imgui]
@@ -22,7 +23,7 @@ impl Debug for ImguiClipboardSupport {
 }
 
 /// (Tries to) initialise clipboard support
-#[instrument(ret, level="trace")]
+#[instrument(ret, level = "trace")]
 pub fn clipboard_init() -> Result<ImguiClipboardSupport, Box<dyn Error>> {
     ClipboardContext::new().map(|val| ImguiClipboardSupport {
         backing_context: val,

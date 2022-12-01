@@ -1,6 +1,7 @@
-use crate::program::ui_system::UiConfig;
 use imgui::FontConfig;
 use imgui_winit_support::winit::dpi::{LogicalSize, Size};
+
+use crate::program::ui_system::UiConfig;
 
 pub const UI_CONFIG: UiConfig = UiConfig {
     vsync: false,

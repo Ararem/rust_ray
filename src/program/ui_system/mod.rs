@@ -1,20 +1,22 @@
-pub mod clipboard_integration;
-pub mod font_manager;
-pub mod docking;
-
 use std::path::PathBuf;
-use crate::program::ui_system::font_manager::FontManager;
+
 use color_eyre::eyre;
+use glium::{Display, glutin};
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
-use glium::{glutin, Display};
 use imgui::{Condition, Context, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::dpi::Size;
 use tracing::{debug_span, instrument, trace, warn};
+
 use crate::config::program_config::{IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::log_expr_val;
+use crate::program::ui_system::font_manager::FontManager;
+
+pub mod clipboard_integration;
+pub mod font_manager;
+pub mod docking;
 
 /*
 TODO:   Add support for different renderers (glow, glium, maybe d3d12, dx11, wgpu) and backend platforms (winit, sdl2)
@@ -70,7 +72,8 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         .with_vsync(config.vsync)
         .with_hardware_acceleration(config.hardware_acceleration);
     trace!("creating [winit] window builder");
-    let window_builder = WindowBuilder::new().with_title(title).with_inner_size(config.default_window_size).with_maximized(true); //TODO: Configure
+    let window_builder = WindowBuilder::new().with_title(title).with_inner_size(config.default_window_size).with_maximized(true);
+    //TODO: Configure
     trace!("creating display");
     display = Display::new(window_builder, glutin_context_builder, &event_loop)
         .expect("could not initialise display");
@@ -116,7 +119,7 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
             platform,
             renderer,
         },
-        managers: UiManagers{
+        managers: UiManagers {
             font_manager
         },
     })
@@ -125,9 +128,9 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
 impl UiManagers {
     pub fn render_ui_managers_window(&mut self, ui: &Ui) {
         ui.window("UI Management")
-            .size([300.0, 110.0], Condition::FirstUseEver)
-            .build(|| {
-                self.font_manager.render_font_selector(ui);
-            });
+          .size([300.0, 110.0], Condition::FirstUseEver)
+          .build(|| {
+              self.font_manager.render_font_selector(ui);
+          });
     }
 }

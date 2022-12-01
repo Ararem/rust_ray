@@ -1,7 +1,8 @@
 // No, not that kind of docking :p
 
 use std::os::raw::c_char;
-use imgui::{sys, Direction};
+
+use imgui::{Direction, sys};
 
 pub struct DockNode {
     id: u32,

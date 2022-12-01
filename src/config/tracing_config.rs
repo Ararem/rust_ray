@@ -1,13 +1,15 @@
-use super::super::helper::logging::event_targets::*;
 use lazy_static::lazy_static;
 use regex::Regex;
 use tracing_subscriber::{fmt::format::*, fmt::time::*};
+
+use super::super::helper::logging::event_targets::*;
 
 /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
 pub struct LogTargetFilter {
     pub regex: Regex,
     pub enabled: bool,
 }
+
 impl LogTargetFilter {
     /// Creates a filter that matches if the target starts with a specified string. The input can be regex
     pub fn starts_with(start: &str, enabled: bool) -> LogTargetFilter {

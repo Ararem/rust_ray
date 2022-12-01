@@ -1,1 +1,2 @@
-#[macro_use] pub mod logging;
+#[macro_use]
+pub mod logging;

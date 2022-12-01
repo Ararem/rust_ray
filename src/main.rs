@@ -1,22 +1,25 @@
 #![warn(missing_docs)]
 
 //! # A little test raytracer project
+use std::io;
+use std::process::ExitCode;
+
+use color_eyre::eyre;
+use shadow_rs::shadow;
+use tracing::*;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::filter::FilterFn;
+use tracing_subscriber::fmt::format::FmtSpan;
+
+use helper::logging::event_targets::*;
+
+use crate::config::tracing_config::STANDARD_FORMAT;
+
 mod engine;
 mod helper;
 mod program;
 mod config;
 mod resources;
-
-use color_eyre::eyre;
-use helper::logging::event_targets::*;
-use shadow_rs::shadow;
-use std::io;
-use std::process::ExitCode;
-use tracing::level_filters::LevelFilter;
-use tracing::*;
-use tracing_subscriber::filter::FilterFn;
-use tracing_subscriber::fmt::format::FmtSpan;
-use crate::config::tracing_config::STANDARD_FORMAT;
 
 shadow!(build); //Required for shadow-rs to work
 
@@ -65,7 +68,7 @@ fn init_tracing() -> eyre::Result<()> {
                 .from_env_lossy()
         )
         .with_filter(
-            FilterFn::new(|meta|{
+            FilterFn::new(|meta| {
                 let target = meta.target();
                 for filter in config::tracing_config::LOG_FILTERS.iter() {
                     if filter.regex.is_match(target) {

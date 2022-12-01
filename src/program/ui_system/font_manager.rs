@@ -2,16 +2,18 @@
 
 use Cow::Borrowed;
 use std::borrow::Cow;
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::io::Read;
 use std::ops::Deref;
-use fs_extra::*;
+
 use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::eyre;
+use fs_extra::*;
 use imgui::{FontAtlas, FontConfig, FontId, FontSource, TreeNodeFlags, Ui};
 use tracing::{debug, error, info, trace, trace_span};
 use tracing::{instrument, warn};
+
 use crate::config::resources_config::{FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER, FONTS_PATH};
 use crate::config::ui_config::*;
 use crate::config::ui_config::colours::ERROR;
