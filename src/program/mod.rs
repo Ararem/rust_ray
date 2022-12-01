@@ -75,7 +75,8 @@ fn render(
 
         let main_window_flags =
             // No borders etc for top-level window
-            WindowFlags::NO_DECORATION | WindowFlags::NO_MOVE
+            WindowFlags::NO_DECORATION
+                | WindowFlags::NO_MOVE
                 // Show menu bar
                 | WindowFlags::MENU_BAR
                 // Don't raise window on focus (as it'll clobber floating windows)

@@ -11,6 +11,7 @@ use glium::{glutin, Display};
 use imgui::{Condition, Context, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use imgui_winit_support::winit::dpi::Size;
 use tracing::{debug_span, instrument, trace, warn};
 use crate::config::program_config::{IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::log_expr_val;
@@ -44,6 +45,7 @@ pub struct UiManagers {
 pub struct UiConfig {
     pub vsync: bool,
     pub hardware_acceleration: Option<bool>,
+    pub default_window_size: Size,
 }
 
 ///Initialises the UI system and returns it
@@ -68,7 +70,7 @@ pub fn init_ui_system(title: &str, config: UiConfig) -> eyre::Result<UiSystem> {
         .with_vsync(config.vsync)
         .with_hardware_acceleration(config.hardware_acceleration);
     trace!("creating [winit] window builder");
-    let window_builder = WindowBuilder::new().with_title(title); //TODO: Configure
+    let window_builder = WindowBuilder::new().with_title(title).with_inner_size(config.default_window_size).with_maximized(true); //TODO: Configure
     trace!("creating display");
     display = Display::new(window_builder, glutin_context_builder, &event_loop)
         .expect("could not initialise display");
