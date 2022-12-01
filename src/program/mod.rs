@@ -1,22 +1,18 @@
 use crate::config::program_config::APP_TITLE;
 use crate::helper::logging::event_targets::*;
-use crate::program::ui_system::font_manager::FontManager;
 use crate::program::ui_system::{init_ui_system, UiBackend, UiManagers, UiSystem};
 use chrono::Local;
 use color_eyre::{eyre, Report};
-use glium::glutin::event_loop::{ControlFlow, EventLoop};
+use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::{glutin, Display, Surface};
-use imgui::{Condition, Context, DrawData, FontId, Ui, WindowFlags};
+use imgui::{Context, DrawData, FontId, Key, Ui, WindowFlags};
 use imgui_glium_renderer::Renderer;
-use imgui_winit_support::WinitPlatform;
-use std::borrow::Borrow;
-use std::ops::Deref;
-use color_eyre::owo_colors::OwoColorize;
+use imgui_winit_support::{winit, WinitPlatform};
 use imgui::Condition::Always;
 use tracing::{debug_span, error, instrument, trace, trace_span, warn};
-use crate::main;
 use crate::program::ui_system::docking::UiDockingArea;
+use crate::config::keybindings_config::standard::*;
 
 pub(crate) mod ui_system;
 
@@ -28,6 +24,39 @@ fn render(
     renderer: &mut Renderer,
     managers: &mut UiManagers,
 ) -> color_eyre::Result<()> {
+    unsafe fn build_ui(ui: &Ui, managers: &mut UiManagers) {
+        let _span = trace_span!(target: UI_SPAMMY, "build_ui").entered();
+        static mut SHOW_DEMO_WINDOW: bool = true;
+        static mut SHOW_METRICS_WINDOW: bool = true;
+
+        trace!(target:UI_SPAMMY, "processing keybindings");
+        macro_rules! toggle_key {
+            ($key:ident, $toggle_var:ident) => {
+                        if ui.is_key_index_pressed_no_repeat($key) {
+                            let old = $toggle_var;
+                            let new = !old;
+                            $toggle_var  = new;
+                            trace!(target: UI_USER_EVENT, "toggle key {key}: {old} => {new}", key=stringify!($key), old=old, new=new);
+                        };
+            };
+        }
+        toggle_key!(TOGGLE_METRICS_WINDOW,SHOW_METRICS_WINDOW);
+        toggle_key!(TOGGLE_DEMO_WINDOW,SHOW_DEMO_WINDOW);
+
+        trace!(target:UI_SPAMMY, "menu bar");
+        // ui.menu_bar()
+
+
+        trace!(target:UI_SPAMMY, "showing windows");
+        if SHOW_DEMO_WINDOW { ui.show_demo_window(&mut SHOW_DEMO_WINDOW); }
+        if SHOW_METRICS_WINDOW { ui.show_metrics_window(&mut SHOW_METRICS_WINDOW); }
+
+        // Create stuff for our newly-created frame
+        managers.render_ui_managers_window(&ui);
+
+        _span.exit();
+    }
+
     let _guard = trace_span!(
         target: UI_SPAMMY,
         "render",
@@ -41,8 +70,6 @@ fn render(
             Err(err) => warn!("font manager was not able to rebuild font: {err}"),
             // Font atlas was rebuilt
             Ok(true) => {
-                drop(fonts);
-                //Have to drop because it references imgui_context, and we need to borrow as mut here
                 trace!("font was rebuilt, reloading renderer texture");
                 let result = renderer.reload_font_texture(imgui_context);
                 match result {
@@ -85,7 +112,6 @@ fn render(
                 | WindowFlags::NO_DOCKING
             ;
 
-
         let main_window_token = ui.window("Main Window")
                                   .flags(main_window_flags)
                                   .position([0.0, 0.0], Always) // These two make it always fill the whole screen
@@ -94,16 +120,15 @@ fn render(
             None => trace!(target:UI_SPAMMY, "warning: main window is not visible"),
             Some(token) => {
                 let docking_area = UiDockingArea {};
-                let dock_node = docking_area.dockspace("Main Dock Area");
+                let _dock_node = docking_area.dockspace("Main Dock Area");
 
-                ui.show_demo_window(&mut false);
+                // Unsafe because of static mut variables inside build_ui
+                unsafe { build_ui(&ui, managers); }
 
                 token.end();
             }
         }
 
-        // Create stuff for our newly-created frame
-        managers.render_ui_managers_window(&ui);
 
         if let Some(token) = maybe_font_token {
             token.pop();

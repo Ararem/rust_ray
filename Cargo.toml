@@ -39,3 +39,30 @@ imgui-winit-support = "0.9.0"
 shadow-rs = "0.17.1" # Needs to run at build-time, so include as build dependency
 fs_extra = "1.2.0"
 glob = "0.3"
+
+[profile.dev]
+# No optimisation. Sloewr code but means nothing has been changed so we won't have issues debugging
+opt-level = 0
+# Checks our maths is good
+overflow-checks = true
+lto = false
+# Fast compile time, not very optimised
+codegen-units = 32
+incremental = true
+# Includes debug information in release builds. Necessary for profiling. Does not
+# slow down the executable.
+debug = true
+
+[profile.release]
+# Full optimisation
+opt-level = 3
+overflow-checks = false
+# Enable link-time optimization, eliminates more code and inlines across crate boundaries.
+# Default: false
+lto = true
+# Much slower compile time, but speeds up generated code (best optimisations)
+codegen-units = 1
+incremental = true
+# Includes debug information in release builds. Necessary for profiling. Does not
+# slow down the executable.
+debug = true
