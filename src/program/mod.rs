@@ -1,18 +1,19 @@
+use chrono::Local;
+use color_eyre::{eyre, Report};
+use glium::{Display, glutin, Surface};
+use glium::glutin::event_loop::ControlFlow;
+use glium::glutin::platform::run_return::EventLoopExtRunReturn;
+use imgui::{Context, DrawData, FontId, Key, Ui, WindowFlags};
+use imgui::Condition::Always;
+use imgui_glium_renderer::Renderer;
+use imgui_winit_support::{winit, WinitPlatform};
+use tracing::{debug_span, error, instrument, trace, trace_span, warn};
+
+use crate::config::keybindings_config::standard::*;
 use crate::config::program_config::APP_TITLE;
 use crate::helper::logging::event_targets::*;
 use crate::program::ui_system::{init_ui_system, UiBackend, UiManagers, UiSystem};
-use chrono::Local;
-use color_eyre::{eyre, Report};
-use glium::glutin::event_loop::ControlFlow;
-use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use glium::{glutin, Display, Surface};
-use imgui::{Context, DrawData, FontId, Key, Ui, WindowFlags};
-use imgui_glium_renderer::Renderer;
-use imgui_winit_support::{winit, WinitPlatform};
-use imgui::Condition::Always;
-use tracing::{debug_span, error, instrument, trace, trace_span, warn};
 use crate::program::ui_system::docking::UiDockingArea;
-use crate::config::keybindings_config::standard::*;
 
 pub(crate) mod ui_system;
 
