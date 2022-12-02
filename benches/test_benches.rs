@@ -11,7 +11,7 @@ lazy_static! {
         }
 // For NUM=120, Vec wins (22ns vs 1us)
 // For Num=12000, SliceDeque just wins (1us vs 1.4us)
-static NUM_FRAME_TIMES_TO_TRACK: usize = 12000usize;
+static NUM_FRAME_TIMES_TO_TRACK: usize = 3600usize;
 
 #[derive(Debug, Clone)]
 struct FrameTimesVec {

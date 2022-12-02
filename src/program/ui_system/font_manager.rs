@@ -88,10 +88,9 @@ impl FontManager {
                 }
             };
 
-            let bytes_read;
             font_data_buffer.clear();
             match file.read_to_end(&mut font_data_buffer) {
-                Ok(_read) => bytes_read = _read,
+                Ok(_read) => {}
                 Err(error) => {
                     let report = Report::new(error)
                         .wrap_err(format!("could not read bytes from font file at {file_path}"));
@@ -260,51 +259,53 @@ impl FontManager {
 
     /// Renders the font selector, and returns the selected font
     pub fn render_font_selector(&mut self, ui: &Ui) {
-        if ui.collapsing_header("Font Manager", TreeNodeFlags::empty()) {
-            if ui.button("Reload fonts list") {
-                match self.reload_list_from_resources() {
-                    Ok(_) => info!("font list reloaded"),
-                    Err(err) => {
-                        let report = err.note("called manually by user in font manager UI");
-                        warn!("{report}");
-                    }
+        if !(ui.collapsing_header("Font Manager", TreeNodeFlags::empty())) {
+            return;
+        }
+
+        if ui.button("Reload fonts list") {
+            match self.reload_list_from_resources() {
+                Ok(_) => info!("font list reloaded"),
+                Err(err) => {
+                    let report = err.note("called manually by user in font manager UI");
+                    warn!("{report}");
                 }
             }
-            if self.fonts.len() == 0 {
-                ui.text_colored(ERROR, "No fonts loaded");
+        }
+        if self.fonts.len() == 0 {
+            ui.text_colored(ERROR, "No fonts loaded");
+        } else {
+            let dirty = &mut self.dirty;
+            if ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| Borrowed(&f.name)) {
+                trace!(target: UI_USER_EVENT, "Changed font to [{new_font_index}]: {new_font}", new_font_index = self.selected_font_index, new_font = self.fonts[self.selected_font_index].name);
+                *dirty = true;
+            }
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Select a font to use for the user interface (UI)");
+            }
+            if self.fonts[self.selected_font_index].weights.len() == 0 {
+                ui.text_colored(ERROR, "No weights loaded for the selected font.");
+                /*
+                 * The way it's done is by getting the font and weight name from font file, and then placing the file into nested hashmaps (`fonts[base_font].insert(weight)`).
+                 * We should never get an empty font, since the entry for a font only ever gets created when we have to insert a weight and don't have a parent font entry already
+                 * If we get to here, something has gone seriously wrong
+                 */
+                error!("had no weights loaded for the selected font. this shouldn't happen because of how the font and weight names are calculated, so something probably went wrong");
             } else {
-                let dirty = &mut self.dirty;
-                if ui.combo("Font", &mut self.selected_font_index, &self.fonts, |f| Borrowed(&f.name)) {
-                    trace!(target: UI_USER_EVENT, "Changed font to [{new_font_index}]: {new_font}", new_font_index = self.selected_font_index, new_font = self.fonts[self.selected_font_index].name);
+                if ui.combo("Weight", &mut self.selected_weight_index, &self.fonts[self.selected_font_index].weights, |v| Borrowed(&v.name), ) {
+                    trace!(target: UI_USER_EVENT, "Changed font weight to [{new_weight_index}]: {new_weight}", new_weight_index = self.selected_weight_index, new_weight = self.fonts[self.selected_font_index].weights[self.selected_weight_index].name);
                     *dirty = true;
                 }
                 if ui.is_item_hovered() {
-                    ui.tooltip_text("Select a font to use for the user interface (UI)");
+                    ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
                 }
-                if self.fonts[self.selected_font_index].weights.len() == 0 {
-                    ui.text_colored(ERROR, "No weights loaded for the selected font.");
-                    /*
-                     * The way it's done is by getting the font and weight name from font file, and then placing the file into nested hashmaps (`fonts[base_font].insert(weight)`).
-                     * We should never get an empty font, since the entry for a font only ever gets created when we have to insert a weight and don't have a parent font entry already
-                     * If we get to here, something has gone seriously wrong
-                     */
-                    error!("had no weights loaded for the selected font. this shouldn't happen because of how the font and weight names are calculated, so something probably went wrong");
-                } else {
-                    if ui.combo("Weight", &mut self.selected_weight_index, &self.fonts[self.selected_font_index].weights, |v| Borrowed(&v.name), ) {
-                        trace!(target: UI_USER_EVENT, "Changed font weight to [{new_weight_index}]: {new_weight}", new_weight_index = self.selected_weight_index, new_weight = self.fonts[self.selected_font_index].weights[self.selected_weight_index].name);
-                        *dirty = true;
-                    }
-                    if ui.is_item_hovered() {
-                        ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
-                    }
-                }
-                if ui.slider("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE, &mut self.selected_size) {
-                    trace!(target: UI_USER_EVENT, "Changed font size to {new_size} px", new_size=self.selected_size);
-                    *dirty = true;
-                }
-                if ui.is_item_hovered() {
-                    ui.tooltip_text("Change the size of the font (in pixels)");
-                }
+            }
+            if ui.slider("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE, &mut self.selected_size) {
+                trace!(target: UI_USER_EVENT, "Changed font size to {new_size} px", new_size=self.selected_size);
+                *dirty = true;
+            }
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Change the size of the font (in pixels)");
             }
         }
     }

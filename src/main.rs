@@ -5,7 +5,6 @@ use std::io;
 use std::process::ExitCode;
 
 use color_eyre::eyre;
-use shadow_rs::shadow;
 use tracing::*;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::FilterFn;
@@ -21,8 +20,7 @@ mod program;
 mod config;
 mod resources;
 mod test;
-
-shadow!(build); //Required for shadow-rs to work
+mod build;
 
 /// Main entrypoint for the program
 ///

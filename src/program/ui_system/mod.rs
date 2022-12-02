@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -7,12 +6,12 @@ use color_eyre::{eyre, Help, Report};
 use glium::{Display, glutin};
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
-use imgui::{Condition, Context, Ui};
+use imgui::{Condition, Context, TreeNodeFlags, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::dpi::Size;
 use lazy_static::lazy_static;
-use tracing::{error, info, instrument, trace, warn};
+use tracing::{error, instrument, trace, warn};
 
 use nameof::*;
 
@@ -149,13 +148,16 @@ impl UiManagers {
         lazy_static! {
             static ref FRAME_TIMES: Mutex<FrameTimes> = Mutex::new(FrameTimes{deltas:Vec::new(), fps:Vec::new()});
         }
-        static NUM_FRAMES_TO_TRACK: usize = 120usize;
+        static NUM_FRAMES_TO_TRACK: usize = 3600usize;
         #[derive(Debug, Clone)]
-        ///
+        /// Struct that stores arrays of floats for frame times (ΔT) and frame-rates
         ///
         ///
         /// # Performance Notes
-        /// Although using a Vec as a FIFO queue normally would be a bad idea, since inserting at `[0]` always causes
+        /// Although using a [Vec] as a FIFO queue normally would be a bad idea, since inserting at `[0]` always causes the entire vec to be shifted
+        /// In benchmarks, it was actually *much* faster that using any other collection types:
+        /// * [VecDeque] - Wouldn't work because in order to plot, a slice `[f32]` needs to be passed, and this is very tricky to get from a [VecDeque]
+        /// * [SliceDeque] - Worked almost identically to [Vec], but was orders of magnitudes slower (`~1 us` for [SliceDeque] vs `~22ns` for [Vec], at 120 frames stored). At extreme frame counts (`~12000` frames), it did gain a slight advantage (`1us` vs `1.4us`), indicating that [SliceDeque] has `O(1)` performance, but has a massive overhead comparatively to [Vec]
         struct FrameTimes {
             /// ΔT values, in milliseconds
             ///
@@ -167,6 +169,7 @@ impl UiManagers {
             /// Inverse of [deltas](FrameTimes::deltas)
             fps: Vec<f32>
         }
+
         let mut guard_frame_times = match FRAME_TIMES.lock() {
             Err(poisoned) => {
                 let report = Report::msg(format!("{} mutex was poisoned", name_of!(FRAME_TIMES)))
@@ -177,16 +180,20 @@ impl UiManagers {
             Ok(guard) => guard,
         };
 
-
         let frame_times = guard_frame_times.deref_mut();
         let delta = ui.io().delta_time;
+        // We insert into the front (start) of the Vec, then truncate the end, ensuring that the values get pushed along and we don't go over our limit
         frame_times.deltas.insert(0, delta * 1000.0);
         frame_times.fps.insert(0, 1f32 / delta);
         frame_times.deltas.truncate(NUM_FRAMES_TO_TRACK);
         frame_times.fps.truncate(NUM_FRAMES_TO_TRACK);
-        ui.plot_lines("Frame Times (ms)", &frame_times.deltas)
-          .build();
-        ui.plot_lines("Frame Rates", &frame_times.fps)
-          .build();
+
+
+        if ui.collapsing_header("Frame Timings", TreeNodeFlags::empty()) {
+            ui.plot_lines("Frame Times (ms)", &frame_times.deltas)
+              .build();
+            ui.plot_lines("Frame Rates", &frame_times.fps)
+              .build();
+        }
     }
 }

@@ -1,13 +1,12 @@
 use chrono::Local;
 use color_eyre::{eyre, Report};
-use color_eyre::owo_colors::OwoColorize;
 use glium::{Display, glutin, Surface};
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use imgui::{Context, DrawData, FontId, Key, StyleVar, Ui, WindowFlags};
+use imgui::{Context, StyleVar, Ui, WindowFlags};
 use imgui::Condition::Always;
 use imgui_glium_renderer::Renderer;
-use imgui_winit_support::{winit, WinitPlatform};
+use imgui_winit_support::WinitPlatform;
 use tracing::{debug_span, error, instrument, trace, trace_span, warn};
 
 use crate::config::keybindings_config::standard::*;
