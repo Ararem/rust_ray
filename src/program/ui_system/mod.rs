@@ -1,11 +1,9 @@
-use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::ops::{DerefMut, Index};
+use std::ops::DerefMut;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
-use color_eyre::{eyre, Help, IndentedSection, Report};
-use color_eyre::owo_colors::OwoColorize;
+use color_eyre::{eyre, Help, Report};
 use glium::{Display, glutin};
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
@@ -13,10 +11,7 @@ use imgui::{Condition, Context, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::dpi::Size;
-use lazy_static::__Deref;
 use lazy_static::lazy_static;
-use shadow_rs::new;
-use structx::*;
 use tracing::{error, info, instrument, trace, warn};
 
 use nameof::*;
@@ -151,12 +146,16 @@ impl UiManagers {
     }
 
     fn render_framerate_graph(ui: &Ui) {
-        static mut i: i32 = 0;
         lazy_static! {
             static ref FRAME_TIMES: Mutex<FrameTimes> = Mutex::new(FrameTimes{deltas:Vec::new(), fps:Vec::new()});
         }
-        static NUM_FRAME_TIMES_TO_TRACK: usize = 120usize;
+        static NUM_FRAMES_TO_TRACK: usize = 120usize;
         #[derive(Debug, Clone)]
+        ///
+        ///
+        ///
+        /// # Performance Notes
+        /// Although using a Vec as a FIFO queue normally would be a bad idea, since inserting at `[0]` always causes
         struct FrameTimes {
             /// ΔT values, in milliseconds
             ///
@@ -179,23 +178,12 @@ impl UiManagers {
         };
 
 
-        //TODO: See if there's a faster way
         let frame_times = guard_frame_times.deref_mut();
-        unsafe {
-            i += 1;
-            if i % 1000 == 1 {
-                let delta = ui.io().delta_time;
-                frame_times.deltas.insert(0, delta * 1000.0);
-                frame_times.fps.insert(0, 1f32 / delta);
-                frame_times.deltas.truncate(NUM_FRAME_TIMES_TO_TRACK);
-                frame_times.fps.truncate(NUM_FRAME_TIMES_TO_TRACK);
-            }
-        }
-        let x: VecDeque<f32> = VecDeque::new();
-        // x.rotate_right()
-        ui.plot_lines("Test Frame Times (ms)", &frame_times.deltas)
-          .values_offset(frame_times.deltas.len() / 2)
-          .build();
+        let delta = ui.io().delta_time;
+        frame_times.deltas.insert(0, delta * 1000.0);
+        frame_times.fps.insert(0, 1f32 / delta);
+        frame_times.deltas.truncate(NUM_FRAMES_TO_TRACK);
+        frame_times.fps.truncate(NUM_FRAMES_TO_TRACK);
         ui.plot_lines("Frame Times (ms)", &frame_times.deltas)
           .build();
         ui.plot_lines("Frame Rates", &frame_times.fps)

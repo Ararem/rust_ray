@@ -20,6 +20,7 @@ mod helper;
 mod program;
 mod config;
 mod resources;
+mod test;
 
 shadow!(build); //Required for shadow-rs to work
 
