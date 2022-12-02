@@ -27,6 +27,7 @@ chrono = "0.4"
 fs_extra = "1.2.0"
 path-clean = "0.1.0"
 nameof = "1.2.2"
+criterion = "0.4.0"
 
 # ImGUI dependencies
 clipboard = "0.5"
@@ -67,3 +68,7 @@ incremental = true
 # Includes debug information in release builds. Necessary for profiling. Does not
 # slow down the executable.
 debug = true
+
+[[bench]]
+name = "test_benches"
+harness = false

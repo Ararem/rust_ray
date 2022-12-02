@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Index};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
@@ -192,8 +192,8 @@ impl UiManagers {
             }
         }
         let x: VecDeque<f32> = VecDeque::new();
-        x.fro
-        ui.plot_lines("Off Frame Times (ms)", &frame_times.deltas)
+        // x.rotate_right()
+        ui.plot_lines("Test Frame Times (ms)", &frame_times.deltas)
           .values_offset(frame_times.deltas.len() / 2)
           .build();
         ui.plot_lines("Frame Times (ms)", &frame_times.deltas)
