@@ -72,7 +72,7 @@ impl DockNode {
     }
 }
 
-//TODO: Find out what's necessary in these files. May be able to remove UiDockingArea struct completetely
+//TODO: Find out what's necessary in these files. May be able to remove UiDockingArea struct completely
 /// # Docking
 pub struct UiDockingArea {}
 
@@ -86,7 +86,7 @@ impl UiDockingArea {
     }
 
     /// Create dockspace with given label. Returns a handle to the
-    /// dockspace which can be used to, say, programatically split or
+    /// dockspace which can be used to, say, programmatically split or
     /// dock windows into it
     #[doc(alias = "DockSpace")]
     pub fn dockspace(&self, label: &str) -> DockNode {
