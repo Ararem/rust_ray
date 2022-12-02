@@ -1,9 +1,10 @@
 use chrono::Local;
 use color_eyre::{eyre, Report};
+use color_eyre::owo_colors::OwoColorize;
 use glium::{Display, glutin, Surface};
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use imgui::{Context, DrawData, FontId, Key, Ui, WindowFlags};
+use imgui::{Context, DrawData, FontId, Key, StyleVar, Ui, WindowFlags};
 use imgui::Condition::Always;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{winit, WinitPlatform};
@@ -29,31 +30,49 @@ fn render(
         let _span = trace_span!(target: UI_SPAMMY, "build_ui").entered();
         static mut SHOW_DEMO_WINDOW: bool = true;
         static mut SHOW_METRICS_WINDOW: bool = true;
+        static mut SHOW_UI_MANAGEMENT_WINDOW: bool = true;
+        const NO_SHORTCUT: &str = "N/A";
 
         trace!(target:UI_SPAMMY, "processing keybindings");
-        macro_rules! toggle_key {
-            ($key:ident, $toggle_var:ident) => {
-                        if ui.is_key_index_pressed_no_repeat($key) {
-                            let old = $toggle_var;
-                            let new = !old;
-                            $toggle_var  = new;
-                            trace!(target: UI_USER_EVENT, "toggle key {key}: {old} => {new}", key=stringify!($key), old=old, new=new);
+        macro_rules! key_toggle {
+            ($keybinding:ident, $toggle_var:ident) => {
+                        if ui.is_key_index_pressed_no_repeat($keybinding as i32) {
+                            $toggle_var  ^= true;
+                            trace!(target: UI_USER_EVENT, "toggle key {} => {}", stringify!($keybinding), $toggle_var);
                         };
             };
         }
-        toggle_key!(TOGGLE_METRICS_WINDOW,SHOW_METRICS_WINDOW);
-        toggle_key!(TOGGLE_DEMO_WINDOW,SHOW_DEMO_WINDOW);
+        key_toggle!(KEY_TOGGLE_METRICS_WINDOW,SHOW_METRICS_WINDOW);
+        key_toggle!(KEY_TOGGLE_DEMO_WINDOW,SHOW_DEMO_WINDOW);
 
         trace!(target:UI_SPAMMY, "menu bar");
-        // ui.menu_bar()
-
+        ui.main_menu_bar(|| {
+            ui.menu("Tools", ||
+                {
+                    macro_rules! toggle_menu_item {
+                        ($item_name:expr, $toggle_var:ident, NO_SHORTCUT) => {
+                            // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
+                             if ui.menu_item_config($item_name).shortcut(NO_SHORTCUT).build_with_ref(&mut $toggle_var){
+                                trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
+                             }
+                        };
+                        ($item_name:expr, $toggle_var:ident, $key:expr) => {
+                            // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
+                             if ui.menu_item_config($item_name).shortcut(format!("{:?}", $key)).build_with_ref(&mut $toggle_var){
+                                trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
+                             }
+                        };
+                    }
+                    toggle_menu_item!("Metrics", SHOW_METRICS_WINDOW, KEY_TOGGLE_METRICS_WINDOW);
+                    toggle_menu_item!("Demo Window", SHOW_DEMO_WINDOW, KEY_TOGGLE_DEMO_WINDOW);
+                    toggle_menu_item!("UI Management", SHOW_UI_MANAGEMENT_WINDOW, NO_SHORTCUT);
+                });
+        });
 
         trace!(target:UI_SPAMMY, "showing windows");
         if SHOW_DEMO_WINDOW { ui.show_demo_window(&mut SHOW_DEMO_WINDOW); }
         if SHOW_METRICS_WINDOW { ui.show_metrics_window(&mut SHOW_METRICS_WINDOW); }
-
-        // Create stuff for our newly-created frame
-        managers.render_ui_managers_window(&ui);
+        managers.render_ui_managers_window(&ui, &mut SHOW_UI_MANAGEMENT_WINDOW);
 
         _span.exit();
     }
@@ -113,10 +132,13 @@ fn render(
                 | WindowFlags::NO_DOCKING
             ;
 
+
+        let _window_padding_token = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
         let main_window_token = ui.window("Main Window")
                                   .flags(main_window_flags)
                                   .position([0.0, 0.0], Always) // These two make it always fill the whole screen
                                   .size(ui.io().display_size, Always).begin();
+        _window_padding_token.end();
         match main_window_token {
             None => trace!(target:UI_SPAMMY, "warning: main window is not visible"),
             Some(token) => {

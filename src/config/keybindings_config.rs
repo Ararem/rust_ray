@@ -6,7 +6,7 @@ pub mod standard {
     use imgui_winit_support::winit::event::VirtualKeyCode;
 
     /// Toggles the visibility of the [imgui] metrics window (see [imgui::Ui::show_metrics_window()])
-    pub const TOGGLE_METRICS_WINDOW: i32 = VirtualKeyCode::F3 as i32;
+    pub const KEY_TOGGLE_METRICS_WINDOW: VirtualKeyCode = VirtualKeyCode::F3;
     /// Toggles the visibility of the [imgui] demo window (see [imgui::Ui::show_demo_window()])
-    pub const TOGGLE_DEMO_WINDOW: i32 = VirtualKeyCode::F1 as i32;
+    pub const KEY_TOGGLE_DEMO_WINDOW: VirtualKeyCode = VirtualKeyCode::F1;
 }
