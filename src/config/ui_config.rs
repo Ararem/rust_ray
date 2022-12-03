@@ -25,5 +25,8 @@ pub fn base_font_config() -> FontConfig {
 
 /// Colour arrays for use with [`imgui`]
 pub mod colours {
-    pub const ERROR: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+    pub const COLOUR_GOOD: [f32; 4] = [1.0, 0.82, 0.0, 1.0];
+    pub const COLOUR_WARNING: [f32; 4] = [1.0, 0.82, 0.0, 1.0];
+    pub const COLOUR_ERROR: [f32; 4] = [1.0, 0.47, 0.0, 1.0];
+    pub const COLOUR_SEVERE_ERROR: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 }
