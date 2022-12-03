@@ -38,6 +38,9 @@ imgui-glium-renderer = "0.9.0"
 imgui-winit-support = "0.9.0"
 #imgui-sys = {version = "0.9.0", features = ["docking"]}
 
+# Raytracing-related deps
+vek = "0.15.9"
+
 [build-dependencies]
 shadow-rs = "0.18.0" # Needs to run at build-time, so include as build dependency
 fs_extra = "1.2.0"
