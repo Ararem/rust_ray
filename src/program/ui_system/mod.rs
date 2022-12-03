@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -6,14 +7,13 @@ use color_eyre::{eyre, Help, Report};
 use glium::{Display, glutin};
 use glium::glutin::event_loop::EventLoop;
 use glium::glutin::window::WindowBuilder;
-use imgui::{Condition, Context, TreeNodeFlags, Ui};
+use imgui::{Condition, Context, ItemHoveredFlags, SliderFlags, TreeNodeFlags, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::dpi::Size;
 use lazy_static::lazy_static;
-use tracing::{error, instrument, trace, warn};
-
 use nameof::*;
+use tracing::{error, instrument, trace, warn};
 
 use crate::config::program_config::{IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::log_expr_val;
@@ -148,7 +148,12 @@ impl UiManagers {
         lazy_static! {
             static ref FRAME_TIMES: Mutex<FrameTimes> = Mutex::new(FrameTimes{deltas:Vec::new(), fps:Vec::new()});
         }
-        static NUM_FRAMES_TO_TRACK: usize = 3600usize;
+        /// The number of frames to be recorded into the buffer at most
+        static mut NUM_FRAMES_TO_TRACK: usize = 3600usize;
+        /// The number of frames to display in the UI
+        static mut NUM_FRAMES_TO_DISPLAY: usize = 3600usize;
+        /// Arbitrary hard limit on how many frames we are allowed to track.
+        const HARD_LIMIT_MAX_FRAMES_TO_TRACK: u64 = 64_000u64;
         #[derive(Debug, Clone)]
         /// Struct that stores arrays of floats for frame times (ΔT) and frame-rates
         ///
@@ -170,30 +175,59 @@ impl UiManagers {
             fps: Vec<f32>
         }
 
-        let mut guard_frame_times = match FRAME_TIMES.lock() {
-            Err(poisoned) => {
-                let report = Report::msg(format!("{} mutex was poisoned", name_of!(FRAME_TIMES)))
-                    .note("Perhaps [render_ui_managers()] was called multiple times (async), and one call failed, causing the FRAME_TIME mutex to be poisoned by that failure?\nNote: This **should never happen** as the UI should be single-threaded");
-                error!("{}", report);
-                poisoned.into_inner()
+        unsafe { // Has to be unsafe because of mut static variables
+            if !(ui.collapsing_header("Frame Timings", TreeNodeFlags::empty())) {
+                return;
             }
-            Ok(guard) => guard,
-        };
 
-        let frame_times = guard_frame_times.deref_mut();
-        let delta = ui.io().delta_time;
-        // We insert into the front (start) of the Vec, then truncate the end, ensuring that the values get pushed along and we don't go over our limit
-        frame_times.deltas.insert(0, delta * 1000.0);
-        frame_times.fps.insert(0, 1f32 / delta);
-        frame_times.deltas.truncate(NUM_FRAMES_TO_TRACK);
-        frame_times.fps.truncate(NUM_FRAMES_TO_TRACK);
+            let mut guard_frame_times = match FRAME_TIMES.lock() {
+                Err(poisoned) => {
+                    let report = Report::msg(format!("{} mutex was poisoned", name_of!(FRAME_TIMES)))
+                        .note("Perhaps [render_ui_managers()] was called multiple times (async), and one call failed, causing the FRAME_TIME mutex to be poisoned by that failure?\nNote: This **should never happen** as the UI should be single-threaded");
+                    error!("{}", report);
+                    poisoned.into_inner()
+                }
+                Ok(guard) => guard,
+            };
 
+            let frame_times = guard_frame_times.deref_mut();
+            let delta = ui.io().delta_time;
+            // We insert into the front (start) of the Vec, then truncate the end, ensuring that the values get pushed along and we don't go over our limit
+            frame_times.deltas.insert(0, delta * 1000.0);
+            frame_times.fps.insert(0, 1f32 / delta);
+            frame_times.deltas.truncate(NUM_FRAMES_TO_TRACK);
+            frame_times.fps.truncate(NUM_FRAMES_TO_TRACK);
 
-        if ui.collapsing_header("Frame Timings", TreeNodeFlags::empty()) {
-            ui.plot_lines("Frame Times (ms)", &frame_times.deltas)
+            // Note the [0..min(NUM_FRAMES_TO_DISPLAY, frame_times.XXX.len())-1]
+            // This ensures that we don't try to take a slice that's bigger than the amount we have in the Vec
+            // Don't have to worry about the `-1` if `len() == 0`, since len() should never `== 0`: we always have at least 1 frame since we insert above, and NUM_FRAMES_TO_DISPLAY should always be >=1
+            let num_delta_frames = min(NUM_FRAMES_TO_DISPLAY, frame_times.deltas.len());
+            ui.plot_lines("Frame Times (ms)", &frame_times.deltas[0..num_delta_frames - 1])
+              .overlay_text(format!("{num_delta_frames} frames"))
               .build();
-            ui.plot_lines("Frame Rates", &frame_times.fps)
+            let num_fps_frames = min(NUM_FRAMES_TO_DISPLAY, frame_times.fps.len());
+            ui.plot_lines("Frame Rates", &frame_times.fps[0..num_fps_frames - 1])
+              .overlay_text(format!("{num_fps_frames} frames"))
               .build();
+
+            let mut num_track_frames_u64: u64 = NUM_FRAMES_TO_TRACK as u64; // Might fail on 128-bit systems, but eh
+            ui.slider_config("Num Tracked Frames", 1, HARD_LIMIT_MAX_FRAMES_TO_TRACK)
+              .flags(SliderFlags::LOGARITHMIC)
+              .build(&mut num_track_frames_u64);
+            NUM_FRAMES_TO_TRACK = num_track_frames_u64 as usize;
+            if ui.is_item_hovered() {
+                ui.tooltip_text("The maximum amount of frames that can be stored at one time. You probably want to leave this alone and modify [Num Displayed Frames] instead");
+            }
+
+            let mut num_displayed_frames_u64: u64 = NUM_FRAMES_TO_DISPLAY as u64; // Might fail on 128-bit systems, but eh
+            num_displayed_frames_u64 = min(num_displayed_frames_u64, num_track_frames_u64); // Don't allow it to go over num_track_frames
+            ui.slider_config("Num Displayed Frames", 1, min(HARD_LIMIT_MAX_FRAMES_TO_TRACK, num_track_frames_u64))
+              .flags(SliderFlags::LOGARITHMIC)
+              .build(&mut num_displayed_frames_u64);
+            NUM_FRAMES_TO_DISPLAY = num_displayed_frames_u64 as usize;
+            if ui.is_item_hovered() {
+                ui.tooltip_text("The number of frames that will be displayed in the plot. Must be <= [Num Tracked Frames]. Will also be automatically limited if there are not enough frames stored to be displayed (until there are enough)");
+            }
         }
     }
 }
