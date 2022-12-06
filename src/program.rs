@@ -6,8 +6,6 @@ use color_eyre::{eyre, Help, Report};
 use nameof::{name_of, name_of_type};
 use tracing::{debug, error, info, instrument, trace};
 
-use flume::*;
-
 use crate::engine::*;
 use crate::helper::logging::event_targets::*;
 use crate::program::program_messages::*;
@@ -41,7 +39,7 @@ pub fn run() -> eyre::Result<()> {
 
     // The engine/ui threads use the command_sender to send messages back to the main thread, in order to do stuff (like quit the app)
     trace!("creating mpsc channel for thread communication");
-    let (command_sender, command_receiver) = flume::unbounded::<Message>();
+    let (message_sender, message_receiver) = flume::unbounded::<Message>();
 
     // This barrier blocks our UI and engine thread from starting until the program is ready for them
     trace!("creating start thread barrier for threads");
@@ -50,11 +48,12 @@ pub fn run() -> eyre::Result<()> {
     debug!("creating engine thread");
     let engine_thread = {
         let data = Arc::clone(&program_data_wrapped);
-        let sender = flume::Sender::clone(&command_sender);
+        let sender = flume::Sender::clone(&message_sender);
+        let receiver = flume::Receiver::clone(&message_receiver);
         let barrier = Arc::clone(&thread_start_barrier);
         match thread::Builder::new()
             .name("engine_thread".to_string())
-            .spawn(move || engine_thread(barrier, data, sender))
+            .spawn(move || engine_thread(barrier, data, sender, receiver))
         {
             Ok(thread) => thread,
             Err(error) => {
@@ -71,11 +70,12 @@ pub fn run() -> eyre::Result<()> {
     debug!("creating ui thread");
     let ui_thread = {
         let data = Arc::clone(&program_data_wrapped);
-        let sender = flume::Sender::clone(&command_sender);
+        let sender = flume::Sender::clone(&message_sender);
+        let receiver = flume::Receiver::clone(&message_receiver);
         let barrier = Arc::clone(&thread_start_barrier);
         match thread::Builder::new()
             .name("ui_thread".to_string())
-            .spawn(move || ui_thread(barrier, data, sender))
+            .spawn(move || ui_thread(barrier, data, sender, receiver))
         {
             Ok(thread) => thread,
             Err(error) => {
@@ -90,7 +90,7 @@ pub fn run() -> eyre::Result<()> {
     trace!("created ui thread");
 
     // Drop command sender now that we've sent it to the threads
-    drop(command_sender);
+    drop(message_sender);
 
     trace!("waiting on barrier to enable it");
     thread_start_barrier.wait();
@@ -100,14 +100,15 @@ pub fn run() -> eyre::Result<()> {
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits
     'global: loop {
+        // Process any messages we might have from the other threads
         trace!(
             target: PROGRAM_MESSAGE_POLL_SPAMMY,
             "checking {} for messages",
-            name_of!(command_receiver)
+            name_of!(message_receiver)
         );
         'loop_messages: loop {
             // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
-            let recv = command_receiver.try_recv();
+            let recv = message_receiver.try_recv();
             match recv {
                 Err(flume::TryRecvError::Empty) => {
                     trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
@@ -159,6 +160,8 @@ pub fn run() -> eyre::Result<()> {
             }
         }
 
+        // Ensure the threads are OK
+        // ui_thread.thread().
         thread::sleep(poll_interval);
     }
 

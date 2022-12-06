@@ -1443,11 +1443,22 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e322c04a9e3440c327fca7b6c8a63e6890a32fa2ad689db972425f07e0d22abb"
 dependencies = [
- "autocfg",
- "bitflags",
- "cfg-if",
- "libc",
- "memoffset 0.6.5",
+    "autocfg",
+    "bitflags",
+    "cfg-if",
+    "libc",
+    "memoffset 0.6.5",
+]
+
+[[package]]
+name = "no-panic"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f10d4b6dcf2138f0fc171f4cc8f49517cc71ac57e29aa061c61aa57ec2dffc"
+dependencies = [
+    "proc-macro2",
+    "quote",
+    "syn",
 ]
 
 [[package]]
@@ -1456,8 +1467,8 @@ version = "7.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8903e5a29a317527874d0402f867152a3d21c908bb0b933e416c65e301d4c36"
 dependencies = [
- "memchr",
- "minimal-lexical",
+    "memchr",
+    "minimal-lexical",
 ]
 
 [[package]]
@@ -1872,26 +1883,27 @@ dependencies = [
  "clipboard",
  "color-eyre",
  "criterion",
- "flume",
- "fs_extra",
- "glium",
- "glob",
- "imgui",
- "imgui-glium-renderer",
- "imgui-winit-support",
- "indoc",
- "lazy_static",
- "nameof",
- "path-clean",
- "pretty_assertions",
- "regex",
- "shadow-rs",
- "slice-deque",
- "structx",
- "tracing",
- "tracing-error",
- "tracing-subscriber",
- "vek",
+    "flume",
+    "fs_extra",
+    "glium",
+    "glob",
+    "imgui",
+    "imgui-glium-renderer",
+    "imgui-winit-support",
+    "indoc",
+    "lazy_static",
+    "nameof",
+    "no-panic",
+    "path-clean",
+    "pretty_assertions",
+    "regex",
+    "shadow-rs",
+    "slice-deque",
+    "structx",
+    "tracing",
+    "tracing-error",
+    "tracing-subscriber",
+    "vek",
 ]
 
 [[package]]

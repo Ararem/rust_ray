@@ -30,6 +30,7 @@ nameof = "1.2.2"
 criterion = "0.4.0"
 slice-deque = "0.3.0" # Deque that can be mapped into a slice really easily
 flume = "0.10.14"
+no-panic = "0.1.16"
 
 # ImGUI dependencies
 clipboard = "0.5"
