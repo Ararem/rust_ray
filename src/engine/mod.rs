@@ -13,7 +13,11 @@ use crate::program::ProgramData;
 pub struct EngineData {}
 
 #[instrument(ret)]
-pub(crate) fn engine_thread(thread_start_barrier: Arc<Barrier>, program_data_wrapped: Arc<Mutex<ProgramData>>, program_message_sender: flume::Sender<Message>) -> color_eyre::eyre::Result<()> {
+pub(crate) fn engine_thread(
+    thread_start_barrier: Arc<Barrier>,
+    program_data_wrapped: Arc<Mutex<ProgramData>>,
+    program_message_sender: flume::Sender<Message>,
+) -> color_eyre::eyre::Result<()> {
     trace!("waiting for {}", name_of!(thread_start_barrier));
     thread_start_barrier.wait();
     trace!("wait complete, running engine thread");

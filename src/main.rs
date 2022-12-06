@@ -12,13 +12,13 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::config::tracing_config::STANDARD_FORMAT;
 
-mod program;
-mod config;
-mod helper;
-mod resources;
 mod build;
-mod ui;
+mod config;
 mod engine;
+mod helper;
+mod program;
+mod resources;
+mod ui;
 
 /// Main entrypoint for the program
 ///
@@ -48,7 +48,7 @@ fn main() -> eyre::Result<ExitCode> {
             warn!("program completed with errors");
             Err(report)
         }
-    }
+    };
 }
 
 /// Initialises [eyre]. Called as part of the core init
@@ -69,19 +69,17 @@ fn init_tracing() -> eyre::Result<()> {
         .with_filter(
             EnvFilter::builder()
                 .with_default_directive(LevelFilter::TRACE.into())
-                .from_env_lossy()
+                .from_env_lossy(),
         )
-        .with_filter(
-            FilterFn::new(|meta| {
-                let target = meta.target();
-                for filter in config::tracing_config::LOG_FILTERS.iter() {
-                    if filter.regex.is_match(target) {
-                        return filter.enabled
-                    }
+        .with_filter(FilterFn::new(|meta| {
+            let target = meta.target();
+            for filter in config::tracing_config::LOG_FILTERS.iter() {
+                if filter.regex.is_match(target) {
+                    return filter.enabled;
                 }
-                return true;
-            })
-        );
+            }
+            return true;
+        }));
 
     let error_layer = ErrorLayer::default();
 

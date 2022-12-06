@@ -26,7 +26,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             o
         };
 
-        let source_path = format!("{}/{}/{}", env::var("CARGO_MANIFEST_DIR")?, RESOURCES_FOLDER_LOCATION, RESOURCES_FOLDER_NAME);
+        let source_path = format!(
+            "{}/{}/{}",
+            env::var("CARGO_MANIFEST_DIR")?,
+            RESOURCES_FOLDER_LOCATION,
+            RESOURCES_FOLDER_NAME
+        );
         // Have to jump up a three levels because cargo adds some extra directories: "\rust_ray\target\debug\build\rust_ray-e17a28a2c53dbfbd\out"
         let dest_path = format!("{}/../../../", env::var("OUT_DIR")?);
 

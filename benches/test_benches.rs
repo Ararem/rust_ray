@@ -6,9 +6,16 @@ use lazy_static::*;
 use slice_deque::SliceDeque;
 
 lazy_static! {
-            static ref FRAME_TIMES_VEC: Mutex<FrameTimesVec> = Mutex::new(FrameTimesVec{deltas:Vec::new(), fps:Vec::new()});
-            static ref FRAME_TIMES_SLICE_DEQUE: Mutex<FrameTimesSliceDeque> = Mutex::new(FrameTimesSliceDeque{deltas:SliceDeque::new(), fps:SliceDeque::new()});
-        }
+    static ref FRAME_TIMES_VEC: Mutex<FrameTimesVec> = Mutex::new(FrameTimesVec {
+        deltas: Vec::new(),
+        fps: Vec::new()
+    });
+    static ref FRAME_TIMES_SLICE_DEQUE: Mutex<FrameTimesSliceDeque> =
+        Mutex::new(FrameTimesSliceDeque {
+            deltas: SliceDeque::new(),
+            fps: SliceDeque::new()
+        });
+}
 // For NUM=120, Vec wins (22ns vs 1us)
 // For Num=12000, SliceDeque just wins (1us vs 1.4us)
 static NUM_FRAME_TIMES_TO_TRACK: usize = 3600usize;
@@ -16,13 +23,13 @@ static NUM_FRAME_TIMES_TO_TRACK: usize = 3600usize;
 #[derive(Debug, Clone)]
 struct FrameTimesVec {
     deltas: Vec<f32>,
-    fps: Vec<f32>
+    fps: Vec<f32>,
 }
 
 #[derive(Debug, Clone)]
 struct FrameTimesSliceDeque {
     deltas: SliceDeque<f32>,
-    fps: SliceDeque<f32>
+    fps: SliceDeque<f32>,
 }
 
 fn bench_vec(delta: f32) {
@@ -70,7 +77,9 @@ fn bench_slice_deque(delta: f32) {
 
 fn criterion_benchmark(criterion: &mut Criterion) {
     criterion.bench_function("vec", |b| b.iter(|| bench_vec(black_box(1f32 / 69f32))));
-    criterion.bench_function("slice_deque", |b| b.iter(|| bench_slice_deque(black_box(1f32 / 69f32))));
+    criterion.bench_function("slice_deque", |b| {
+        b.iter(|| bench_slice_deque(black_box(1f32 / 69f32)))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);

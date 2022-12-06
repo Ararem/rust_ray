@@ -20,7 +20,7 @@ pub(crate) mod program_messages;
 #[derive(Debug)]
 pub struct ProgramData {
     pub ui_data: UiData,
-    pub engine_data: EngineData
+    pub engine_data: EngineData,
 }
 
 #[instrument(ret)]
@@ -29,7 +29,7 @@ pub fn run() -> eyre::Result<()> {
     trace!("creating {} struct", name_of_type!(ProgramData));
     let program_data = ProgramData {
         ui_data: UiData {},
-        engine_data: EngineData {}
+        engine_data: EngineData {},
     };
 
     // Wrap the program data inside an Arc(Mutex(T))
@@ -48,24 +48,24 @@ pub fn run() -> eyre::Result<()> {
     let thread_start_barrier = Arc::new(Barrier::new(3)); // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
 
     debug!("creating engine thread");
-    let engine_thread =
+    let engine_thread = {
+        let data = Arc::clone(&program_data_wrapped);
+        let sender = flume::Sender::clone(&command_sender);
+        let barrier = Arc::clone(&thread_start_barrier);
+        match thread::Builder::new()
+            .name("engine_thread".to_string())
+            .spawn(move || engine_thread(barrier, data, sender))
         {
-            let data = Arc::clone(&program_data_wrapped);
-            let sender = flume::Sender::clone(&command_sender);
-            let barrier = Arc::clone(&thread_start_barrier);
-            match thread::Builder::new()
-                .name("engine_thread".to_string())
-                .spawn(move || engine_thread(barrier, data, sender)) {
-                Ok(thread) => thread,
-                Err(error) => {
-                    let report = Report::new(error)
-                        .wrap_err("failed to create engine thread")
-                        .note("this error was most likely due to a failure at the OS level");
+            Ok(thread) => thread,
+            Err(error) => {
+                let report = Report::new(error)
+                    .wrap_err("failed to create engine thread")
+                    .note("this error was most likely due to a failure at the OS level");
 
-                    return Err(report);
-                }
+                return Err(report);
             }
-        };
+        }
+    };
     trace!("created engine thread");
 
     debug!("creating ui thread");
@@ -75,7 +75,8 @@ pub fn run() -> eyre::Result<()> {
         let barrier = Arc::clone(&thread_start_barrier);
         match thread::Builder::new()
             .name("ui_thread".to_string())
-            .spawn(move || ui_thread(barrier, data, sender)) {
+            .spawn(move || ui_thread(barrier, data, sender))
+        {
             Ok(thread) => thread,
             Err(error) => {
                 let report = Report::new(error)
@@ -99,41 +100,60 @@ pub fn run() -> eyre::Result<()> {
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits
     'global: loop {
-        trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "checking {} for messages", name_of!(command_receiver));
-        'loop_messages: loop { // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
+        trace!(
+            target: PROGRAM_MESSAGE_POLL_SPAMMY,
+            "checking {} for messages",
+            name_of!(command_receiver)
+        );
+        'loop_messages: loop {
+            // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
             let recv = command_receiver.try_recv();
             match recv {
                 Err(flume::TryRecvError::Empty) => {
                     trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
                     break 'loop_messages; // Exit the message loop, go into waiting
-                },
+                }
                 Err(flume::TryRecvError::Disconnected) => {
                     // Should (only) get here once the UI and engine threads have exited, and therefore their closures have dropped the sender variables
                     trace!("all senders have disconnected from program message channel");
                     todo!("ALL SENDERS DISCONNECTED HANDLING");
-                },
+                }
                 Ok(message) => {
-                    trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "got message: {:?}", &message);
+                    trace!(
+                        target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                        "got message: {:?}",
+                        &message
+                    );
                     match message {
                         Ui(_ui_message) => {
-                            trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY,"[program] message for ui thread, ignoring");
+                            trace!(
+                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                                "[program] message for ui thread, ignoring"
+                            );
                             continue 'loop_messages;
-                        },
+                        }
                         Engine(_engine_message) => {
-                            trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY,"[program] message for engine thread, ignoring");
+                            trace!(
+                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                                "[program] message for engine thread, ignoring"
+                            );
                             continue 'loop_messages;
-                        },
+                        }
                         Program(program_message) => match program_message {
-                            ProgramThreadMessage::QuitAppNoError(QuitAppNoErrorReason::QuitInteractionByUser) => {
+                            ProgramThreadMessage::QuitAppNoError(
+                                QuitAppNoErrorReason::QuitInteractionByUser,
+                            ) => {
                                 info!("user wants to quit");
                                 todo!("Quit handling");
-                            },
-                            ProgramThreadMessage::QuitAppError(QuitAppErrorReason::Error(error_report)) => {
+                            }
+                            ProgramThreadMessage::QuitAppError(QuitAppErrorReason::Error(
+                                                                   error_report,
+                                                               )) => {
                                 info!("quitting app due to error");
                                 error!("{}", error_report);
                                 break 'global;
                             }
-                        }
+                        },
                     }
                 }
             }
@@ -141,7 +161,6 @@ pub fn run() -> eyre::Result<()> {
 
         thread::sleep(poll_interval);
     }
-
 
     trace!("hello?!");
     thread::sleep(Duration::from_secs(1));
