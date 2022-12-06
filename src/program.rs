@@ -11,6 +11,7 @@ use flume::*;
 use crate::engine::*;
 use crate::helper::logging::event_targets::*;
 use crate::program::program_messages::*;
+use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::ui::*;
 
 pub(crate) mod program_messages;
@@ -40,7 +41,7 @@ pub fn run() -> eyre::Result<()> {
 
     // The engine/ui threads use the command_sender to send messages back to the main thread, in order to do stuff (like quit the app)
     trace!("creating mpsc channel for thread communication");
-    let (command_sender, command_receiver) = flume::unbounded::<ProgramMessage>();
+    let (command_sender, command_receiver) = flume::unbounded::<Message>();
 
     // This barrier blocks our UI and engine thread from starting until the program is ready for them
     trace!("creating start thread barrier for threads");
@@ -50,7 +51,7 @@ pub fn run() -> eyre::Result<()> {
     let engine_thread =
         {
             let data = Arc::clone(&program_data_wrapped);
-            let sender = Sender::clone(&command_sender);
+            let sender = flume::Sender::clone(&command_sender);
             let barrier = Arc::clone(&thread_start_barrier);
             match thread::Builder::new()
                 .name("engine_thread".to_string())
@@ -102,26 +103,36 @@ pub fn run() -> eyre::Result<()> {
         'loop_messages: loop { // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
             let recv = command_receiver.try_recv();
             match recv {
-                Err(Empty) => {
+                Err(flume::TryRecvError::Empty) => {
                     trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
                     break 'loop_messages; // Exit the message loop, go into waiting
                 },
-                Err(Disconnected) => {
+                Err(flume::TryRecvError::Disconnected) => {
                     // Should (only) get here once the UI and engine threads have exited, and therefore their closures have dropped the sender variables
                     trace!("all senders have disconnected from program message channel");
                     todo!("ALL SENDERS DISCONNECTED HANDLING");
                 },
                 Ok(message) => {
-                    trace!(target: PROGRAM_MESSAGE_POLL, "got {}: {:?}", name_of_type!(ProgramMessage), message);
+                    trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "got message: {:?}", &message);
                     match message {
-                        ProgramMessage::QuitAppNoError(QuitAppNoErrorReason::QuitInteractionByUser) => {
-                            info!("user wants to quit");
-                            todo!("Quit handling");
+                        Ui(_ui_message) => {
+                            trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY,"[program] message for ui thread, ignoring");
+                            continue 'loop_messages;
                         },
-                        ProgramMessage::QuitAppError(QuitAppErrorReason::Error(error_report)) => {
-                            info!("quitting app due to error");
-                            error!("{}", error_report);
-                            break 'global;
+                        Engine(_engine_message) => {
+                            trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY,"[program] message for engine thread, ignoring");
+                            continue 'loop_messages;
+                        },
+                        Program(program_message) => match program_message {
+                            ProgramThreadMessage::QuitAppNoError(QuitAppNoErrorReason::QuitInteractionByUser) => {
+                                info!("user wants to quit");
+                                todo!("Quit handling");
+                            },
+                            ProgramThreadMessage::QuitAppError(QuitAppErrorReason::Error(error_report)) => {
+                                info!("quitting app due to error");
+                                error!("{}", error_report);
+                                break 'global;
+                            }
                         }
                     }
                 }
