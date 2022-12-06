@@ -4,46 +4,51 @@
 use std::io;
 use std::process::ExitCode;
 
-use color_eyre::eyre;
+use color_eyre::{eyre, Report};
 use tracing::*;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
-use helper::logging::event_targets::*;
-
 use crate::config::tracing_config::STANDARD_FORMAT;
 
-mod engine;
-mod helper;
 mod program;
 mod config;
+mod helper;
 mod resources;
-mod test;
 mod build;
+mod ui;
+mod engine;
 
 /// Main entrypoint for the program
 ///
 /// Handles the important setup before handing control over to the actual program:
 /// * Initialises [eyre] (for panic/error handling)
 /// * Initialises [tracing] (for logging)
-/// * Processes command-line arguments
+/// * TODO: Processes command-line arguments
 /// * Runs the [program] for real
 fn main() -> eyre::Result<ExitCode> {
     init_eyre()?;
     init_tracing()?;
-    debug!(target: PROGRAM_CORE, "initialised [tracing] and [eyre]");
+    debug!("initialised [tracing] and [eyre]");
 
-    debug!(target: PROGRAM_CORE, "skipping CLI and Env args");
+    debug!("skipping CLI and Env args");
 
     //Event loop
-    debug!(target: PROGRAM_CORE, "main init complete, starting");
+    debug!("main init complete, starting");
 
-    trace!(target: PROGRAM_CORE, "running program");
-    program::run()?;
-
-    info!(target: PROGRAM_CORE, "goodbye");
-    return Ok(ExitCode::SUCCESS);
+    trace!("running program");
+    return match program::run() {
+        Ok(_) => {
+            info!("program completed successfully");
+            info!("goodbye");
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(report) => {
+            warn!("program completed with errors");
+            Err(report)
+        }
+    }
 }
 
 /// Initialises [eyre]. Called as part of the core init

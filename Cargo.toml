@@ -29,6 +29,7 @@ path-clean = "0.1.0"
 nameof = "1.2.2"
 criterion = "0.4.0"
 slice-deque = "0.3.0" # Deque that can be mapped into a slice really easily
+flume = "0.10.14"
 
 # ImGUI dependencies
 clipboard = "0.5"

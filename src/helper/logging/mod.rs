@@ -1,4 +1,4 @@
-pub(crate) mod event_targets;
+pub mod event_targets;
 
 /// Logs an expression's string representation and returns the original expression. The format string can also be customised in the second overload (with custom arguments)
 ///

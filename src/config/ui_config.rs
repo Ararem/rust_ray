@@ -1,13 +1,11 @@
 use imgui::FontConfig;
 use imgui_winit_support::winit::dpi::{LogicalSize, Size};
 
-use crate::program::ui_system::UiConfig;
-
-pub const UI_CONFIG: UiConfig = UiConfig {
-    vsync: false,
-    hardware_acceleration: Some(true),
-    default_window_size: Size::Logical(LogicalSize { width: 1600.0, height: 900.0 })
-};
+// pub const UI_CONFIG: UiConfig = UiConfig {
+//     vsync: false,
+//     hardware_acceleration: Some(true),
+//     default_window_size: Size::Logical(LogicalSize { width: 1600.0, height: 900.0 })
+// };
 
 pub const DEFAULT_FONT_SIZE: f32 = 20f32;
 pub const MIN_FONT_SIZE: f32 = 8f32;

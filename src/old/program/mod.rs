@@ -25,7 +25,7 @@ fn render(
     renderer: &mut Renderer,
     managers: &mut UiManagers,
 ) -> color_eyre::Result<()> {
-    unsafe fn build_ui(ui: &Ui, managers: &mut UiManagers) {
+    fn build_ui(ui: &Ui, managers: &mut UiManagers) {
         let _span = trace_span!(target: UI_SPAMMY, "build_ui").entered();
         static mut SHOW_DEMO_WINDOW: bool = true;
         static mut SHOW_METRICS_WINDOW: bool = true;
@@ -144,8 +144,7 @@ fn render(
                 let docking_area = UiDockingArea {};
                 let _dock_node = docking_area.dockspace("Main Dock Area");
 
-                // Unsafe because of static mut variables inside build_ui
-                unsafe { build_ui(&ui, managers); }
+                build_ui(&ui, managers);
 
                 token.end();
             }
