@@ -24,8 +24,8 @@ pub(crate) fn ui_thread(
     message_sender: BroadcastSender<Message>,
     message_receiver: BroadcastReceiver<Message>,
 ) {
-    //Create a NoPanicPill to make sure we DON'T PANIC
-    let _no_panic_pill = crate::helper::no_panic_pill::NoPanicPill {};
+    //Create a NoPanicPill to make sure we exit if anything panics
+    let _no_panic_pill = crate::helper::panic_pill::PanicPill {};
 
     trace!("waiting for {}", name_of!(thread_start_barrier));
     thread_start_barrier.wait();
