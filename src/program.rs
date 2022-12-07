@@ -1,10 +1,13 @@
 use std::sync::{Arc, Barrier, Mutex};
+use std::sync::mpsc::{TryRecvError, TrySendError::*};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use color_eyre::{eyre, Help, Report};
-use nameof::{name_of, name_of_type};
-use tracing::{debug, error, info, instrument, trace};
+use multiqueue2::broadcast_queue;
+use nameof::name_of_type;
+use tracing::{debug, debug_span, error, info, instrument, trace};
 
 use crate::engine::*;
 use crate::helper::logging::event_targets::*;
@@ -38,18 +41,18 @@ pub fn run() -> eyre::Result<()> {
     let program_data_wrapped = Arc::new(Mutex::new(program_data));
 
     // The engine/ui threads use the command_sender to send messages back to the main thread, in order to do stuff (like quit the app)
-    trace!("creating mpsc channel for thread communication");
-    let (message_sender, message_receiver) = flume::unbounded::<Message>();
+    trace!("creating MPMC channel for thread communication");
+    let (message_sender, message_receiver) = broadcast_queue::<Message>(0);
 
     // This barrier blocks our UI and engine thread from starting until the program is ready for them
     trace!("creating start thread barrier for threads");
     let thread_start_barrier = Arc::new(Barrier::new(3)); // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
 
     debug!("creating engine thread");
-    let engine_thread = {
+    let engine_thread: JoinHandle<()> = {
         let data = Arc::clone(&program_data_wrapped);
-        let sender = flume::Sender::clone(&message_sender);
-        let receiver = flume::Receiver::clone(&message_receiver);
+        let sender = message_sender.clone();
+        let receiver = message_receiver.add_stream();
         let barrier = Arc::clone(&thread_start_barrier);
         match thread::Builder::new()
             .name("engine_thread".to_string())
@@ -68,10 +71,10 @@ pub fn run() -> eyre::Result<()> {
     trace!("created engine thread");
 
     debug!("creating ui thread");
-    let ui_thread = {
+    let ui_thread: JoinHandle<()> = {
         let data = Arc::clone(&program_data_wrapped);
-        let sender = flume::Sender::clone(&message_sender);
-        let receiver = flume::Receiver::clone(&message_receiver);
+        let sender = message_sender.clone();
+        let receiver = message_receiver.add_stream();
         let barrier = Arc::clone(&thread_start_barrier);
         match thread::Builder::new()
             .name("ui_thread".to_string())
@@ -89,9 +92,6 @@ pub fn run() -> eyre::Result<()> {
     };
     trace!("created ui thread");
 
-    // Drop command sender now that we've sent it to the threads
-    drop(message_sender);
-
     trace!("waiting on barrier to enable it");
     thread_start_barrier.wait();
     trace!("threads should now be awake");
@@ -101,20 +101,16 @@ pub fn run() -> eyre::Result<()> {
     // Should loop until program exits
     'global: loop {
         // Process any messages we might have from the other threads
-        trace!(
-            target: PROGRAM_MESSAGE_POLL_SPAMMY,
-            "checking {} for messages",
-            name_of!(message_receiver)
-        );
+        let _span = debug_span!("process_messages").entered();
         'loop_messages: loop {
             // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
             let recv = message_receiver.try_recv();
             match recv {
-                Err(flume::TryRecvError::Empty) => {
+                Err(TryRecvError::Empty) => {
                     trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
-                Err(flume::TryRecvError::Disconnected) => {
+                Err(TryRecvError::Disconnected) => {
                     // Should (only) get here once the UI and engine threads have exited, and therefore their closures have dropped the sender variables
                     trace!("all senders have disconnected from program message channel");
                     todo!("ALL SENDERS DISCONNECTED HANDLING");
@@ -145,11 +141,79 @@ pub fn run() -> eyre::Result<()> {
                                 QuitAppNoErrorReason::QuitInteractionByUser,
                             ) => {
                                 info!("user wants to quit");
-                                todo!("Quit handling");
+
+                                // We have to unsubscribe from out receiver or it blocks the other threads because we haven't received the [ExitXXXThread] messages
+                                trace!("unsubbing message receiver to release stream");
+                                message_receiver.unsubscribe();
+                                let _join_threads_span = debug_span!("join_threads_and_quit").entered();
+
+                                trace!("signalling ui thread to quit");
+                                match message_sender.try_send(Ui(UiThreadMessage::ExitUiThread)) {
+                                    Ok(()) => {
+                                        trace!("ui thread signalled, joining threads");
+                                        let join_result = ui_thread.join();
+                                        match join_result {
+                                            Ok(()) => {
+                                                trace!("ui thread joined successfully");
+                                            },
+                                            Err(boxed_error) => {
+                                                // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
+                                                // So log the error, and pass up a generic one to the main function
+                                                error!("ui thread joined with error: {boxed_error:#?}");
+                                                let report = Report::msg("ui thread panicked (cannot display error due to [Box<dyn...>])");
+                                                return Err(report);
+                                            }
+                                        }
+                                    },
+
+                                    // Neither of these errors should happen ever, but better to be safe
+                                    Err(Disconnected(..)) => {
+                                        let report = Report::msg("failed to send quit signal to ui thread: no message receivers");
+                                        return Err(report);
+                                    },
+                                    Err(Full(..)) => {
+                                        let report = Report::msg("failed to send quit signal to ui thread: message buffer full");
+                                        return Err(report);
+                                    }
+                                }
+
+                                trace!("signalling engine thread to quit");
+                                match message_sender.try_send(Engine(EngineThreadMessage::ExitEngineThread)) {
+                                    Ok(()) => {
+                                        trace!("engine thread signalled, joining threads");
+                                        let join_result = engine_thread.join();
+                                        match join_result {
+                                            Ok(()) => {
+                                                trace!("engine thread joined successfully");
+                                            },
+                                            Err(boxed_error) => {
+                                                // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
+                                                // So log the error, and pass up a generic one to the main function
+                                                error!("engine thread joined with error: {boxed_error:#?}");
+                                                let report = Report::msg("engine thread panicked (cannot display error due to [Box<dyn...>])");
+                                                return Err(report);
+                                            }
+                                        }
+                                    },
+
+                                    // Neither of these errors should happen ever, but better to be safe
+                                    Err(Disconnected(..)) => {
+                                        let report = Report::msg("failed to send quit signal to engine thread: no message receivers");
+                                        return Err(report);
+                                    },
+                                    Err(Full(..)) => {
+                                        let report = Report::msg("failed to send quit signal to engine thread: message buffer full");
+                                        return Err(report);
+                                    }
+                                }
+
+                                // We know all is well if we get here, since we return immediately on any error when joining
+                                trace!("engine and ui threads joined successfully");
+                                drop(_join_threads_span);
+
+                                break 'global;
                             }
-                            ProgramThreadMessage::QuitAppError(QuitAppErrorReason::Error(
-                                                                   error_report,
-                                                               )) => {
+                            ProgramThreadMessage::QuitAppError(error_report) => {
                                 info!("quitting app due to error");
                                 error!("{}", error_report);
                                 break 'global;
@@ -159,6 +223,7 @@ pub fn run() -> eyre::Result<()> {
                 }
             }
         }
+        drop(_span);
 
         // Ensure the threads are OK
         // ui_thread.thread().

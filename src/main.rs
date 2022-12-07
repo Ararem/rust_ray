@@ -4,7 +4,7 @@
 use std::io;
 use std::process::ExitCode;
 
-use color_eyre::{eyre, Report};
+use color_eyre::eyre;
 use tracing::*;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::FilterFn;
@@ -62,7 +62,7 @@ fn init_tracing() -> eyre::Result<()> {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
     let standard_layer = fmt::layer()
-        .with_span_events(FmtSpan::ACTIVE)
+        .with_span_events(FmtSpan::NONE)
         .log_internal_errors(true)
         .event_format(STANDARD_FORMAT.clone())
         .with_writer(io::stdout)

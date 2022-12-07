@@ -1,18 +1,17 @@
-use std::io::stdin;
 use std::sync::{Arc, Barrier, Mutex};
+use std::sync::mpsc::TryRecvError;
 use std::thread;
 use std::time::Duration;
 
-use flume::{Receiver, Sender, TryRecvError};
-use flume::TryRecvError::Disconnected;
+use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{info, instrument, trace};
-use TryRecvError::Empty;
+use tracing::{debug_span, info, instrument, trace};
+
+use rand::prelude::*;
 
 use crate::helper::logging::event_targets::*;
-use crate::program::program_messages::{Message, QuitAppNoErrorReason, UiThreadMessage};
+use crate::program::program_messages::{Message, UiThreadMessage};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
-use crate::program::program_messages::ProgramThreadMessage::QuitAppNoError;
 use crate::program::ProgramData;
 
 #[derive(Copy, Clone, Debug)]
@@ -22,40 +21,33 @@ pub struct UiData {}
 pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
-    message_sender: Sender<Message>,
-    message_receiver: Receiver<Message>,
+    message_sender: BroadcastSender<Message>,
+    message_receiver: BroadcastReceiver<Message>,
 ) {
     //Create a NoPanicPill to make sure we DON'T PANIC
     let _no_panic_pill = crate::helper::no_panic_pill::NoPanicPill {};
 
     trace!("waiting for {}", name_of!(thread_start_barrier));
     thread_start_barrier.wait();
-    trace!("wait complete, running engine thread");
+    trace!("wait complete, running ui thread");
 
-    loop {
+    'outer: loop {
         // Pretend we're doing work here
         thread::sleep(Duration::from_secs(1));
 
-        let mut s = String::new();
-        if let Ok(_) = stdin().read_line(&mut s) {
-            info!("sending quit");
-            message_sender.send(Message::Program(QuitAppNoError(
-                QuitAppNoErrorReason::QuitInteractionByUser,
-            ))).expect("dev code, expect message to send");
-        }
-
+        let _span = debug_span!("process_messages").entered();
         'loop_messages: loop {
             // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
             let recv = message_receiver.try_recv();
             match recv {
-                Err(Empty) => {
+                Err(TryRecvError::Empty) => {
                     trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
-                Err(Disconnected) => {
+                Err(TryRecvError::Disconnected) => {
                     // Should (only) get here once the program and engine threads have exited, and therefore they have dropped their sender variables
                     // This is not supposed to happen, since the program thread should always be the last to exit
-                    unreachable!(r"ui thread {} returned {}, which shouldn't be possible (the program thread should always be alive while the UI thread is alive)", name_of!(message_receiver), Disconnected);
+                    unreachable!(r"ui thread {} returned [Disconnected], which shouldn't be possible (the program thread should always be alive while the UI thread is alive)", name_of!(message_receiver));
                 }
                 Ok(message) => {
                     trace!(
@@ -80,15 +72,26 @@ pub(crate) fn ui_thread(
                         }
                         Ui(ui_message) => match ui_message {
                             UiThreadMessage::ExitUiThread => {
-                                info!("got exit message for Ui thread");
-                                return;
+                                trace!("got exit message for Ui thread");
+                                break 'outer;
                             },
                         },
                     }
                 }
             }
         }
+        drop(_span);
     }
 
+    // If we get to here, it's time to exit the thread and shutdown
+    info!("ui thread exiting");
+
+    trace!("unsubscribing message receiver");
+    message_receiver.unsubscribe();
+    trace!("unsubscribing message sender");
+    message_sender.unsubscribe();
+
+    trace!("dropping {}", name_of!(_no_panic_pill));
     drop(_no_panic_pill);
+    return;
 }
