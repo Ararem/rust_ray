@@ -11,6 +11,7 @@ use crate::helper::logging::event_targets::*;
 use crate::program::program_messages::{EngineThreadMessage, Message};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::ProgramData;
+use crate::program_thread_messaging__unreachable_never_should_be_disconnected;
 
 #[derive(Copy, Clone, Debug)]
 pub struct EngineData {}
@@ -43,9 +44,7 @@ pub(crate) fn engine_thread(
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
-                    // Should (only) get here once the program and engine threads have exited, and therefore they have dropped their sender variables
-                    // This is not supposed to happen, since the program thread should always be the last to exit
-                    unreachable!(r"engine thread {} returned [Disconnected], which shouldn't be possible (the program thread should always be alive while the engine thread is alive)", name_of!(message_receiver));
+                    program_thread_messaging__unreachable_never_should_be_disconnected!();
                 }
                 Ok(message) => {
                     trace!(

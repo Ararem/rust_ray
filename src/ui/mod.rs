@@ -7,12 +7,11 @@ use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug_span, info, instrument, trace};
 
-use rand::prelude::*;
-
 use crate::helper::logging::event_targets::*;
 use crate::program::program_messages::{Message, UiThreadMessage};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::ProgramData;
+use crate::program_thread_messaging__unreachable_never_should_be_disconnected;
 
 #[derive(Copy, Clone, Debug)]
 pub struct UiData {}
@@ -45,9 +44,7 @@ pub(crate) fn ui_thread(
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
-                    // Should (only) get here once the program and engine threads have exited, and therefore they have dropped their sender variables
-                    // This is not supposed to happen, since the program thread should always be the last to exit
-                    unreachable!(r"ui thread {} returned [Disconnected], which shouldn't be possible (the program thread should always be alive while the UI thread is alive)", name_of!(message_receiver));
+                    program_thread_messaging__unreachable_never_should_be_disconnected!();
                 }
                 Ok(message) => {
                     trace!(

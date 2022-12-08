@@ -15,6 +15,7 @@ use crate::program::program_messages::*;
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::ui::*;
 
+#[macro_use]
 pub(crate) mod program_messages;
 
 /// Main data structure used
@@ -111,14 +112,7 @@ pub fn run() -> eyre::Result<()> {
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
-                    // Should (only) get here once all senders have disconnected
-                    // However, this should only happen when the threads are told to quit, after which the main function quits...
-                    // Also, the main (this) thread sender should never be dropped
-                    // So (in working code) we should never get here
-                    let report = Report::msg("all message channel senders were dropped")
-                        .note(r"ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
-                        something probably went (badly) wrong somewhere else");
-                    return Err(report);
+                    program_thread_messaging__unreachable_never_should_be_disconnected!();
                 }
                 Ok(message) => {
                     trace!(
