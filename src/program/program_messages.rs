@@ -51,9 +51,9 @@ pub(crate) enum EngineThreadMessage {
     ExitEngineThread,
 }
 
-// ========== MACROS ==========
+// ========== MACROS AND FUNCTIONS ==========
 
-/// Macro that injects shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_recv] returns [std::sync::mpsc::TryRecvError::Disconnected] in any of the message loops
+/// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_recv] returns [std::sync::mpsc::TryRecvError::Disconnected] in any of the message loops
 ///
 /// # ***THIS IS BAD:***
 /// Should (only) get here once all senders have disconnected
@@ -63,16 +63,13 @@ pub(crate) enum EngineThreadMessage {
 /// Also, the main (this) thread sender should never be dropped
 ///
 /// So (in working code) we should never get here
-#[macro_export]
-macro_rules! program_thread_messaging__unreachable_never_should_be_disconnected {
-    () => {{
-            let message_heading =::indoc::formatdoc!(r#"
+pub(crate) fn unreachable_never_should_be_disconnected() -> ! {
+    let message_heading = indoc::formatdoc!(r#"
             all message channel senders were dropped: [try_recv()] returned [{0:?}] "{0}""#
                 , ::std::sync::mpsc::TryRecvError::Disconnected);
-            let message_body = ::indoc::formatdoc!(r"
+    let message_body = indoc::formatdoc!(r"
             ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
             something probably went (badly) wrong somewhere else");
-            unreachable!("{}\n\n{}", message_heading, message_body);
-            // return Err(Report::msg(message_heading).note(message_body));
-    }};
+    panic!("invalid state: {}\n\n{}", message_heading, message_body);
+    // return Err(Report::msg(message_heading).note(message_body));
 }

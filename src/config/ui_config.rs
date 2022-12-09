@@ -1,12 +1,21 @@
+//! # [ui_config]
+//!
+//! Contains UI configuration fields
+//!
+//! # Notes:
+//! With [VSYNC] and [HARDWARE_ACCELERATION], I've had to hardcode these since changing them makes glutin crap itself:
+//! `could not initialise display: GlutinCreationError(NoAvailablePixelFormat)`
 use imgui::FontConfig;
 use imgui_winit_support::winit::dpi::{LogicalSize, Size};
 
-// pub const UI_CONFIG: UiConfig = UiConfig {
-//     vsync: false,
-//     hardware_acceleration: Some(true),
-//     default_window_size: Size::Logical(LogicalSize { width: 1600.0, height: 900.0 })
-// };
-
+pub const DEFAULT_WINDOW_SIZE: Size = Size::Logical(LogicalSize { width: 1600.0, height: 900.0 });
+pub const VSYNC: bool = true;
+///Sets the multisampling level to request. A value of 0 indicates that multisampling must not be enabled.
+///
+/// Must be a power of 2
+pub const MULTISAMPLING: u16 = 2;
+/// Value is [None], meaning hardware acceleration is *not* required
+pub const HARDWARE_ACCELERATION: Option<bool> = Some(false);
 pub const DEFAULT_FONT_SIZE: f32 = 20f32;
 pub const MIN_FONT_SIZE: f32 = 8f32;
 pub const MAX_FONT_SIZE: f32 = 128f32;

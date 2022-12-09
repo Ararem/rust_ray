@@ -102,7 +102,7 @@ pub fn run() -> eyre::Result<()> {
     // Should loop until program exits
     'global: loop {
         // Process any messages we might have from the other threads
-        let _span = debug_span!("process_messages").entered();
+        let process_messages_span = debug_span!("process_messages").entered();
         'loop_messages: loop {
             // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
             let recv = message_receiver.try_recv();
@@ -112,7 +112,7 @@ pub fn run() -> eyre::Result<()> {
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
-                    program_thread_messaging__unreachable_never_should_be_disconnected!();
+                    unreachable_never_should_be_disconnected();
                 }
                 Ok(message) => {
                     trace!(
@@ -157,9 +157,8 @@ pub fn run() -> eyre::Result<()> {
                                             },
                                             Err(boxed_error) => {
                                                 // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
-                                                // So log the error, and pass up a generic one to the main function
-                                                error!("ui thread joined with error: {boxed_error:#?}");
-                                                let report = Report::msg("ui thread panicked (cannot display error due to [Box<dyn...>])");
+                                                // So we have to format it as a string
+                                                let report = Report::msg(format!("ui thread panicked:\n{:#?}", boxed_error));
                                                 return Err(report);
                                             }
                                         }
@@ -187,9 +186,8 @@ pub fn run() -> eyre::Result<()> {
                                             },
                                             Err(boxed_error) => {
                                                 // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
-                                                // So log the error, and pass up a generic one to the main function
-                                                error!("engine thread joined with error: {boxed_error:#?}");
-                                                let report = Report::msg("engine thread panicked (cannot display error due to [Box<dyn...>])");
+                                                // So we have to format it as a string
+                                                let report = Report::msg(format!("engine thread panicked:\n{:#?}", boxed_error));
                                                 return Err(report);
                                             }
                                         }
@@ -222,10 +220,47 @@ pub fn run() -> eyre::Result<()> {
                 }
             }
         }
-        drop(_span);
+        drop(process_messages_span);
 
-        // Ensure the threads are OK
-        // ui_thread.thread().
+        /*
+        Ensure the threads are OK (still running)
+        They should only ever safely exit while inside the 'process_messages loop (since that's where they're told to quit)
+        So if they have finished here, that's BAAADDDD
+        */
+        trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "checking ui thread status");
+        if ui_thread.is_finished() {
+            error!("ui thread finished early when it shouldn't have, joining to get return value");
+            let join_result = ui_thread.join();
+            return Err(match join_result {
+                Ok(ret) => {
+                    let report = Report::msg(format!("ui thread finished early with return value `{:#?}`", ret));
+                    report
+                },
+                Err(boxed_error) => {
+                    let report = Report::msg(format!("ui thread panicked:\n{:#?}", boxed_error));
+                    report
+                }
+            });
+        } else {
+            trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "ui thread still running");
+        }
+        trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "checking engine thread status");
+        if engine_thread.is_finished() {
+            error!("engine finished early when it shouldn't have, joining to get return value");
+            let join_result = engine_thread.join();
+            return Err(match join_result {
+                Ok(ret) => {
+                    let report = Report::msg(format!("engine thread finished early with return value `{:#?}`", ret));
+                    report
+                },
+                Err(boxed_error) => {
+                    let report = Report::msg(format!("engine thread panicked:\n{:#?}", boxed_error));
+                    report
+                }
+            });
+        } else {
+            trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "Ui thread still running");
+        }
         thread::sleep(poll_interval);
     }
 

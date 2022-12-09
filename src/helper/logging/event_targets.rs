@@ -17,6 +17,10 @@ target!(
     r"High-frequency (i.e. every frame) logs from the program message poll loop"
 );
 target!(
+    PROGRAM_RUN_LOOP_SPAMMY,
+    r"High-frequency (i.e. every iteration) logs from the standard program run loop"
+);
+target!(
     PROGRAM_MESSAGE_POLL,
     r"Logs from the program message poll loop that shouldn't be called super often, or spam the log"
 );
