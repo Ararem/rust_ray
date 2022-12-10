@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use shadow_rs::formatcp;
 
 pub const APP_TITLE: &'static str =

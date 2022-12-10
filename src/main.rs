@@ -45,7 +45,7 @@ fn main() -> eyre::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Err(report) => {
-            warn!("program completed with errors");
+            error!("program completed with errors");
             Err(report)
         }
     };

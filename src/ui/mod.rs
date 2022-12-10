@@ -18,10 +18,10 @@ use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug_span, info, instrument, trace, warn};
 
+use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::config::ui_config::{DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, VSYNC};
 use crate::helper::logging::event_targets::*;
-use crate::log_expr_val;
 use crate::program::program_messages::{Message, UiThreadMessage, unreachable_never_should_be_disconnected};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::ProgramData;
@@ -33,13 +33,13 @@ mod clipboard_integration;
 #[derive(Copy, Clone, Debug)]
 pub struct UiData {}
 
-#[instrument(ret, skip_all)]
+#[instrument(skip_all)]
 pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<Message>,
     message_receiver: BroadcastReceiver<Message>,
-) {
+) -> eyre::Result<()> {
     //Create a NoPanicPill to make sure we exit if anything panics
     let _no_panic_pill = crate::helper::panic_pill::PanicPill {};
 
@@ -47,7 +47,8 @@ pub(crate) fn ui_thread(
     thread_start_barrier.wait();
     trace!("wait complete, running ui thread");
 
-    init_ui_system(APP_TITLE).expect("AAA");
+    init_ui_system(APP_TITLE)
+        .wrap_err("failed while initialising ui system")?;
 
     'outer: loop {
         // Pretend we're doing work here
@@ -109,14 +110,14 @@ pub(crate) fn ui_thread(
 
     trace!("dropping {}", name_of!(_no_panic_pill));
     drop(_no_panic_pill);
-    return;
+    return Ok(());
 }
 
 ///Initialises the UI system and returns it
 ///
 /// * `title` - Title of the created window
 #[instrument]
-pub fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
+fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     let display;
     let mut imgui_context;
     let event_loop;
@@ -126,16 +127,21 @@ pub fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     //TODO: More config options
     trace!("cloning title");
     let title = title.to_owned();
+    log_variable!(title);
+
     trace!("creating [winit] event loop with [any_thread]=`true`");
     event_loop = EventLoopBuilder::new()
         .with_any_thread(true)
         .build();
+
     trace!("creating [glutin] context builder");
     let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
         .with_vsync(VSYNC)
         .with_hardware_acceleration(HARDWARE_ACCELERATION)
         .with_srgb(true)
         .with_multisampling(MULTISAMPLING);
+    log_variable!(glutin_context_builder:?);
+
     trace!("creating [winit] window builder");
     let window_builder = WindowBuilder::new().with_title(title).with_inner_size(DEFAULT_WINDOW_SIZE).with_maximized(true);
     //TODO: Configure
@@ -157,16 +163,16 @@ pub fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     //TODO: High DPI setting
     trace!("creating [winit] platform");
     platform = WinitPlatform::init(&mut imgui_context);
+
     trace!("attaching window");
     platform.attach_window(
         imgui_context.io_mut(),
         display.gl_window().window(),
         HiDpiMode::Default,
     );
+
     trace!("creating [glium] renderer");
     renderer = Renderer::init(&mut imgui_context, &display).wrap_err("failed to create renderer")?;
-
-    trace!("done");
 
     match clipboard_integration::clipboard_init() {
         Ok(clipboard_backend) => {
@@ -178,6 +184,7 @@ pub fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
         }
     }
 
+    trace!("done");
     Ok(UiSystem {
         backend: UiBackend {
             event_loop,

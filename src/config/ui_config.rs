@@ -15,7 +15,7 @@ pub const VSYNC: bool = true;
 /// Must be a power of 2
 pub const MULTISAMPLING: u16 = 2;
 /// Value is [None], meaning hardware acceleration is *not* required
-pub const HARDWARE_ACCELERATION: Option<bool> = Some(false);
+pub const HARDWARE_ACCELERATION: Option<bool> = Some(true);
 pub const DEFAULT_FONT_SIZE: f32 = 20f32;
 pub const MIN_FONT_SIZE: f32 = 8f32;
 pub const MAX_FONT_SIZE: f32 = 128f32;

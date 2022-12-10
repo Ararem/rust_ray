@@ -25,7 +25,7 @@ pub struct ProgramData {
     pub engine_data: EngineData,
 }
 
-#[instrument(ret)]
+#[instrument]
 pub fn run() -> eyre::Result<()> {
     // Create new program instance
     trace!("creating {} struct", name_of_type!(ProgramData));
@@ -72,7 +72,7 @@ pub fn run() -> eyre::Result<()> {
     trace!("created engine thread");
 
     debug!("creating ui thread");
-    let ui_thread: JoinHandle<()> = {
+    let ui_thread: JoinHandle<eyre::Result<()>> = {
         let data = Arc::clone(&program_data_wrapped);
         let sender = message_sender.clone();
         let receiver = message_receiver.add_stream();
@@ -152,8 +152,9 @@ pub fn run() -> eyre::Result<()> {
                                         trace!("ui thread signalled, joining threads");
                                         let join_result = ui_thread.join();
                                         match join_result {
-                                            Ok(()) => {
+                                            Ok(_) => {
                                                 trace!("ui thread joined successfully");
+                                                todo!("ui thread return value");
                                             },
                                             Err(boxed_error) => {
                                                 // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
