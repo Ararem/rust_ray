@@ -152,7 +152,7 @@ pub fn run() -> eyre::Result<()> {
                                         trace!("ui thread signalled, joining threads");
                                         let join_result = ui_thread.join();
                                         match join_result {
-                                            Ok(_) => {
+                                            Ok(_return) => {
                                                 trace!("ui thread joined successfully");
                                                 todo!("ui thread return value");
                                             },
@@ -166,11 +166,11 @@ pub fn run() -> eyre::Result<()> {
                                     },
 
                                     // Neither of these errors should happen ever, but better to be safe
-                                    Err(Disconnected(..)) => {
+                                    Err(Disconnected(_failed_message)) => {
                                         let report = Report::msg("failed to send quit signal to ui thread: no message receivers");
                                         return Err(report);
                                     },
-                                    Err(Full(..)) => {
+                                    Err(Full(_failed_message)) => {
                                         let report = Report::msg("failed to send quit signal to ui thread: message buffer full");
                                         return Err(report);
                                     }

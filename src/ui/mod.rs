@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier, Mutex};
 use std::sync::mpsc::TryRecvError;
-use std::thread;
-use std::time::Duration;
 
 use color_eyre::{eyre, Help};
 use color_eyre::eyre::WrapErr;
@@ -16,11 +14,11 @@ use imgui_winit_support::winit::platform::windows::EventLoopBuilderExtWindows;
 use imgui_winit_support::winit::window::WindowBuilder;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug_span, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
-use crate::config::ui_config::{DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, VSYNC};
+use crate::config::ui_config::{DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC};
 use crate::helper::logging::event_targets::*;
 use crate::program::program_messages::{Message, UiThreadMessage, unreachable_never_should_be_disconnected};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
@@ -47,57 +45,37 @@ pub(crate) fn ui_thread(
     thread_start_barrier.wait();
     trace!("wait complete, running ui thread");
 
-    init_ui_system(APP_TITLE)
-        .wrap_err("failed while initialising ui system")?;
-
+    /*
+    The outer loop is the one that should keep the UI thread alive all the time
+    If for some reason the UI crashes, this loop is responsible for bringing it back to life
+    */
+    let mut outer_loop_iterations: usize = 0;
     'outer: loop {
-        // Pretend we're doing work here
-        thread::sleep(Duration::from_secs(1));
+        outer_loop_iterations += 1;
+        debug!("starting outer loop iteration {}", outer_loop_iterations);
 
-        let _span = debug_span!("process_messages").entered();
-        'loop_messages: loop {
-            // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
-            let recv = message_receiver.try_recv();
-            match recv {
-                Err(TryRecvError::Empty) => {
-                    trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
-                    break 'loop_messages; // Exit the message loop, go into waiting
-                }
-                Err(TryRecvError::Disconnected) => {
-                    unreachable_never_should_be_disconnected();
-                }
-                Ok(message) => {
-                    trace!(
-                        target: PROGRAM_MESSAGE_POLL_SPAMMY,
-                        "got message: {:?}",
-                        &message
-                    );
-                    match message {
-                        Program(_program_message) => {
-                            trace!(
-                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
-                                "[ui] message for program thread, ignoring"
-                            );
-                            continue 'loop_messages;
-                        }
-                        Engine(_engine_message) => {
-                            trace!(
-                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
-                                "[ui] message for engine thread, ignoring"
-                            );
-                            continue 'loop_messages;
-                        }
-                        Ui(ui_message) => match ui_message {
-                            UiThreadMessage::ExitUiThread => {
-                                trace!("got exit message for Ui thread");
-                                break 'outer;
-                            },
-                        },
-                    }
-                }
-            }
+        /*
+        Init ui
+        If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
+        */
+        let system = init_ui_system(APP_TITLE)
+            .wrap_err("failed while initialising ui system")?;
+
+        // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
+        let UiSystem {
+            backend: UiBackend {
+                mut display,
+                mut event_loop,
+                mut imgui_context,
+                mut platform,
+                mut renderer,
+            },
+            managers: UiManagers {}
+        };
+
+        if let Some(ret) = process_messages(&message_sender, &message_receiver) {
+            return ret;
         }
-        drop(_span);
     }
 
     // If we get to here, it's time to exit the thread and shutdown
@@ -111,6 +89,61 @@ pub(crate) fn ui_thread(
     trace!("dropping {}", name_of!(_no_panic_pill));
     drop(_no_panic_pill);
     return Ok(());
+}
+
+/// Function that processes the messages, and returns a value depending on what the UI thread should do
+///
+/// # Return Value
+/// [None] - Do nothing
+/// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
+#[instrument(ret, skip_all, level = "trace")]
+fn process_messages(message_sender: &BroadcastSender<Message>,
+                    message_receiver: &BroadcastReceiver<Message>) -> Option<eyre::Result<()>> {
+    'loop_messages: loop {
+        // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
+        let recv = message_receiver.try_recv();
+        match recv {
+            Err(TryRecvError::Empty) => {
+                trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
+                break 'loop_messages; // Exit the message loop, go into waiting
+            }
+            Err(TryRecvError::Disconnected) => {
+                unreachable_never_should_be_disconnected();
+            }
+            Ok(message) => {
+                trace!(
+                        target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                        "got message: {:?}",
+                        &message
+                    );
+                match message {
+                    Program(_program_message) => {
+                        trace!(
+                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                                "[ui] message for program thread, ignoring"
+                            );
+                        continue 'loop_messages;
+                    }
+                    Engine(_engine_message) => {
+                        trace!(
+                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                                "[ui] message for engine thread, ignoring"
+                            );
+                        continue 'loop_messages;
+                    }
+                    Ui(ui_message) => match ui_message {
+                        UiThreadMessage::ExitUiThread => {
+                            trace!("got exit message for Ui thread");
+                            return Some(Ok(())); //Ui thread should return with Ok
+                        },
+                    },
+                }
+            }
+        }
+    }
+
+    //UI thread should keep running
+    return None;
 }
 
 ///Initialises the UI system and returns it
@@ -143,7 +176,7 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     log_variable!(glutin_context_builder:?);
 
     trace!("creating [winit] window builder");
-    let window_builder = WindowBuilder::new().with_title(title).with_inner_size(DEFAULT_WINDOW_SIZE).with_maximized(true);
+    let window_builder = WindowBuilder::new().with_title(title).with_inner_size(DEFAULT_WINDOW_SIZE).with_maximized(START_MAXIMIZED);
     //TODO: Configure
     trace!("creating display");
     display = Display::new(window_builder, glutin_context_builder, &event_loop)
