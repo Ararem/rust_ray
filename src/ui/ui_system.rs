@@ -1,3 +1,4 @@
+//! Module that contains the structs used in the [crate::ui] module
 use glium::Display;
 use glium::glutin::event_loop::EventLoop;
 use imgui::Context;

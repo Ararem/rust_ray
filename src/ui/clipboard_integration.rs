@@ -1,4 +1,4 @@
-//!
+//! Support module that allows for using the clipboard in [imgui]
 use std::any::type_name;
 use std::error::Error;
 use std::fmt::{Debug, Formatter};

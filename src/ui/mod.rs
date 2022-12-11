@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier, Mutex};
 use std::sync::mpsc::TryRecvError;
+use std::sync::mpsc::TrySendError::{Disconnected, Full};
 use std::time::Instant;
 
 use color_eyre::{eyre, Help, Report};
@@ -18,13 +19,16 @@ use imgui_winit_support::winit::event_loop::EventLoopBuilder;
 use imgui_winit_support::winit::window::WindowBuilder;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, debug_span, error, info, instrument, trace, trace_span, warn};
+use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
+
+use ProgramThreadMessage::QuitAppNoError;
+use QuitAppNoErrorReason::QuitInteractionByUser;
 
 use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::config::ui_config::{DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC};
 use crate::helper::logging::event_targets::*;
-use crate::program::program_messages::{Message, UiThreadMessage, unreachable_never_should_be_disconnected};
+use crate::program::program_messages::{Message, ProgramThreadMessage, QuitAppNoErrorReason, UiThreadMessage, unreachable_never_should_be_disconnected};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::ProgramData;
 use crate::ui::docking::UiDockingArea;
@@ -84,7 +88,15 @@ pub(crate) fn ui_thread(
     let _guard_imgui_internal_span = imgui_internal_span.enter();
 
     debug!("running event loop");
-    event_loop.run_return(move |event, _window_target, control_flow| {
+    event_loop.run_return(|event, _window_target, control_flow| {
+        macro_rules! event_loop_return {
+            ($return_value:expr) => {{
+               trace!("expecting event loop to exit");
+               *result_ref = $return_value;
+               *control_flow = ControlFlow::Exit;
+            }};
+        }
+
         let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "process_ui_event", ?event).entered();
         match event {
             //We have new events, but we don't care what they are, just need to update frame timings
@@ -132,8 +144,7 @@ pub(crate) fn ui_thread(
                 if let Err(e) = result {
                     let error = Report::wrap_err(e, "encountered error while drawing: {err}. program should now exit");
                     warn!("encountered error while drawing");
-                    *result_ref = Err(error);
-                    *control_flow = ControlFlow::Exit;
+                    event_loop_return!(Err(error));
                 }
             }
 
@@ -142,7 +153,29 @@ pub(crate) fn ui_thread(
                 event: glutin::event::WindowEvent::CloseRequested,
                 ..
             } => {
-                *control_flow = ControlFlow::Exit;
+                // Here, we don't actually want to close the window, but inform the main thread that we'd like to quit
+                // Then, we wait for the main thread to tell us to quit
+                info!(target: UI_USER_EVENT, "got CloseRequested window event");
+
+                let message = Program(QuitAppNoError(QuitInteractionByUser));
+                debug!("sending message to program thread: {:?}", message);
+                match message_sender.try_send(message) {
+                    Ok(()) => {
+                        // We have signalled the thread, wait till the next loop when the main thread wants us to exit
+                        trace!("program thread signalled");
+                        trace!("see you on the other side!")
+                    },
+
+                    // Neither of these errors should happen ever, but better to be safe
+                    Err(Disconnected(_failed_message)) => {
+                        let report = Report::msg("failed to send quit request to program thread: no message receivers");
+                        event_loop_return!(Err(report));
+                    },
+                    Err(Full(_failed_message)) => {
+                        let report = Report::msg("failed to send quit request to program thread: message buffer full");
+                        event_loop_return!(Err(report));
+                    }
+                }
             }
 
             //Catch-all, passes onto the glutin backend
@@ -152,12 +185,12 @@ pub(crate) fn ui_thread(
             }
         }
 
+        if let Some(ret) = process_messages(&message_sender, &message_receiver) {
+            event_loop_return!(ret);
+        }
+
         _span.exit();
     });
-
-    if let Some(ret) = process_messages(&message_sender, &message_receiver) {
-        return ret;
-    }
 
     // If we get to here, it's time to exit the thread and shutdown
     info!("ui thread exiting");
