@@ -23,7 +23,6 @@ indoc = "1.0.7"
 structx = "0.1"
 regex = "1.7"
 lazy_static = "1.4"
-chrono = "0.4"
 fs_extra = "1.2.0"
 path-clean = "0.1.0"
 nameof = "1.2.2"
@@ -32,6 +31,7 @@ slice-deque = "0.3.0" # Deque that can be mapped into a slice really easily
 multiqueue2 = "0.1.7"
 no-panic = "0.1.16"
 rand = "0.8.5"
+humantime = "2.1.0"
 
 # ImGUI dependencies
 clipboard = "0.5"

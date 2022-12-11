@@ -1,20 +1,22 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier, Mutex};
 use std::sync::mpsc::TryRecvError;
+use std::time::Instant;
 
-use color_eyre::{eyre, Help};
+use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::WrapErr;
 use glium::{Display, glutin};
 use glium::glutin::CreationError::NoAvailablePixelFormat;
+use glium::glutin::event_loop::ControlFlow;
+use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use imgui::Context;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::event_loop::EventLoopBuilder;
-use imgui_winit_support::winit::platform::windows::EventLoopBuilderExtWindows;
 use imgui_winit_support::winit::window::WindowBuilder;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{info, instrument, trace, warn};
+use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
 
 use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
@@ -64,6 +66,90 @@ pub(crate) fn ui_thread(
         managers: UiManagers {}
     };
 
+    /*
+    Since we can't technically pass a variable out of a closure (which we have to use for the event loop),
+    Let the event loop take ownership of `result_ref`, and use `result` afterwards.
+    Neat!
+    */
+    let mut result: eyre::Result<()> = Ok(());
+    let result_ref = &mut result;
+    let mut last_frame = Instant::now();
+
+    //Enter the imgui_internal span so that any logs will be inside that span by default
+    let imgui_internal_span = debug_span!("imgui_internal");
+    let _guard_imgui_internal_span = imgui_internal_span.enter();
+
+    debug!("running event loop");
+    event_loop.run_return(move |event, _window_target, control_flow| {
+        let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "process_ui_event", ?event).entered();
+        match event {
+            //We have new events, but we don't care what they are, just need to update frame timings
+            glutin::event::Event::NewEvents(_) => {
+                let old_last_frame = last_frame;
+                last_frame = Instant::now();
+                let delta = last_frame - old_last_frame;
+                imgui_context
+                    .io_mut()
+                    .update_delta_time(delta);
+
+                trace!(target: UI_PERFRAME_SPAMMY,"updated deltaT: {delta}",delta = humantime::format_duration(delta));
+            }
+
+            glutin::event::Event::MainEventsCleared => {
+                trace!(target: UI_PERFRAME_SPAMMY, "main events cleared");
+                trace!(target: UI_PERFRAME_SPAMMY, "requesting redraw");
+                let window = display.gl_window().window();
+                window.request_redraw();
+                //Pretty sure this makes us render constantly
+                trace!(target: UI_PERFRAME_SPAMMY, "preparing frame");
+                let result = platform
+                    .prepare_frame(imgui_context.io_mut(), window);
+                if let Err(error) = result {
+                    let report = Report::new(error);
+                    // let wrapped_report = Report::wrap_err(report, "failed to prepare frame");
+                    // Pretty sure this error isn't harmful, so just log it
+                    warn!("failed to prepare frame: {}", report);
+                }
+            }
+
+            //This only gets called when something changes (not constantly), but it doesn't matter too much since it should be real-time
+            glutin::event::Event::RedrawRequested(_) => {
+                trace!(target: UI_PERFRAME_SPAMMY, "redraw requested");
+
+                let result = render(
+                    &mut display,
+                    &mut imgui_context,
+                    &mut platform,
+                    &mut renderer,
+                    &mut managers,
+                );
+
+                if let Err(e) = result {
+                    let error = Report::wrap_err(e, "encountered error while rendering: {err}. program should now exit");
+                    warn!("encountered error while rendering");
+                    *result_ref = Err(error);
+                    *control_flow = ControlFlow::Exit;
+                }
+            }
+
+            //Handle window events, we just do close events
+            glutin::event::Event::WindowEvent {
+                event: glutin::event::WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+
+            //Catch-all, passes onto the glutin backend
+            event => {
+                let gl_window = display.gl_window();
+                platform.handle_event(imgui_context.io_mut(), gl_window.window(), &event);
+            }
+        }
+
+        _span.exit();
+    });
+
     if let Some(ret) = process_messages(&message_sender, &message_receiver) {
         return ret;
     }
@@ -87,8 +173,7 @@ pub(crate) fn ui_thread(
 /// [None] - Do nothing
 /// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
 #[instrument(ret, skip_all, level = "trace")]
-fn process_messages(message_sender: &BroadcastSender<Message>,
-                    message_receiver: &BroadcastReceiver<Message>) -> Option<eyre::Result<()>> {
+fn process_messages(message_sender: &BroadcastSender<Message>, message_receiver: &BroadcastReceiver<Message>) -> Option<eyre::Result<()>> {
     'loop_messages: loop {
         // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
         let recv = message_receiver.try_recv();
