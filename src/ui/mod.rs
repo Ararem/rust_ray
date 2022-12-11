@@ -14,7 +14,7 @@ use imgui_winit_support::winit::platform::windows::EventLoopBuilderExtWindows;
 use imgui_winit_support::winit::window::WindowBuilder;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{info, instrument, trace, warn};
 
 use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
@@ -46,36 +46,26 @@ pub(crate) fn ui_thread(
     trace!("wait complete, running ui thread");
 
     /*
-    The outer loop is the one that should keep the UI thread alive all the time
-    If for some reason the UI crashes, this loop is responsible for bringing it back to life
+    Init ui
+    If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
     */
-    let mut outer_loop_iterations: usize = 0;
-    'outer: loop {
-        outer_loop_iterations += 1;
-        debug!("starting outer loop iteration {}", outer_loop_iterations);
+    let system = init_ui_system(APP_TITLE)
+        .wrap_err("failed while initialising ui system")?;
 
-        /*
-        Init ui
-        If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
-        */
-        let system = init_ui_system(APP_TITLE)
-            .wrap_err("failed while initialising ui system")?;
+    // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
+    let UiSystem {
+        backend: UiBackend {
+            mut display,
+            mut event_loop,
+            mut imgui_context,
+            mut platform,
+            mut renderer,
+        },
+        managers: UiManagers {}
+    };
 
-        // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
-        let UiSystem {
-            backend: UiBackend {
-                mut display,
-                mut event_loop,
-                mut imgui_context,
-                mut platform,
-                mut renderer,
-            },
-            managers: UiManagers {}
-        };
-
-        if let Some(ret) = process_messages(&message_sender, &message_receiver) {
-            return ret;
-        }
+    if let Some(ret) = process_messages(&message_sender, &message_receiver) {
+        return ret;
     }
 
     // If we get to here, it's time to exit the thread and shutdown
