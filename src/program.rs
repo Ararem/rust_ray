@@ -260,7 +260,7 @@ pub fn run() -> eyre::Result<()> {
                 }
             });
         } else {
-            trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "Ui thread still running");
+            trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "engine thread still running");
         }
         thread::sleep(poll_interval);
     }

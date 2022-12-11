@@ -5,18 +5,20 @@ use std::time::Instant;
 
 use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::WrapErr;
-use glium::{Display, glutin};
+use glium::{Display, glutin, Surface};
 use glium::glutin::CreationError::NoAvailablePixelFormat;
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
-use imgui::Context;
+use glium::glutin::platform::windows::EventLoopBuilderExtWindows;
+use imgui::{Context, StyleVar, WindowFlags};
+use imgui::Condition::Always;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::event_loop::EventLoopBuilder;
 use imgui_winit_support::winit::window::WindowBuilder;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
+use tracing::{debug, debug_span, error, info, instrument, trace, trace_span, warn};
 
 use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
@@ -25,10 +27,12 @@ use crate::helper::logging::event_targets::*;
 use crate::program::program_messages::{Message, UiThreadMessage, unreachable_never_should_be_disconnected};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::ProgramData;
+use crate::ui::docking::UiDockingArea;
 use crate::ui::ui_system::{UiBackend, UiManagers, UiSystem};
 
 mod ui_system;
 mod clipboard_integration;
+mod docking;
 
 #[derive(Copy, Clone, Debug)]
 pub struct UiData {}
@@ -63,8 +67,8 @@ pub(crate) fn ui_thread(
             mut platform,
             mut renderer,
         },
-        managers: UiManagers {}
-    };
+        mut managers
+    } = system;
 
     /*
     Since we can't technically pass a variable out of a closure (which we have to use for the event loop),
@@ -92,13 +96,14 @@ pub(crate) fn ui_thread(
                     .io_mut()
                     .update_delta_time(delta);
 
-                trace!(target: UI_PERFRAME_SPAMMY,"updated deltaT: {delta}",delta = humantime::format_duration(delta));
+                trace!(target: UI_PERFRAME_SPAMMY,"updated deltaT: {}",  humantime::format_duration(delta));
             }
 
             glutin::event::Event::MainEventsCleared => {
                 trace!(target: UI_PERFRAME_SPAMMY, "main events cleared");
                 trace!(target: UI_PERFRAME_SPAMMY, "requesting redraw");
-                let window = display.gl_window().window();
+                let gl_window = display.gl_window();
+                let window = gl_window.window();
                 window.request_redraw();
                 //Pretty sure this makes us render constantly
                 trace!(target: UI_PERFRAME_SPAMMY, "preparing frame");
@@ -116,7 +121,7 @@ pub(crate) fn ui_thread(
             glutin::event::Event::RedrawRequested(_) => {
                 trace!(target: UI_PERFRAME_SPAMMY, "redraw requested");
 
-                let result = render(
+                let result = outer_render_a_frame(
                     &mut display,
                     &mut imgui_context,
                     &mut platform,
@@ -125,8 +130,8 @@ pub(crate) fn ui_thread(
                 );
 
                 if let Err(e) = result {
-                    let error = Report::wrap_err(e, "encountered error while rendering: {err}. program should now exit");
-                    warn!("encountered error while rendering");
+                    let error = Report::wrap_err(e, "encountered error while drawing: {err}. program should now exit");
+                    warn!("encountered error while drawing");
                     *result_ref = Err(error);
                     *control_flow = ControlFlow::Exit;
                 }
@@ -164,6 +169,166 @@ pub(crate) fn ui_thread(
 
     trace!("dropping {}", name_of!(_no_panic_pill));
     drop(_no_panic_pill);
+    return Ok(());
+}
+
+
+/// Called every frame, handles everything required to draw an entire frame
+///
+/// Sets up all the boilerplate, then calls [inner_render] to create (build) the actual ui
+fn outer_render_a_frame(
+    display: &mut Display,
+    imgui_context: &mut Context,
+    platform: &mut WinitPlatform,
+    renderer: &mut Renderer,
+    managers: &mut UiManagers,
+) -> color_eyre::Result<()> {
+    let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "outer_render", frame = imgui_context.frame_count()).entered();
+
+    // {
+    //     let mut fonts = imgui_context.fonts();
+    //     match managers.font_manager.rebuild_font_if_needed(&mut fonts) {
+    //         Err(err) => warn!("font manager was not able to rebuild font: {err}"),
+    //         // Font atlas was rebuilt
+    //         Ok(true) => {
+    //             trace!("font was rebuilt, reloading renderer texture");
+    //             let result = renderer.reload_font_texture(imgui_context);
+    //             match result {
+    //                 Ok(()) => trace!("renderer font texture reloaded successfully"),
+    //                 Err(err) => {
+    //                     let report = Report::new(err);
+    //                     error!("{}", report);
+    //                 }
+    //             }
+    //         }
+    //         Ok(false) => { trace!(target:UI_PERFRAME_SPAMMY, "font not rebuilt (probably not dirty)") }
+    //     }
+    // }
+
+    // Create a new imgui frame to render to
+    let ui = imgui_context.new_frame();
+    //Build the UI
+    {
+        // Try to set our custom font
+        // let maybe_font_token = match managers.font_manager.get_font_id() {
+        //     Err(err) => {
+        //         warn!(
+        //         target: UI_PERFRAME_SPAMMY,
+        //         "font manager failed to return font: {err}"
+        //     );
+        //         None
+        //     }
+        //     Ok(font_id) => Some(ui.push_font(*font_id)),
+        // };
+
+        let main_window_flags =
+            // No borders etc for top-level window
+            WindowFlags::NO_DECORATION
+                | WindowFlags::NO_MOVE
+                // Show menu bar
+                | WindowFlags::MENU_BAR
+                // Don't raise window on focus (as it'll clobber floating windows)
+                | WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS | WindowFlags::NO_NAV_FOCUS
+                // Don't want the dock area's parent to be dockable!
+                | WindowFlags::NO_DOCKING
+            ;
+
+
+        let _window_padding_token = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+        let main_window_token = ui.window("Main Window")
+                                  .flags(main_window_flags)
+                                  .position([0.0, 0.0], Always) // These two make it always fill the whole screen
+                                  .size(ui.io().display_size, Always).begin();
+        _window_padding_token.end();
+        match main_window_token {
+            None => trace!(target:UI_PERFRAME_SPAMMY, "warning: main window is not visible"),
+            Some(token) => {
+                let docking_area = UiDockingArea {};
+                let _dock_node = docking_area.dockspace("Main Dock Area");
+
+                build_ui(&ui, managers);
+
+                token.end();
+            }
+        }
+
+
+        // if let Some(token) = maybe_font_token {
+        //     token.pop();
+        // }
+    }
+
+    // Start drawing to our OpenGL context (via glium/glutin)
+    let gl_window = display.gl_window();
+    let mut target = display.draw();
+    target.clear_color_srgb(0.0, 0.0, 0.0, 0.0); //Clear background so we don't get any leftovers from previous frames
+
+    // Render our imgui frame now we've written to it
+    platform.prepare_render(&ui, gl_window.window());
+    let draw_data = imgui_context.render();
+
+    // Copy the imgui rendered frame to our OpenGL surface (so we can see it)
+    renderer
+        .render(&mut target, draw_data)
+        .expect("UI rendering failed");
+    target.finish().expect("Failed to swap buffers");
+
+    drop(_span);
+    return Ok(());
+}
+
+fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers) -> eyre::Result<()> {
+    let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "build_ui").entered();
+    static mut SHOW_DEMO_WINDOW: bool = true;
+    static mut SHOW_METRICS_WINDOW: bool = true;
+    static mut SHOW_UI_MANAGEMENT_WINDOW: bool = true;
+    const NO_SHORTCUT: &str = "N/A";
+
+    trace!(target:UI_PERFRAME_SPAMMY, "processing keybindings");
+    macro_rules! key_toggle {
+            ($keybinding:ident, $toggle_var:ident) => {
+                        if ui.is_key_index_pressed_no_repeat($keybinding as i32) {
+                            $toggle_var  ^= true;
+                            trace!(target: UI_USER_EVENT, "toggle key {} => {}", stringify!($keybinding), $toggle_var);
+                        };
+            };
+        }
+    // key_toggle!(KEY_TOGGLE_METRICS_WINDOW,SHOW_METRICS_WINDOW);
+    // key_toggle!(KEY_TOGGLE_DEMO_WINDOW,SHOW_DEMO_WINDOW);
+    //
+    // trace!(target:UI_PERFRAME_SPAMMY, "menu bar");
+    // ui.main_menu_bar(|| {
+    //     ui.menu("Tools", ||
+    //         {
+    //             macro_rules! toggle_menu_item {
+    //                     ($item_name:expr, $toggle_var:ident, NO_SHORTCUT) => {
+    //                         // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
+    //                          if ui.menu_item_config($item_name).shortcut(NO_SHORTCUT).build_with_ref(&mut $toggle_var){
+    //                             trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
+    //                          }
+    //                     };
+    //                     ($item_name:expr, $toggle_var:ident, $key:expr) => {
+    //                         // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
+    //                          if ui.menu_item_config($item_name).shortcut(format!("{:?}", $key)).build_with_ref(&mut $toggle_var){
+    //                             trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
+    //                          }
+    //                     };
+    //                 }
+    //             toggle_menu_item!("Metrics", SHOW_METRICS_WINDOW, KEY_TOGGLE_METRICS_WINDOW);
+    //             toggle_menu_item!("Demo Window", SHOW_DEMO_WINDOW, KEY_TOGGLE_DEMO_WINDOW);
+    //             toggle_menu_item!("UI Management", SHOW_UI_MANAGEMENT_WINDOW, NO_SHORTCUT);
+    //         });
+    // });
+    //
+    // trace!(target:UI_PERFRAME_SPAMMY, "showing windows");
+    // if SHOW_DEMO_WINDOW { ui.show_demo_window(&mut SHOW_DEMO_WINDOW); }
+    // if SHOW_METRICS_WINDOW { ui.show_metrics_window(&mut SHOW_METRICS_WINDOW); }
+    // managers.render_ui_managers_window(&ui, &mut SHOW_UI_MANAGEMENT_WINDOW);
+
+    ui.show_demo_window(&mut false);
+
+    _span.exit();
+
     return Ok(());
 }
 
@@ -238,8 +403,7 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     log_variable!(title);
 
     trace!("creating [winit] event loop with [any_thread]=`true`");
-    event_loop = EventLoopBuilder::new()
-        .with_any_thread(true)
+    event_loop = EventLoopBuilder::with_any_thread(&mut EventLoopBuilder::new(), true)
         .build();
 
     trace!("creating [glutin] context builder");

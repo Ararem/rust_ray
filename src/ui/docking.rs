@@ -1,4 +1,5 @@
 // No, not that kind of docking :p
+//! Module that implements support for the docking feature of ImGUI
 #![allow(unused)]
 
 use std::os::raw::c_char;
