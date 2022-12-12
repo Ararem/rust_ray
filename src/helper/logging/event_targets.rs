@@ -13,8 +13,8 @@ target!(
     r"High-frequency (i.e. every frame) logs from the UI"
 );
 target!(
-    PROGRAM_MESSAGE_POLL_SPAMMY,
-    r"High-frequency (i.e. every frame) logs from the program message poll loop"
+    THREAD_MESSAGE_PROCESSING_SPAMMY,
+    r"Spammy logs that relate to processing messages between threads"
 );
 target!(
     PROGRAM_RUN_LOOP_SPAMMY,

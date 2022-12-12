@@ -46,7 +46,7 @@ pub fn run() -> eyre::Result<()> {
 
     // The engine/ui threads use the command_sender to send messages back to the main thread, in order to do stuff (like quit the app)
     trace!("creating MPMC channel for thread communication");
-    let (message_sender, message_receiver) = broadcast_queue::<Message>(0);
+    let (message_sender, message_receiver) = broadcast_queue::<Message>(100);
 
     // This barrier blocks our UI and engine thread from starting until the program is ready for them
     trace!("creating start thread barrier for threads");
@@ -111,7 +111,10 @@ pub fn run() -> eyre::Result<()> {
             let recv = message_receiver.try_recv();
             match recv {
                 Err(TryRecvError::Empty) => {
-                    trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
+                    trace!(
+                        target: THREAD_MESSAGE_PROCESSING_SPAMMY,
+                        "no messages waiting"
+                    );
                     break 'loop_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
@@ -119,21 +122,21 @@ pub fn run() -> eyre::Result<()> {
                 }
                 Ok(message) => {
                     trace!(
-                        target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                        target: THREAD_MESSAGE_PROCESSING_SPAMMY,
                         "got message: {:?}",
                         &message
                     );
                     match message {
                         Ui(_ui_message) => {
                             trace!(
-                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                                target: THREAD_MESSAGE_PROCESSING_SPAMMY,
                                 "[program] message for ui thread, ignoring"
                             );
                             continue 'loop_messages;
                         }
                         Engine(_engine_message) => {
                             trace!(
-                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
+                                target: THREAD_MESSAGE_PROCESSING_SPAMMY,
                                 "[program] message for engine thread, ignoring"
                             );
                             continue 'loop_messages;
@@ -202,17 +205,16 @@ pub fn run() -> eyre::Result<()> {
                                         match join_result {
                                             Ok(return_value) => {
                                                 trace!("engine thread joined");
-                                                warn!("TODO: engine thread return value");
-                                                // match return_value {
-                                                // Ok(()) => {
-                                                //     debug!("ui thread return was Ok");
-                                                // }
-                                                // Err(error) => {
-                                                //     log_error(&error.wrap_err(
-                                                //         "engine thread exited with error",
-                                                //     ));
-                                                // }
-                                                // }
+                                                match return_value {
+                                                    Ok(()) => {
+                                                        debug!("engine thread return was Ok");
+                                                    }
+                                                    Err(error) => {
+                                                        log_error(&error.wrap_err(
+                                                            "engine thread exited with error",
+                                                        ));
+                                                    }
+                                                }
                                             }
                                             Err(boxed_error) => {
                                                 // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
@@ -304,7 +306,9 @@ pub fn run() -> eyre::Result<()> {
             "checking engine thread status"
         );
         if engine_thread.is_finished() {
-            error!("engine finished early when it shouldn't have, joining to get return value");
+            error!(
+                "engine thread finished early when it shouldn't have, joining to get return value"
+            );
             let join_result = engine_thread.join();
             return Err(match join_result {
                 Ok(ret) => {

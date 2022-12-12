@@ -1,22 +1,22 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Barrier, Mutex};
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::TrySendError::{Disconnected, Full};
+use std::sync::{Arc, Barrier, Mutex};
 use std::time::Instant;
 
-use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::WrapErr;
-use glium::{Display, glutin, Surface};
-use glium::glutin::CreationError::NoAvailablePixelFormat;
+use color_eyre::{eyre, Help, Report};
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::glutin::platform::windows::EventLoopBuilderExtWindows;
-use imgui::{Context, StyleVar, WindowFlags};
+use glium::glutin::CreationError::NoAvailablePixelFormat;
+use glium::{glutin, Display, Surface};
 use imgui::Condition::Always;
+use imgui::{Context, StyleVar, WindowFlags};
 use imgui_glium_renderer::Renderer;
-use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::event_loop::EventLoopBuilder;
 use imgui_winit_support::winit::window::WindowBuilder;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
@@ -24,19 +24,24 @@ use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
 
-use crate::{log_expr_val, log_variable};
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
-use crate::config::ui_config::{DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC};
+use crate::config::ui_config::{
+    DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
+};
 use crate::helper::logging::event_targets::*;
-use crate::program::program_messages::{Message, ProgramThreadMessage, QuitAppNoErrorReason, UiThreadMessage, unreachable_never_should_be_disconnected};
 use crate::program::program_messages::Message::{Engine, Program, Ui};
+use crate::program::program_messages::{
+    unreachable_never_should_be_disconnected, Message, ProgramThreadMessage, QuitAppNoErrorReason,
+    UiThreadMessage,
+};
 use crate::program::ProgramData;
 use crate::ui::docking::UiDockingArea;
 use crate::ui::ui_system::{UiBackend, UiManagers, UiSystem};
+use crate::{log_expr_val, log_variable};
 
-mod ui_system;
 mod clipboard_integration;
 mod docking;
+mod ui_system;
 
 #[derive(Copy, Clone, Debug)]
 pub struct UiData {}
@@ -59,19 +64,19 @@ pub(crate) fn ui_thread(
     Init ui
     If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
     */
-    let system = init_ui_system(APP_TITLE)
-        .wrap_err("failed while initialising ui system")?;
+    let system = init_ui_system(APP_TITLE).wrap_err("failed while initialising ui system")?;
 
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
     let UiSystem {
-        backend: UiBackend {
-            mut display,
-            mut event_loop,
-            mut imgui_context,
-            mut platform,
-            mut renderer,
-        },
-        mut managers
+        backend:
+            UiBackend {
+                mut display,
+                mut event_loop,
+                mut imgui_context,
+                mut platform,
+                mut renderer,
+            },
+        mut managers,
     } = system;
 
     /*
@@ -91,9 +96,9 @@ pub(crate) fn ui_thread(
     event_loop.run_return(|event, _window_target, control_flow| {
         macro_rules! event_loop_return {
             ($return_value:expr) => {{
-               trace!("expecting event loop to exit");
-               *result_ref = $return_value;
-               *control_flow = ControlFlow::Exit;
+                trace!("expecting event loop to exit");
+                *result_ref = $return_value;
+                *control_flow = ControlFlow::Exit;
             }};
         }
 
@@ -104,11 +109,13 @@ pub(crate) fn ui_thread(
                 let old_last_frame = last_frame;
                 last_frame = Instant::now();
                 let delta = last_frame - old_last_frame;
-                imgui_context
-                    .io_mut()
-                    .update_delta_time(delta);
+                imgui_context.io_mut().update_delta_time(delta);
 
-                trace!(target: UI_PERFRAME_SPAMMY,"updated deltaT: {}",  humantime::format_duration(delta));
+                trace!(
+                    target: UI_PERFRAME_SPAMMY,
+                    "updated deltaT: {}",
+                    humantime::format_duration(delta)
+                );
             }
 
             glutin::event::Event::MainEventsCleared => {
@@ -119,8 +126,7 @@ pub(crate) fn ui_thread(
                 window.request_redraw();
                 //Pretty sure this makes us render constantly
                 trace!(target: UI_PERFRAME_SPAMMY, "preparing frame");
-                let result = platform
-                    .prepare_frame(imgui_context.io_mut(), window);
+                let result = platform.prepare_frame(imgui_context.io_mut(), window);
                 if let Err(error) = result {
                     let report = Report::new(error);
                     // let wrapped_report = Report::wrap_err(report, "failed to prepare frame");
@@ -142,7 +148,10 @@ pub(crate) fn ui_thread(
                 );
 
                 if let Err(e) = result {
-                    let error = Report::wrap_err(e, "encountered error while drawing: {err}. program should now exit");
+                    let error = Report::wrap_err(
+                        e,
+                        "encountered error while drawing: {err}. program should now exit",
+                    );
                     warn!("encountered error while drawing");
                     event_loop_return!(Err(error));
                 }
@@ -164,15 +173,19 @@ pub(crate) fn ui_thread(
                         // We have signalled the thread, wait till the next loop when the main thread wants us to exit
                         trace!("program thread signalled");
                         trace!("see you on the other side!")
-                    },
+                    }
 
                     // Neither of these errors should happen ever, but better to be safe
                     Err(Disconnected(_failed_message)) => {
-                        let report = Report::msg("failed to send quit request to program thread: no message receivers");
+                        let report = Report::msg(
+                            "failed to send quit request to program thread: no message receivers",
+                        );
                         event_loop_return!(Err(report));
-                    },
+                    }
                     Err(Full(_failed_message)) => {
-                        let report = Report::msg("failed to send quit request to program thread: message buffer full");
+                        let report = Report::msg(
+                            "failed to send quit request to program thread: message buffer full",
+                        );
                         event_loop_return!(Err(report));
                     }
                 }
@@ -191,6 +204,7 @@ pub(crate) fn ui_thread(
 
         _span.exit();
     });
+    drop(_guard_imgui_internal_span);
 
     // If we get to here, it's time to exit the thread and shutdown
     info!("ui thread exiting");
@@ -200,11 +214,8 @@ pub(crate) fn ui_thread(
     trace!("unsubscribing message sender");
     message_sender.unsubscribe();
 
-    trace!("dropping {}", name_of!(_no_panic_pill));
-    drop(_no_panic_pill);
-    return Ok(());
+    Ok(())
 }
-
 
 /// Called every frame, handles everything required to draw an entire frame
 ///
@@ -216,7 +227,12 @@ fn outer_render_a_frame(
     renderer: &mut Renderer,
     managers: &mut UiManagers,
 ) -> color_eyre::Result<()> {
-    let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "outer_render", frame = imgui_context.frame_count()).entered();
+    let _span = trace_span!(
+        target: UI_PERFRAME_SPAMMY,
+        "outer_render",
+        frame = imgui_context.frame_count()
+    )
+    .entered();
 
     // {
     //     let mut fonts = imgui_context.fonts();
@@ -266,15 +282,19 @@ fn outer_render_a_frame(
                 | WindowFlags::NO_DOCKING
             ;
 
-
         let _window_padding_token = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
-        let main_window_token = ui.window("Main Window")
-                                  .flags(main_window_flags)
-                                  .position([0.0, 0.0], Always) // These two make it always fill the whole screen
-                                  .size(ui.io().display_size, Always).begin();
+        let main_window_token = ui
+            .window("Main Window")
+            .flags(main_window_flags)
+            .position([0.0, 0.0], Always) // These two make it always fill the whole screen
+            .size(ui.io().display_size, Always)
+            .begin();
         _window_padding_token.end();
         match main_window_token {
-            None => trace!(target:UI_PERFRAME_SPAMMY, "warning: main window is not visible"),
+            None => trace!(
+                target: UI_PERFRAME_SPAMMY,
+                "warning: main window is not visible"
+            ),
             Some(token) => {
                 let docking_area = UiDockingArea {};
                 let _dock_node = docking_area.dockspace("Main Dock Area");
@@ -284,7 +304,6 @@ fn outer_render_a_frame(
                 token.end();
             }
         }
-
 
         // if let Some(token) = maybe_font_token {
         //     token.pop();
@@ -317,15 +336,20 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers) -> eyre::Result<()> {
     static mut SHOW_UI_MANAGEMENT_WINDOW: bool = true;
     const NO_SHORTCUT: &str = "N/A";
 
-    trace!(target:UI_PERFRAME_SPAMMY, "processing keybindings");
+    trace!(target: UI_PERFRAME_SPAMMY, "processing keybindings");
     macro_rules! key_toggle {
-            ($keybinding:ident, $toggle_var:ident) => {
-                        if ui.is_key_index_pressed_no_repeat($keybinding as i32) {
-                            $toggle_var  ^= true;
-                            trace!(target: UI_USER_EVENT, "toggle key {} => {}", stringify!($keybinding), $toggle_var);
-                        };
+        ($keybinding:ident, $toggle_var:ident) => {
+            if ui.is_key_index_pressed_no_repeat($keybinding as i32) {
+                $toggle_var ^= true;
+                trace!(
+                    target: UI_USER_EVENT,
+                    "toggle key {} => {}",
+                    stringify!($keybinding),
+                    $toggle_var
+                );
             };
-        }
+        };
+    }
     // key_toggle!(KEY_TOGGLE_METRICS_WINDOW,SHOW_METRICS_WINDOW);
     // key_toggle!(KEY_TOGGLE_DEMO_WINDOW,SHOW_DEMO_WINDOW);
     //
@@ -362,7 +386,7 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers) -> eyre::Result<()> {
 
     _span.exit();
 
-    return Ok(());
+    Ok(())
 }
 
 /// Function that processes the messages, and returns a value depending on what the UI thread should do
@@ -370,14 +394,24 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers) -> eyre::Result<()> {
 /// # Return Value
 /// [None] - Do nothing
 /// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
-#[instrument(ret, skip_all, level = "trace")]
-fn process_messages(message_sender: &BroadcastSender<Message>, message_receiver: &BroadcastReceiver<Message>) -> Option<eyre::Result<()>> {
+fn process_messages(
+    message_sender: &BroadcastSender<Message>,
+    message_receiver: &BroadcastReceiver<Message>,
+) -> Option<eyre::Result<()>> {
+    let _span = trace_span!(
+        target: THREAD_MESSAGE_PROCESSING_SPAMMY,
+        name_of!(process_messages)
+    )
+    .entered();
     'loop_messages: loop {
         // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
         let recv = message_receiver.try_recv();
         match recv {
             Err(TryRecvError::Empty) => {
-                trace!(target: PROGRAM_MESSAGE_POLL_SPAMMY, "no messages waiting");
+                trace!(
+                    target: THREAD_MESSAGE_PROCESSING_SPAMMY,
+                    "no messages waiting"
+                );
                 break 'loop_messages; // Exit the message loop, go into waiting
             }
             Err(TryRecvError::Disconnected) => {
@@ -385,38 +419,40 @@ fn process_messages(message_sender: &BroadcastSender<Message>, message_receiver:
             }
             Ok(message) => {
                 trace!(
-                        target: PROGRAM_MESSAGE_POLL_SPAMMY,
-                        "got message: {:?}",
-                        &message
-                    );
+                    target: THREAD_MESSAGE_PROCESSING_SPAMMY,
+                    "got message: {:?}",
+                    &message
+                );
                 match message {
                     Program(_program_message) => {
                         trace!(
-                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
-                                "[ui] message for program thread, ignoring"
-                            );
+                            target: THREAD_MESSAGE_PROCESSING_SPAMMY,
+                            "[ui] message for program thread, ignoring"
+                        );
                         continue 'loop_messages;
                     }
                     Engine(_engine_message) => {
                         trace!(
-                                target: PROGRAM_MESSAGE_POLL_SPAMMY,
-                                "[ui] message for engine thread, ignoring"
-                            );
+                            target: THREAD_MESSAGE_PROCESSING_SPAMMY,
+                            "[ui] message for engine thread, ignoring"
+                        );
                         continue 'loop_messages;
                     }
-                    Ui(ui_message) => match ui_message {
-                        UiThreadMessage::ExitUiThread => {
-                            trace!("got exit message for Ui thread");
-                            return Some(Ok(())); //Ui thread should return with Ok
-                        },
-                    },
+                    Ui(ui_message) => {
+                        return match ui_message {
+                            UiThreadMessage::ExitUiThread => {
+                                trace!("got exit message for Ui thread");
+                                Some(Ok(())) //Ui thread should return with Ok
+                            }
+                        };
+                    }
                 }
             }
         }
     }
 
     //UI thread should keep running
-    return None;
+    None
 }
 
 ///Initialises the UI system and returns it
@@ -436,8 +472,7 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     log_variable!(title);
 
     trace!("creating [winit] event loop with [any_thread]=`true`");
-    event_loop = EventLoopBuilder::with_any_thread(&mut EventLoopBuilder::new(), true)
-        .build();
+    event_loop = EventLoopBuilder::with_any_thread(&mut EventLoopBuilder::new(), true).build();
 
     trace!("creating [glutin] context builder");
     let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
@@ -448,7 +483,10 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     log_variable!(glutin_context_builder:?);
 
     trace!("creating [winit] window builder");
-    let window_builder = WindowBuilder::new().with_title(title).with_inner_size(DEFAULT_WINDOW_SIZE).with_maximized(START_MAXIMIZED);
+    let window_builder = WindowBuilder::new()
+        .with_title(title)
+        .with_inner_size(DEFAULT_WINDOW_SIZE)
+        .with_maximized(START_MAXIMIZED);
     //TODO: Configure
     trace!("creating display");
     display = Display::new(window_builder, glutin_context_builder, &event_loop)
@@ -477,7 +515,8 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     );
 
     trace!("creating [glium] renderer");
-    renderer = Renderer::init(&mut imgui_context, &display).wrap_err("failed to create renderer")?;
+    renderer =
+        Renderer::init(&mut imgui_context, &display).wrap_err("failed to create renderer")?;
 
     match clipboard_integration::clipboard_init() {
         Ok(clipboard_backend) => {

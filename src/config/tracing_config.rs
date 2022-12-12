@@ -31,7 +31,7 @@ pub enum ErrorLogStyle {
     Short,
     ShortWithCause,
     WithBacktrace,
-    Debug
+    Debug,
 }
 
 pub static ERROR_LOG_STYLE: ErrorLogStyle = ErrorLogStyle::Short;
@@ -45,6 +45,8 @@ lazy_static! {
     /// Only the first matching filter will be used (the rest will be skipped), and if none match then the event will be logged by default.
     pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
         LogTargetFilter::starts_with(UI_PERFRAME_SPAMMY, false),
+        LogTargetFilter::starts_with(PROGRAM_RUN_LOOP_SPAMMY, false),
+        LogTargetFilter::starts_with(THREAD_MESSAGE_PROCESSING_SPAMMY, false),
         LogTargetFilter::starts_with(DATA_DUMP, false),
     ];
 
