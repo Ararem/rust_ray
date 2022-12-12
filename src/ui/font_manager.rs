@@ -1,26 +1,26 @@
 //! Manages fonts for the UI system
 
-use Cow::Borrowed;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::ops::Deref;
+use Cow::Borrowed;
 
-use color_eyre::{eyre, Help, Report};
 use color_eyre::eyre::eyre;
-use color_eyre::owo_colors::OwoColorize;
+use color_eyre::{eyre, Help, Report};
 use fs_extra::*;
 use imgui::{FontAtlas, FontConfig, FontId, FontSource, TreeNodeFlags, Ui};
-use nameof::name_of;
 use tracing::{debug, error, info, trace, trace_span};
 use tracing::{instrument, warn};
 
-use crate::config::resources_config::{FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER, FONTS_PATH};
-use crate::config::ui_config::*;
+use crate::config::resources_config::{
+    FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER, FONTS_PATH,
+};
 use crate::config::ui_config::colours::COLOUR_ERROR;
-use crate::helper::logging::event_targets;
+use crate::config::ui_config::*;
 use crate::helper::logging::event_targets::{DATA_DUMP, UI_USER_EVENT};
+use crate::helper::logging::{event_targets, log_error_as_warning};
 use crate::resources::resource_manager::get_main_resource_folder_path;
 
 #[derive(Debug)]
@@ -43,24 +43,32 @@ impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
     #[instrument(skip_all, level = "trace")]
     pub fn reload_list_from_resources(&mut self) -> eyre::Result<()> {
-        let fonts_directory =
-            get_main_resource_folder_path()?.join(FONTS_PATH);
+        let fonts_directory = get_main_resource_folder_path()?.join(FONTS_PATH);
 
-        debug!("reloading fonts from resources folder {:?}", &fonts_directory);
-        let directory;
-        match dir::get_dir_content(&fonts_directory) {
+        debug!(
+            "reloading fonts from resources folder {:?}",
+            &fonts_directory
+        );
+        let directory = match dir::get_dir_content(&fonts_directory) {
             Err(e) => {
-                let error = Report::from(e).wrap_err(format!("could not load fonts directory {:?}", &fonts_directory));
-                error!("{error}");
+                let error = Report::from(e).wrap_err(format!(
+                    "could not load fonts directory at {:?}",
+                    &fonts_directory
+                ));
                 return Err(error);
             }
-            Ok(dir) => directory = dir,
-        }
+            Ok(dir) => dir,
+        };
 
-        debug!(target:DATA_DUMP,"fonts folder directories: {:#?}", &directory.directories);
-        debug!(target:DATA_DUMP,"fonts folder files:{:#?}", &directory.files);
+        debug!(
+            target: DATA_DUMP,
+            "fonts folder directories: {:#?}", &directory.directories
+        );
+        debug!(
+            target: DATA_DUMP,
+            "fonts folder files:{:#?}", &directory.files
+        );
 
-        //Visit each file in the tree
         let filter_regex = FONTS_FILE_PATH_FILTER.deref();
         trace!("file path filter for fonts is `{filter_regex:?}`");
         let name_extractor_regex = FONTS_FILE_NAME_EXTRACTOR.deref();
@@ -81,11 +89,11 @@ impl FontManager {
             trace!("reading matching file at {file_path}");
 
             let mut file = match fs::File::open(file_path) {
-                Ok(file) => { file },
+                Ok(file) => file,
                 Err(err) => {
                     let report = Report::new(err)
                         .wrap_err(format!("was not able to open font file at {file_path}"));
-                    warn!("{}", report);
+                    log_error_as_warning(&report);
                     continue;
                 }
             };
@@ -94,9 +102,10 @@ impl FontManager {
             match file.read_to_end(&mut font_data_buffer) {
                 Ok(_read) => {}
                 Err(error) => {
-                    let report = Report::new(error)
-                        .wrap_err(format!("could not read bytes from font file at {file_path}"));
-                    warn!("{}", report);
+                    let report = Report::new(error).wrap_err(format!(
+                        "could not read bytes from font file at {file_path}"
+                    ));
+                    log_error_as_warning(&report);
                     continue;
                 }
             }
@@ -104,8 +113,12 @@ impl FontManager {
             // Extract font names from the file path using Regex
             let mut base_font_name = "Unknown Fonts"; // Should be overwritten unless something goes wrong, this value is fallback
             let mut weight_name = file_path.as_str(); // Should be overwritten unless something goes wrong, this value is fallback
-            // Try trim the file_path default value so it's not as long. Should always complete but just to be sure
-            if let Some(pat) = fonts_directory.to_str() { weight_name = weight_name.trim_start_matches(pat).trim_start_matches(&['/', '\\']); }
+                                                      // Try trim the file_path default value so it's not as long. Should always complete but just to be sure
+            if let Some(pat) = fonts_directory.to_str() {
+                weight_name = weight_name
+                    .trim_start_matches(pat)
+                    .trim_start_matches(&['/', '\\']);
+            }
             for capture in name_extractor_regex.captures_iter(file_path) {
                 if let Some(_match) = capture.name("base_font_name") {
                     base_font_name = _match.as_str();
@@ -117,10 +130,15 @@ impl FontManager {
 
             let base_font_ref = fonts
                 .entry(base_font_name)
-                .or_insert_with(|| { HashMap::new() });
+                .or_insert_with(|| HashMap::new());
 
-            base_font_ref
-                .insert(weight_name, font_data_buffer.clone());
+            trace!(
+                file_path,
+                "loaded font {} @ {}",
+                base_font_name,
+                weight_name
+            );
+            base_font_ref.insert(weight_name, font_data_buffer.clone());
         }
 
         // Now we have loaded file data, process into Font{} structs
@@ -130,7 +148,7 @@ impl FontManager {
             trace!("processing base font {base_font_name}");
             let mut font = Font {
                 name: base_font_name.to_string(),
-                weights: vec![]
+                weights: vec![],
             };
 
             for weight_entry in font_entry.1 {
@@ -140,13 +158,14 @@ impl FontManager {
 
                 let weight = FontWeight {
                     name: weight_name.to_string(),
-                    data
+                    data,
                 };
                 font.weights.push(weight);
             }
 
             //Sort the fonts by their name
-            font.weights.sort_unstable_by(|w1, w2| w1.name.cmp(&w2.name));
+            font.weights
+                .sort_unstable_by(|w1, w2| w1.name.cmp(&w2.name));
 
             // Push the font once it's complete
             self.fonts.push(font);
@@ -216,19 +235,23 @@ impl FontManager {
         // Important: having a negative size is __BAD__
         *size = (*size).clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
 
-        trace!("building font {font_name} ({weight}) @ {size}px", font_name = base_font.name, weight = weight.name);
         trace!(
-                    target: event_targets::DATA_DUMP,
-                    "font data is {:?}",
-                    weight.data
-                );
+            "building font {font_name} ({weight}) @ {size}px",
+            font_name = base_font.name,
+            weight = weight.name
+        );
+        trace!(
+            target: event_targets::DATA_DUMP,
+            "font data is {:?}",
+            weight.data
+        );
 
         let full_name = format!(
             "{name} - {weight} ({size}px)",
             name = base_font.name,
             weight = weight.name
         )
-            .into();
+        .into();
         let font_id = font_atlas.add_font(&[FontSource::TtfData {
             data: &weight.data,
             config: Some(FontConfig {
@@ -283,7 +306,8 @@ impl FontManager {
         let font_index = &mut self.selected_font_index;
         let fonts_len = fonts.len();
 
-        if fonts_len == 0 { //Check we have at least one font, or else code further down fails (index out of bounds)
+        if fonts_len == 0 {
+            //Check we have at least one font, or else code further down fails (index out of bounds)
             ui.text_colored(COLOUR_ERROR, "No fonts loaded");
             return;
         }
@@ -293,7 +317,11 @@ impl FontManager {
             *font_index = fonts_len - 1;
         }
         if ui.combo("Font", font_index, fonts, |f| Borrowed(&f.name)) {
-            trace!(target: UI_USER_EVENT, "Changed font to [{font_index}]: {font_name}", font_name = fonts[*font_index].name);
+            trace!(
+                target: UI_USER_EVENT,
+                "Changed font to [{font_index}]: {font_name}",
+                font_name = fonts[*font_index].name
+            );
             *dirty = true;
         }
         if ui.is_item_hovered() {
@@ -306,7 +334,10 @@ impl FontManager {
         let weights_len = weights.len();
 
         if weights_len == 0 {
-            ui.text_colored(COLOUR_ERROR, "(Bad) No weights loaded for the selected font.");
+            ui.text_colored(
+                COLOUR_ERROR,
+                "(Bad) No weights loaded for the selected font.",
+            );
             /*
              * The way it's done is by getting the font and weight name from font file, and then placing the file into nested hashmaps (`fonts[base_font].insert(weight)`).
              * We should never get an empty font, since the entry for a font only ever gets created when we have to insert a weight and don't have a parent font entry already
@@ -320,8 +351,12 @@ impl FontManager {
             trace!("weight_index ({weight_index}) was >= weights_len ({weights_len}), clamping");
             *weight_index = weights_len - 1;
         }
-        if ui.combo("Weight", weight_index, weights, |v| Borrowed(&v.name), ) {
-            trace!(target: UI_USER_EVENT, "Changed font weight to [{weight_index}]: {weight_name}", weight_name=weights[*weight_index].name);
+        if ui.combo("Weight", weight_index, weights, |v| Borrowed(&v.name)) {
+            trace!(
+                target: UI_USER_EVENT,
+                "Changed font weight to [{weight_index}]: {weight_name}",
+                weight_name = weights[*weight_index].name
+            );
             *dirty = true;
         }
         if ui.is_item_hovered() {

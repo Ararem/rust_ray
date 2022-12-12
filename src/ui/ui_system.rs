@@ -1,6 +1,7 @@
 //! Module that contains the structs used in the [crate::ui] module
-use glium::Display;
+use crate::ui::font_manager::FontManager;
 use glium::glutin::event_loop::EventLoop;
+use glium::Display;
 use imgui::Context;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::winit::dpi::Size;
@@ -22,7 +23,7 @@ pub(in crate::ui) struct UiBackend {
 }
 
 pub(in crate::ui) struct UiManagers {
-    // pub font_manager: FontManager,
+    pub font_manager: FontManager,
 }
 
 /// Struct used to configure the UI system

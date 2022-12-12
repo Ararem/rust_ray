@@ -5,6 +5,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use color_eyre::eyre::WrapErr;
 use color_eyre::{eyre, Help, Report};
 use indoc::formatdoc;
 use multiqueue2::broadcast_queue;
@@ -53,46 +54,30 @@ pub fn run() -> eyre::Result<()> {
     let thread_start_barrier = Arc::new(Barrier::new(3)); // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
 
     debug!("creating engine thread");
-    let engine_thread: JoinHandle<()> = {
+    let engine_thread_handle: JoinHandle<eyre::Result<()>> = {
         let data = Arc::clone(&program_data_wrapped);
         let sender = message_sender.clone();
         let receiver = message_receiver.add_stream();
         let barrier = Arc::clone(&thread_start_barrier);
-        match thread::Builder::new()
+        thread::Builder::new()
             .name("engine_thread".to_string())
             .spawn(move || engine_thread(barrier, data, sender, receiver))
-        {
-            Ok(thread) => thread,
-            Err(error) => {
-                let report = Report::new(error)
-                    .wrap_err("failed to create engine thread")
-                    .note("this error was most likely due to a failure at the OS level");
-
-                return Err(report);
-            }
-        }
+            .wrap_err("failed to create engine thread")
+            .note("this error was most likely due to a failure at the OS level")?
     };
     trace!("created engine thread");
 
     debug!("creating ui thread");
-    let ui_thread: JoinHandle<eyre::Result<()>> = {
+    let ui_thread_handle: JoinHandle<eyre::Result<()>> = {
         let data = Arc::clone(&program_data_wrapped);
         let sender = message_sender.clone();
         let receiver = message_receiver.add_stream();
         let barrier = Arc::clone(&thread_start_barrier);
-        match thread::Builder::new()
+        thread::Builder::new()
             .name("ui_thread".to_string())
             .spawn(move || ui_thread(barrier, data, sender, receiver))
-        {
-            Ok(thread) => thread,
-            Err(error) => {
-                let report = Report::new(error)
-                    .wrap_err("failed to create ui thread")
-                    .note("this error was most likely due to a failure at the OS level");
-
-                return Err(report);
-            }
-        }
+            .wrap_err("failed to create ui thread")
+            .note("this error was most likely due to a failure at the OS level")?
     };
     trace!("created ui thread");
 
@@ -157,7 +142,7 @@ pub fn run() -> eyre::Result<()> {
                                 match message_sender.try_send(Ui(UiThreadMessage::ExitUiThread)) {
                                     Ok(()) => {
                                         trace!("ui thread signalled, joining threads");
-                                        let join_result = ui_thread.join();
+                                        let join_result = ui_thread_handle.join();
                                         match join_result {
                                             Ok(return_value) => {
                                                 trace!("ui thread joined");
@@ -201,7 +186,7 @@ pub fn run() -> eyre::Result<()> {
                                 {
                                     Ok(()) => {
                                         trace!("engine thread signalled, joining threads");
-                                        let join_result = engine_thread.join();
+                                        let join_result = engine_thread_handle.join();
                                         match join_result {
                                             Ok(return_value) => {
                                                 trace!("engine thread joined");
@@ -282,9 +267,9 @@ pub fn run() -> eyre::Result<()> {
         So if they have finished here, that's BAAADDDD
         */
         trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "checking ui thread status");
-        if ui_thread.is_finished() {
+        if ui_thread_handle.is_finished() {
             error!("ui thread finished early when it shouldn't have, joining to get return value");
-            let join_result = ui_thread.join();
+            let join_result = ui_thread_handle.join();
             return Err(match join_result {
                 Ok(ret) => {
                     let report = Report::msg(format!(
@@ -305,11 +290,11 @@ pub fn run() -> eyre::Result<()> {
             target: PROGRAM_RUN_LOOP_SPAMMY,
             "checking engine thread status"
         );
-        if engine_thread.is_finished() {
+        if engine_thread_handle.is_finished() {
             error!(
                 "engine thread finished early when it shouldn't have, joining to get return value"
             );
-            let join_result = engine_thread.join();
+            let join_result = engine_thread_handle.join();
             return Err(match join_result {
                 Ok(ret) => {
                     let report = Report::msg(format!(

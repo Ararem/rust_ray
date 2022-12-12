@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::TrySendError::{Disconnected, Full};
@@ -29,6 +30,7 @@ use crate::config::ui_config::{
     DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
 };
 use crate::helper::logging::event_targets::*;
+use crate::helper::logging::log_error;
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::program_messages::{
     unreachable_never_should_be_disconnected, Message, ProgramThreadMessage, QuitAppNoErrorReason,
@@ -36,11 +38,13 @@ use crate::program::program_messages::{
 };
 use crate::program::ProgramData;
 use crate::ui::docking::UiDockingArea;
+use crate::ui::font_manager::FontManager;
 use crate::ui::ui_system::{UiBackend, UiManagers, UiSystem};
 use crate::{log_expr_val, log_variable};
 
 mod clipboard_integration;
 mod docking;
+mod font_manager;
 mod ui_system;
 
 #[derive(Copy, Clone, Debug)]
@@ -234,41 +238,53 @@ fn outer_render_a_frame(
     )
     .entered();
 
-    // {
-    //     let mut fonts = imgui_context.fonts();
-    //     match managers.font_manager.rebuild_font_if_needed(&mut fonts) {
-    //         Err(err) => warn!("font manager was not able to rebuild font: {err}"),
-    //         // Font atlas was rebuilt
-    //         Ok(true) => {
-    //             trace!("font was rebuilt, reloading renderer texture");
-    //             let result = renderer.reload_font_texture(imgui_context);
-    //             match result {
-    //                 Ok(()) => trace!("renderer font texture reloaded successfully"),
-    //                 Err(err) => {
-    //                     let report = Report::new(err);
-    //                     error!("{}", report);
-    //                 }
-    //             }
-    //         }
-    //         Ok(false) => { trace!(target:UI_PERFRAME_SPAMMY, "font not rebuilt (probably not dirty)") }
-    //     }
-    // }
+    {
+        let mut fonts = imgui_context.fonts();
+        match managers.font_manager.rebuild_font_if_needed(&mut fonts) {
+            Err(err) => warn!("font manager was not able to rebuild font: {err}"),
+            // Font atlas was rebuilt
+            Ok(true) => {
+                trace!("font was rebuilt, reloading renderer texture");
+                let result = renderer.reload_font_texture(imgui_context);
+                match result {
+                    Ok(()) => trace!("renderer font texture reloaded successfully"),
+                    Err(err) => {
+                        let report = Report::new(err).wrap_err("could not reload font texture");
+                        log_error(&report);
+                    }
+                }
+            }
+            Ok(false) => {
+                trace!(
+                    target: UI_PERFRAME_SPAMMY,
+                    "font not rebuilt (probably not dirty)"
+                )
+            }
+        }
+    }
 
     // Create a new imgui frame to render to
     let ui = imgui_context.new_frame();
     //Build the UI
     {
         // Try to set our custom font
-        // let maybe_font_token = match managers.font_manager.get_font_id() {
-        //     Err(err) => {
-        //         warn!(
-        //         target: UI_PERFRAME_SPAMMY,
-        //         "font manager failed to return font: {err}"
-        //     );
-        //         None
-        //     }
-        //     Ok(font_id) => Some(ui.push_font(*font_id)),
-        // };
+        let maybe_font_token = match managers.font_manager.get_font_id() {
+            Err(err) => {
+                warn!(
+                    target: UI_PERFRAME_SPAMMY,
+                    "font manager failed to return font: {err}"
+                );
+                None
+            }
+            Ok(font_id) => {
+                trace!(
+                    target: UI_PERFRAME_SPAMMY,
+                    "got custom font id: {:?}",
+                    font_id
+                );
+                Some(ui.push_font(*font_id))
+            }
+        };
 
         let main_window_flags =
             // No borders etc for top-level window
@@ -299,15 +315,15 @@ fn outer_render_a_frame(
                 let docking_area = UiDockingArea {};
                 let _dock_node = docking_area.dockspace("Main Dock Area");
 
-                build_ui(&ui, managers);
+                build_ui(&ui, managers).wrap_err("building ui failed")?;
 
                 token.end();
             }
         }
 
-        // if let Some(token) = maybe_font_token {
-        //     token.pop();
-        // }
+        if let Some(token) = maybe_font_token {
+            token.pop();
+        }
     }
 
     // Start drawing to our OpenGL context (via glium/glutin)
@@ -322,8 +338,8 @@ fn outer_render_a_frame(
     // Copy the imgui rendered frame to our OpenGL surface (so we can see it)
     renderer
         .render(&mut target, draw_data)
-        .expect("UI rendering failed");
-    target.finish().expect("Failed to swap buffers");
+        .wrap_err("ui rendering failed")?;
+    target.finish().wrap_err("Failed to swap buffers")?;
 
     drop(_span);
     return Ok(());
@@ -500,8 +516,8 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     trace!("enabling docking config flag");
     imgui_context.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
 
-    // trace!("creating font manager");
-    // let font_manager = FontManager::new()?;
+    trace!("creating font manager");
+    let font_manager = FontManager::new().wrap_err("failed to create font manager")?;
 
     //TODO: High DPI setting
     trace!("creating [winit] platform");
@@ -537,8 +553,6 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
             platform,
             renderer,
         },
-        managers: UiManagers {
-            // font_manager
-        },
+        managers: UiManagers { font_manager },
     })
 }
