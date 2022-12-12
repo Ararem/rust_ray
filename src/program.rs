@@ -1,18 +1,21 @@
-use std::sync::{Arc, Barrier, Mutex};
+use std::ops::Deref;
 use std::sync::mpsc::{TryRecvError, TrySendError::*};
+use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use color_eyre::{eyre, Help, Report};
+use indoc::formatdoc;
 use multiqueue2::broadcast_queue;
 use nameof::name_of_type;
-use tracing::{debug, debug_span, error, info, instrument, trace};
+use tracing::{debug, debug_span, error, info, instrument, trace, warn};
 
 use crate::engine::*;
 use crate::helper::logging::event_targets::*;
-use crate::program::program_messages::*;
+use crate::helper::logging::log_error;
 use crate::program::program_messages::Message::{Engine, Program, Ui};
+use crate::program::program_messages::*;
 use crate::ui::*;
 
 #[macro_use]
@@ -97,7 +100,7 @@ pub fn run() -> eyre::Result<()> {
     thread_start_barrier.wait();
     trace!("threads should now be awake");
 
-    // Process messages in a loop
+    let mut return_value;
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits
     'global: loop {
@@ -144,61 +147,90 @@ pub fn run() -> eyre::Result<()> {
                                 // We have to unsubscribe from out receiver or it blocks the other threads because we haven't received the [ExitXXXThread] messages
                                 trace!("unsubbing message receiver to release stream");
                                 message_receiver.unsubscribe();
-                                let _join_threads_span = debug_span!("join_threads_and_quit").entered();
+                                let _join_threads_span =
+                                    debug_span!("join_threads_and_quit").entered();
 
-                                trace!("signalling ui thread to quit");
+                                debug!("signalling ui thread to quit");
                                 match message_sender.try_send(Ui(UiThreadMessage::ExitUiThread)) {
                                     Ok(()) => {
                                         trace!("ui thread signalled, joining threads");
                                         let join_result = ui_thread.join();
                                         match join_result {
-                                            Ok(_return) => {
-                                                trace!("ui thread joined successfully");
-                                                todo!("ui thread return value");
-                                            },
+                                            Ok(return_value) => {
+                                                trace!("ui thread joined");
+                                                match return_value {
+                                                    Ok(()) => {
+                                                        debug!("ui thread return was Ok");
+                                                    }
+                                                    Err(error) => {
+                                                        log_error(&error.wrap_err(
+                                                            "ui thread exited with error",
+                                                        ));
+                                                    }
+                                                }
+                                            }
                                             Err(boxed_error) => {
                                                 // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                                                 // So we have to format it as a string
-                                                let report = Report::msg(format!("ui thread panicked:\n{:#?}", boxed_error));
+                                                let report = Report::msg(format!(
+                                                    "ui thread panicked:\n{:#?}",
+                                                    boxed_error
+                                                ));
                                                 return Err(report);
                                             }
                                         }
-                                    },
+                                    }
 
                                     // Neither of these errors should happen ever, but better to be safe
                                     Err(Disconnected(_failed_message)) => {
                                         let report = Report::msg("failed to send quit signal to ui thread: no message receivers");
                                         return Err(report);
-                                    },
+                                    }
                                     Err(Full(_failed_message)) => {
                                         let report = Report::msg("failed to send quit signal to ui thread: message buffer full");
                                         return Err(report);
                                     }
                                 }
 
-                                trace!("signalling engine thread to quit");
-                                match message_sender.try_send(Engine(EngineThreadMessage::ExitEngineThread)) {
+                                debug!("signalling engine thread to quit");
+                                match message_sender
+                                    .try_send(Engine(EngineThreadMessage::ExitEngineThread))
+                                {
                                     Ok(()) => {
                                         trace!("engine thread signalled, joining threads");
                                         let join_result = engine_thread.join();
                                         match join_result {
-                                            Ok(()) => {
-                                                trace!("engine thread joined successfully");
-                                            },
+                                            Ok(return_value) => {
+                                                trace!("engine thread joined");
+                                                warn!("TODO: engine thread return value");
+                                                // match return_value {
+                                                // Ok(()) => {
+                                                //     debug!("ui thread return was Ok");
+                                                // }
+                                                // Err(error) => {
+                                                //     log_error(&error.wrap_err(
+                                                //         "engine thread exited with error",
+                                                //     ));
+                                                // }
+                                                // }
+                                            }
                                             Err(boxed_error) => {
                                                 // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                                                 // So we have to format it as a string
-                                                let report = Report::msg(format!("engine thread panicked:\n{:#?}", boxed_error));
+                                                let report = Report::msg(format!(
+                                                    "engine thread panicked:\n{:#?}",
+                                                    boxed_error
+                                                ));
                                                 return Err(report);
                                             }
                                         }
-                                    },
+                                    }
 
                                     // Neither of these errors should happen ever, but better to be safe
                                     Err(Disconnected(..)) => {
                                         let report = Report::msg("failed to send quit signal to engine thread: no message receivers");
                                         return Err(report);
-                                    },
+                                    }
                                     Err(Full(..)) => {
                                         let report = Report::msg("failed to send quit signal to engine thread: message buffer full");
                                         return Err(report);
@@ -209,18 +241,37 @@ pub fn run() -> eyre::Result<()> {
                                 trace!("engine and ui threads joined successfully");
                                 drop(_join_threads_span);
 
+                                return_value = Ok(());
                                 break 'global;
                             }
-                            ProgramThreadMessage::QuitAppError(error_report) => {
+                            ProgramThreadMessage::QuitAppError(wrapped_error_report) => {
                                 info!("quitting app due to error");
-                                error!("{}", error_report);
-                                break 'global;
+                                // try and return the error directly, but just in case we can't (which should never happen), print the error and return a generic one
+                                return match Arc::try_unwrap(wrapped_error_report) {
+                                    //Only one strong reference to the arc ([wrapped_error_report]), so we got ownership
+                                    // Should always happen
+                                    Ok(owned_error) => {
+                                        Err(owned_error
+                                            .wrap_err("quitting app due to internal error"))
+                                    }
+                                    Err(_arc) => {
+                                        let warn = formatdoc! {"
+                                        was unable to unwrap error report for quitting app - there are {} strong references (should be only 1).
+                                        this should not happen, there is a bug in the error creation code.
+                                        ", Arc::strong_count(&_arc)
+                                        };
+                                        warn!("{}", warn);
+                                        log_error(&_arc);
+                                        Err(Report::msg("quitting app due to an internal error (cannot display due to rust ownership)")
+                                            .warning(warn))
+                                    }
+                                };
                             }
                         },
                     }
                 }
             }
-        }
+        } //end 'loop_messages
         drop(process_messages_span);
 
         /*
@@ -234,9 +285,12 @@ pub fn run() -> eyre::Result<()> {
             let join_result = ui_thread.join();
             return Err(match join_result {
                 Ok(ret) => {
-                    let report = Report::msg(format!("ui thread finished early with return value `{:#?}`", ret));
+                    let report = Report::msg(format!(
+                        "ui thread finished early with return value `{:#?}`",
+                        ret
+                    ));
                     report
-                },
+                }
                 Err(boxed_error) => {
                     let report = Report::msg(format!("ui thread panicked:\n{:#?}", boxed_error));
                     report
@@ -245,28 +299,37 @@ pub fn run() -> eyre::Result<()> {
         } else {
             trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "ui thread still running");
         }
-        trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "checking engine thread status");
+        trace!(
+            target: PROGRAM_RUN_LOOP_SPAMMY,
+            "checking engine thread status"
+        );
         if engine_thread.is_finished() {
             error!("engine finished early when it shouldn't have, joining to get return value");
             let join_result = engine_thread.join();
             return Err(match join_result {
                 Ok(ret) => {
-                    let report = Report::msg(format!("engine thread finished early with return value `{:#?}`", ret));
+                    let report = Report::msg(format!(
+                        "engine thread finished early with return value `{:#?}`",
+                        ret
+                    ));
                     report
-                },
+                }
                 Err(boxed_error) => {
-                    let report = Report::msg(format!("engine thread panicked:\n{:#?}", boxed_error));
+                    let report =
+                        Report::msg(format!("engine thread panicked:\n{:#?}", boxed_error));
                     report
                 }
             });
         } else {
-            trace!(target: PROGRAM_RUN_LOOP_SPAMMY, "engine thread still running");
+            trace!(
+                target: PROGRAM_RUN_LOOP_SPAMMY,
+                "engine thread still running"
+            );
         }
         thread::sleep(poll_interval);
-    }
+    } //end 'global
 
-    trace!("hello?!");
-    thread::sleep(Duration::from_secs(1));
+    debug!("program 'global loop finished");
 
-    return Ok(());
+    return return_value;
 }

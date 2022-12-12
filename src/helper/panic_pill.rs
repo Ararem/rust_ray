@@ -9,6 +9,8 @@ impl Drop for PanicPill {
     fn drop(&mut self) {
         let _span = debug_span!("panic_pill_drop").entered();
         if thread::panicking() {
+            //todo:remove and prefer program error handling
+            return;
             error!("pill dropped while unwinding. process will now exit");
             process::exit(-1);
             // process::abort();

@@ -185,7 +185,7 @@ impl UiManagers {
                 Err(poisoned) => {
                     let report = Report::msg(format!("{} mutex was poisoned", name_of!(FRAME_TIMES)))
                         .note("Perhaps [render_ui_managers()] was called multiple times (async), and one call failed, causing the FRAME_TIME mutex to be poisoned by that failure?\nNote: This **should never happen** as the UI should be single-threaded");
-                    error!("{}", report);
+                    log_err
                     poisoned.into_inner()
                 }
                 Ok(guard) => guard,

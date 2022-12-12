@@ -4,8 +4,11 @@ use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 use clipboard::{ClipboardContext, ClipboardProvider};
+use color_eyre::Help;
 use imgui::ClipboardBackend;
 use tracing::*;
+
+use crate::helper::logging::{dyn_error_to_report, log_error_as_warning};
 
 /// Wrapper struct for [ClipboardContext] that allows integration with [imgui]
 /// Used to implement [ClipboardBackend]
@@ -39,10 +42,14 @@ impl ClipboardBackend for ImguiClipboardSupport {
     }
     fn set(&mut self, text: &str) {
         let result = self.backing_context.set_contents(text.to_owned());
-        if let Err(error) = result {
-            warn!("could not set clipboard due to error: {error}")
+        if let Err(boxed_error) = result {
+            log_error_as_warning(
+                &dyn_error_to_report(&boxed_error)
+                    .wrap_err("could not set clipboard text")
+                    .note(format!("tried to set clipboard to {}", text)),
+            );
         } else {
-            trace!("set clipboard: {text:?}");
+            trace!(clipboard_text = text, "set clipboard");
         }
     }
 }

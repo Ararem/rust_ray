@@ -23,6 +23,19 @@ impl LogTargetFilter {
         }
     }
 }
+
+/// Controls how errors are logged in the app
+///
+/// For a demo/example, see the [color_eyre::eyre::Report] documentation
+pub enum ErrorLogStyle {
+    Short,
+    ShortWithCause,
+    WithBacktrace,
+    Debug
+}
+
+pub static ERROR_LOG_STYLE: ErrorLogStyle = ErrorLogStyle::Short;
+
 lazy_static! {
 
     /// Vec of log filters, that control what log targets will be logged

@@ -1,5 +1,4 @@
 //! Internal module that contains implementations of enums for messages that can be sent upstream by the engine and UI threads to the main thread
-#![macro_use]
 
 use std::sync::Arc;
 
@@ -22,7 +21,8 @@ pub(crate) enum ProgramThreadMessage {
     /// The app should quit, because an error happened
     ///
     /// # Notes:
-    /// Uses an [Arc<T>] to wrap the report because we can't clone a [Report]
+    /// Uses an [Arc<T>] to wrap the report because we can't clone a [Report].
+    /// We need to be able to clone because that's required by [multiqueue2]
     QuitAppError(Arc<Report>),
 }
 
@@ -64,12 +64,16 @@ pub(crate) enum EngineThreadMessage {
 ///
 /// So (in working code) we should never get here
 pub(crate) fn unreachable_never_should_be_disconnected() -> ! {
-    let message_heading = indoc::formatdoc!(r#"
-            all message channel senders were dropped: [try_recv()] returned [{0:?}] "{0}""#
-                , ::std::sync::mpsc::TryRecvError::Disconnected);
-    let message_body = indoc::formatdoc!(r"
+    let message_heading = indoc::formatdoc!(
+        r#"
+            all message channel senders were dropped: [try_recv()] returned [{0:?}] "{0}""#,
+        ::std::sync::mpsc::TryRecvError::Disconnected
+    );
+    let message_body = indoc::formatdoc!(
+        r"
             ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
-            something probably went (badly) wrong somewhere else");
+            something probably went (badly) wrong somewhere else"
+    );
     panic!("invalid state: {}\n\n{}", message_heading, message_body);
     // return Err(Report::msg(message_heading).note(message_body));
 }
