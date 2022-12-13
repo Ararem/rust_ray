@@ -9,4 +9,6 @@ pub mod standard {
     pub const KEY_TOGGLE_METRICS_WINDOW: VirtualKeyCode = VirtualKeyCode::F3;
     /// Toggles the visibility of the [imgui] demo window (see [imgui::Ui::show_demo_window()])
     pub const KEY_TOGGLE_DEMO_WINDOW: VirtualKeyCode = VirtualKeyCode::F1;
+    /// Toggles the visibility of the [UiManagers] window
+    pub const KEY_TOGGLE_UI_MANAGERS_WINDOW: VirtualKeyCode = VirtualKeyCode::F6;
 }

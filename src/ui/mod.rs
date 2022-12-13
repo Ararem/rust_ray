@@ -1,23 +1,24 @@
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::sync::{Arc, Barrier, Mutex, TryLockError};
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::TrySendError::{Disconnected, Full};
-use std::sync::{Arc, Barrier, Mutex};
-use std::time::Instant;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
-use color_eyre::eyre::WrapErr;
 use color_eyre::{eyre, Help, Report};
+use color_eyre::eyre::WrapErr;
+use glium::{Display, glutin, Surface};
+use glium::glutin::CreationError::NoAvailablePixelFormat;
 use glium::glutin::event_loop::ControlFlow;
 use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::glutin::platform::windows::EventLoopBuilderExtWindows;
-use glium::glutin::CreationError::NoAvailablePixelFormat;
-use glium::{glutin, Display, Surface};
-use imgui::Condition::Always;
 use imgui::{Context, StyleVar, WindowFlags};
+use imgui::Condition::Always;
 use imgui_glium_renderer::Renderer;
+use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui_winit_support::winit::event_loop::EventLoopBuilder;
 use imgui_winit_support::winit::window::WindowBuilder;
-use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
@@ -25,30 +26,30 @@ use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
 
+use crate::{log_expr_val, log_variable};
+use crate::config::keybindings_config::standard::*;
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::config::ui_config::{
     DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
 };
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::log_error;
-use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::program_messages::{
-    unreachable_never_should_be_disconnected, Message, ProgramThreadMessage, QuitAppNoErrorReason,
-    UiThreadMessage,
+    Message, ProgramThreadMessage, QuitAppNoErrorReason, UiThreadMessage,
+    unreachable_never_should_be_disconnected,
 };
+use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::ProgramData;
 use crate::ui::docking::UiDockingArea;
 use crate::ui::font_manager::FontManager;
+use crate::ui::ui_data::UiData;
 use crate::ui::ui_system::{UiBackend, UiManagers, UiSystem};
-use crate::{log_expr_val, log_variable};
 
 mod clipboard_integration;
 mod docking;
 mod font_manager;
+pub mod ui_data;
 mod ui_system;
-
-#[derive(Copy, Clone, Debug)]
-pub struct UiData {}
 
 #[instrument(skip_all)]
 pub(crate) fn ui_thread(
@@ -73,13 +74,13 @@ pub(crate) fn ui_thread(
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
     let UiSystem {
         backend:
-            UiBackend {
-                mut display,
-                mut event_loop,
-                mut imgui_context,
-                mut platform,
-                mut renderer,
-            },
+        UiBackend {
+            mut display,
+            mut event_loop,
+            mut imgui_context,
+            mut platform,
+            mut renderer,
+        },
         mut managers,
     } = system;
 
@@ -143,12 +144,29 @@ pub(crate) fn ui_thread(
             glutin::event::Event::RedrawRequested(_) => {
                 trace!(target: UI_PERFRAME_SPAMMY, "redraw requested");
 
+                let mut program_data= loop {
+                    trace!(target: UI_PERFRAME_SPAMMY,"trying to lock ui data mutex");
+                    match program_data_wrapped.try_lock() {
+                        Err(TryLockError::Poisoned(_)) => {}
+                        Err(TryLockError::WouldBlock) => {
+                            const RETRY_DELAY: Duration = Duration::from_millis(1);
+                            trace!(target: UI_PERFRAME_SPAMMY, "mutex locked, waiting and retrying");
+                            sleep(RETRY_DELAY);
+                            continue;
+                        }
+                        Ok(data) => {
+                            break data;
+                        }
+                    }
+                };
+
                 let result = outer_render_a_frame(
                     &mut display,
                     &mut imgui_context,
                     &mut platform,
                     &mut renderer,
                     &mut managers,
+                    &mut program_data.ui_data,
                 );
 
                 if let Err(e) = result {
@@ -230,13 +248,14 @@ fn outer_render_a_frame(
     platform: &mut WinitPlatform,
     renderer: &mut Renderer,
     managers: &mut UiManagers,
+    ui_data: &mut UiData,
 ) -> color_eyre::Result<()> {
     let _span = trace_span!(
         target: UI_PERFRAME_SPAMMY,
         "outer_render",
         frame = imgui_context.frame_count()
     )
-    .entered();
+        .entered();
 
     {
         let mut fonts = imgui_context.fonts();
@@ -315,7 +334,7 @@ fn outer_render_a_frame(
                 let docking_area = UiDockingArea {};
                 let _dock_node = docking_area.dockspace("Main Dock Area");
 
-                build_ui(&ui, managers).wrap_err("building ui failed")?;
+                build_ui(&ui, managers, ui_data).wrap_err("building ui failed")?;
 
                 token.end();
             }
@@ -345,16 +364,17 @@ fn outer_render_a_frame(
     return Ok(());
 }
 
-fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers) -> eyre::Result<()> {
+fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyre::Result<()> {
     let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "build_ui").entered();
-    static mut SHOW_DEMO_WINDOW: bool = true;
-    static mut SHOW_METRICS_WINDOW: bool = true;
-    static mut SHOW_UI_MANAGEMENT_WINDOW: bool = true;
     const NO_SHORTCUT: &str = "N/A";
 
-    trace!(target: UI_PERFRAME_SPAMMY, "processing keybindings");
+    let show_demo_window = &mut data.windows.show_demo_window;
+    let show_metrics_window = &mut data.windows.show_metrics_window;
+    let show_ui_management_window = &mut data.windows.show_ui_management_window;
+
+    trace_span!(target: UI_PERFRAME_SPAMMY, "process_keybindings");
     macro_rules! key_toggle {
-        ($keybinding:ident, $toggle_var:ident) => {
+        ($keybinding:ident, $toggle_var:expr) => {
             if ui.is_key_index_pressed_no_repeat($keybinding as i32) {
                 $toggle_var ^= true;
                 trace!(
@@ -366,39 +386,42 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers) -> eyre::Result<()> {
             };
         };
     }
-    // key_toggle!(KEY_TOGGLE_METRICS_WINDOW,SHOW_METRICS_WINDOW);
-    // key_toggle!(KEY_TOGGLE_DEMO_WINDOW,SHOW_DEMO_WINDOW);
-    //
-    // trace!(target:UI_PERFRAME_SPAMMY, "menu bar");
-    // ui.main_menu_bar(|| {
-    //     ui.menu("Tools", ||
-    //         {
-    //             macro_rules! toggle_menu_item {
-    //                     ($item_name:expr, $toggle_var:ident, NO_SHORTCUT) => {
-    //                         // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
-    //                          if ui.menu_item_config($item_name).shortcut(NO_SHORTCUT).build_with_ref(&mut $toggle_var){
-    //                             trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
-    //                          }
-    //                     };
-    //                     ($item_name:expr, $toggle_var:ident, $key:expr) => {
-    //                         // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
-    //                          if ui.menu_item_config($item_name).shortcut(format!("{:?}", $key)).build_with_ref(&mut $toggle_var){
-    //                             trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
-    //                          }
-    //                     };
-    //                 }
-    //             toggle_menu_item!("Metrics", SHOW_METRICS_WINDOW, KEY_TOGGLE_METRICS_WINDOW);
-    //             toggle_menu_item!("Demo Window", SHOW_DEMO_WINDOW, KEY_TOGGLE_DEMO_WINDOW);
-    //             toggle_menu_item!("UI Management", SHOW_UI_MANAGEMENT_WINDOW, NO_SHORTCUT);
-    //         });
-    // });
-    //
-    // trace!(target:UI_PERFRAME_SPAMMY, "showing windows");
-    // if SHOW_DEMO_WINDOW { ui.show_demo_window(&mut SHOW_DEMO_WINDOW); }
-    // if SHOW_METRICS_WINDOW { ui.show_metrics_window(&mut SHOW_METRICS_WINDOW); }
-    // managers.render_ui_managers_window(&ui, &mut SHOW_UI_MANAGEMENT_WINDOW);
+    key_toggle!(KEY_TOGGLE_METRICS_WINDOW, *show_metrics_window);
+    key_toggle!(KEY_TOGGLE_DEMO_WINDOW, *show_demo_window);
+    key_toggle!(KEY_TOGGLE_UI_MANAGERS_WINDOW, *show_ui_management_window);
 
-    ui.show_demo_window(&mut false);
+    trace!(target: UI_PERFRAME_SPAMMY, "menu bar");
+    ui.main_menu_bar(|| {
+        ui.menu("Tools", ||
+            {
+                macro_rules! toggle_menu_item {
+                        ($item_name:expr, $toggle_var:expr, NO_SHORTCUT) => {
+                            // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
+                             if ui.menu_item_config($item_name).shortcut(NO_SHORTCUT).build_with_ref(&mut $toggle_var){
+                                trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
+                             }
+                        };
+                        ($item_name:expr, $toggle_var:expr, $key:expr) => {
+                            // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
+                             if ui.menu_item_config($item_name).shortcut(format!("{:?}", $key)).build_with_ref(&mut $toggle_var){
+                                trace!(target: UI_USER_EVENT, "toggle menu item {} => {}", stringify!($item_name), $toggle_var);
+                             }
+                        };
+                    }
+                toggle_menu_item!("Metrics", *show_metrics_window, KEY_TOGGLE_METRICS_WINDOW);
+                toggle_menu_item!("Demo Window", *show_demo_window, KEY_TOGGLE_DEMO_WINDOW);
+                toggle_menu_item!("UI Management", *show_ui_management_window, KEY_TOGGLE_UI_MANAGERS_WINDOW);
+            });
+    });
+
+    trace!(target: UI_PERFRAME_SPAMMY, "showing windows");
+    if *show_demo_window {
+        ui.show_demo_window(show_demo_window);
+    }
+    if *show_metrics_window {
+        ui.show_metrics_window(show_metrics_window);
+    }
+    // managers.render_ui_managers_window(&ui, show_ui_management_window);
 
     _span.exit();
 
@@ -418,7 +441,7 @@ fn process_messages(
         target: THREAD_MESSAGE_PROCESSING_SPAMMY,
         name_of!(process_messages)
     )
-    .entered();
+        .entered();
     'loop_messages: loop {
         // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
         let recv = message_receiver.try_recv();

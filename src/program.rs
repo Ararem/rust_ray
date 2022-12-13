@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::sync::mpsc::{TryRecvError, TrySendError::*};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
@@ -17,6 +16,7 @@ use crate::helper::logging::event_targets::*;
 use crate::helper::logging::log_error;
 use crate::program::program_messages::Message::{Engine, Program, Ui};
 use crate::program::program_messages::*;
+use crate::ui::ui_data::UiData;
 use crate::ui::*;
 
 #[macro_use]
@@ -34,7 +34,7 @@ pub fn run() -> eyre::Result<()> {
     // Create new program instance
     trace!("creating {} struct", name_of_type!(ProgramData));
     let program_data = ProgramData {
-        ui_data: UiData {},
+        ui_data: UiData::default(),
         engine_data: EngineData {},
     };
 

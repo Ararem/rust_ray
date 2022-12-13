@@ -9,13 +9,16 @@ use imgui::FontConfig;
 use imgui_winit_support::winit::dpi::{LogicalSize, Size};
 
 /// Default value for the size of the main operating system window
-pub const DEFAULT_WINDOW_SIZE: Size = Size::Logical(LogicalSize { width: 1600.0, height: 900.0 });
+pub const DEFAULT_WINDOW_SIZE: Size = Size::Logical(LogicalSize {
+    width: 1600.0,
+    height: 900.0,
+});
 /// Whether the main OS window should start maximised (when created initially)
 pub const START_MAXIMIZED: bool = true;
 /// flag for if the renderer should enable VSync
 ///
 /// see [glutin::ContextBuilder::with_vsync]
-pub const VSYNC: bool = true;
+pub const VSYNC: bool = false;
 ///Sets the multisampling level to request. A value of 0 indicates that multisampling must not be enabled.
 ///
 /// Must be a power of 2
