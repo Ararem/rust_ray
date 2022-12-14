@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct UiData {
     pub windows: ShownWindows,
@@ -19,5 +21,12 @@ impl Default for UiData {
                 show_ui_management_window: true,
             },
         }
+    }
+}
+
+impl Display for UiData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!()
+            ...
     }
 }

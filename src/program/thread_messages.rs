@@ -3,10 +3,13 @@
 use std::sync::Arc;
 
 use color_eyre::Report;
+use tracing::{debug, trace};
+use ThreadMessage::{Engine, Program, Ui};
+use crate::helper::logging::event_targets::{THREAD_DEBUG_MESSAGE_RECEIVED, THREAD_TRACE_MESSAGE_IGNORED};
 
 /// Base message struct, contains variants for which thread it should be targeted at
 #[derive(Debug, Clone)]
-pub(crate) enum Message {
+pub(crate) enum ThreadMessage {
     Engine(EngineThreadMessage),
     Program(ProgramThreadMessage),
     Ui(UiThreadMessage),
@@ -53,6 +56,36 @@ pub(crate) enum EngineThreadMessage {
 
 // ========== MACROS AND FUNCTIONS ==========
 
+impl ThreadMessage {
+    pub(crate) fn log_ignored(&self) {
+        let target_thread = match self {
+            Engine(_) => "engine",
+            Program(_) => "program",
+            Ui(_) => "ui",
+        };
+        trace!(
+            target: THREAD_TRACE_MESSAGE_IGNORED,
+            ?self,
+            "ignoring message for {}"
+            target_thread
+        );
+    }
+    pub(crate) fn log_received(&self) {
+        let target_thread = match self {
+            Engine(_) => "engine",
+            Program(_) => "program",
+            Ui(_) => "ui",
+        };
+        debug!(
+            target: THREAD_DEBUG_MESSAGE_RECEIVED,
+            ?self,
+            "got {} message",
+            target_thread
+        );
+    }
+}
+
+
 /// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_recv] returns [std::sync::mpsc::TryRecvError::Disconnected] in any of the message loops
 ///
 /// # ***THIS IS BAD:***
@@ -75,5 +108,27 @@ pub(crate) fn unreachable_never_should_be_disconnected() -> ! {
             something probably went (badly) wrong somewhere else"
     );
     panic!("invalid state: {}\n\n{}", message_heading, message_body);
-    // return Err(Report::msg(message_heading).note(message_body));
+}
+
+/// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_recv] returns [std::sync::mpsc::TryRecvError::Full] in any of the message loops
+///
+/// # ***THIS IS BAD:***
+/// The receivers should always be receiving and reading messages as long as they are connected
+///
+/// If we get here, either we have (massively) overloaded the channel (shouldn't be possible, we have a high limit),
+/// Or, one of the threads is deadlocked/stuck somewhere
+///
+/// Either way, shouldn't be possible, will cause panic
+pub(crate) fn unreachable_never_should_be_full() -> ! {
+    let message_heading = indoc::formatdoc!(
+        r#"
+            all message channel senders were dropped: [try_recv()] returned [{0:?}] "{0}""#,
+        ::std::sync::mpsc::TryRecvError::Disconnected
+    );
+    let message_body = indoc::formatdoc!(
+        r"
+            ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
+            something probably went (badly) wrong somewhere else"
+    );
+    panic!("invalid state: {}\n\n{}", message_heading, message_body);
 }

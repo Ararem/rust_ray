@@ -1,22 +1,24 @@
-use std::{process, thread};
+use std::panic::PanicInfo;
 
-use tracing::{debug, debug_span, error};
+use tracing::{debug, error};
 
-/// struct that if dropped when the thread is panicking, prints a log message and quits the whole process
-pub struct PanicPill;
+use crate::helper::logging::event_targets::REALLY_FUCKING_BAD_UNREACHABLE;
+use crate::helper::logging::event_targets::MAIN_DEBUG_GENERAL;
 
-impl Drop for PanicPill {
-    fn drop(&mut self) {
-        let _span = debug_span!("panic_pill_drop").entered();
-        if thread::panicking() {
-            //todo:remove and prefer program error handling
-            return;
-            error!("pill dropped while unwinding. process will now exit");
-            process::exit(-1);
-            // process::abort();
-        } else {
-            debug!("pill dropped normally")
-        }
-        _span.exit();
-    }
+/// Got panics? We've got a pill for that!
+///
+/// Custom panic hook that prints a log message and quits the whole process
+fn swallow_panic_pill<F>(old_hook: F, panic_info: &PanicInfo<'_>)
+                             where F: Fn(&PanicInfo<'_>) + Send + Sync + 'static
+{
+    old_hook(panic_info);
+    error!("you chose the red pill, please stand by while process is be ejected from OS matrix");
+    error!(target: REALLY_FUCKING_BAD_UNREACHABLE,"process panicked. process will now exit");
+    std::process::abort();
+}
+
+pub(crate) fn red_or_blue_pill() {
+    debug!(target: MAIN_DEBUG_GENERAL, "generating a red an blue pill, choose wisely");
+    std::panic::update_hook(Box::new(swallow_panic_pill));
+    debug!(target: MAIN_DEBUG_GENERAL, "pills have been handed over");
 }

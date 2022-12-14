@@ -32,14 +32,10 @@ use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTIN
 use crate::config::ui_config::{
     DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
 };
-use crate::helper::logging::event_targets::*;
-use crate::helper::logging::log_error;
-use crate::program::program_messages::{
-    Message, ProgramThreadMessage, QuitAppNoErrorReason, UiThreadMessage,
-    unreachable_never_should_be_disconnected,
-};
-use crate::program::program_messages::Message::{Engine, Program, Ui};
-use crate::program::ProgramData;
+use crate::helper::logging::{log_error, log_error_as_warning};
+use crate::program::program_data::ProgramData;
+use crate::program::thread_messages::{ignored_message, ProgramThreadMessage, QuitAppNoErrorReason, ThreadMessage, UiThreadMessage, unreachable_never_should_be_disconnected};
+use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::ui::docking::UiDockingArea;
 use crate::ui::font_manager::FontManager;
 use crate::ui::ui_data::UiData;
@@ -55,8 +51,8 @@ mod ui_system;
 pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
-    message_sender: BroadcastSender<Message>,
-    message_receiver: BroadcastReceiver<Message>,
+    message_sender: BroadcastSender<ThreadMessage>,
+    message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {
     //Create a NoPanicPill to make sure we exit if anything panics
     let _no_panic_pill = crate::helper::panic_pill::PanicPill {};
@@ -144,7 +140,7 @@ pub(crate) fn ui_thread(
             glutin::event::Event::RedrawRequested(_) => {
                 trace!(target: UI_PERFRAME_SPAMMY, "redraw requested");
 
-                let mut program_data= loop {
+                let mut program_data = loop {
                     trace!(target: UI_PERFRAME_SPAMMY,"trying to lock ui data mutex");
                     match program_data_wrapped.try_lock() {
                         Err(TryLockError::Poisoned(_)) => {}
@@ -258,8 +254,8 @@ fn outer_render_a_frame(
         .entered();
 
     {
-        let mut fonts = imgui_context.fonts();
-        match managers.font_manager.rebuild_font_if_needed(&mut fonts) {
+        let fonts = imgui_context.fonts();
+        match managers.font_manager.rebuild_font_if_needed(fonts) {
             Err(err) => warn!("font manager was not able to rebuild font: {err}"),
             // Font atlas was rebuilt
             Ok(true) => {
@@ -288,21 +284,12 @@ fn outer_render_a_frame(
     {
         // Try to set our custom font
         let maybe_font_token = match managers.font_manager.get_font_id() {
-            Err(err) => {
-                warn!(
-                    target: UI_PERFRAME_SPAMMY,
-                    "font manager failed to return font: {err}"
-                );
+            Err(report) => {
+                let report = report.wrap_err("font manager failed to return font");
+                log_error_as_warning(&report);
                 None
             }
-            Ok(font_id) => {
-                trace!(
-                    target: UI_PERFRAME_SPAMMY,
-                    "got custom font id: {:?}",
-                    font_id
-                );
-                Some(ui.push_font(*font_id))
-            }
+            Ok(font_id) => Some(ui.push_font(*font_id)),
         };
 
         let main_window_flags =
@@ -325,24 +312,17 @@ fn outer_render_a_frame(
             .size(ui.io().display_size, Always)
             .begin();
         _window_padding_token.end();
-        match main_window_token {
-            None => trace!(
-                target: UI_PERFRAME_SPAMMY,
-                "warning: main window is not visible"
-            ),
-            Some(token) => {
-                let docking_area = UiDockingArea {};
-                let _dock_node = docking_area.dockspace("Main Dock Area");
 
-                build_ui(&ui, managers, ui_data).wrap_err("building ui failed")?;
+        let docking_area = UiDockingArea {};
+        let _dock_node = docking_area.dockspace("Main Dock Area");
 
-                token.end();
-            }
-        }
+        build_ui(ui, managers, ui_data).wrap_err("building ui failed")?;
 
-        if let Some(token) = maybe_font_token {
-            token.pop();
-        }
+        // Technically we should only build the UI if [maybe_window_token] is [Some] ([None] means the window is hidden)
+        // The window should never be hidden though, so this is a non-issue
+        if let Some(token) = main_window_token { token.end() }
+
+        if let Some(token) = maybe_font_token { token.pop(); }
     }
 
     // Start drawing to our OpenGL context (via glium/glutin)
@@ -365,14 +345,12 @@ fn outer_render_a_frame(
 }
 
 fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyre::Result<()> {
-    let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "build_ui").entered();
     const NO_SHORTCUT: &str = "N/A";
 
     let show_demo_window = &mut data.windows.show_demo_window;
     let show_metrics_window = &mut data.windows.show_metrics_window;
     let show_ui_management_window = &mut data.windows.show_ui_management_window;
 
-    trace_span!(target: UI_PERFRAME_SPAMMY, "process_keybindings");
     macro_rules! key_toggle {
         ($keybinding:ident, $toggle_var:expr) => {
             if ui.is_key_index_pressed_no_repeat($keybinding as i32) {
@@ -390,7 +368,6 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
     key_toggle!(KEY_TOGGLE_DEMO_WINDOW, *show_demo_window);
     key_toggle!(KEY_TOGGLE_UI_MANAGERS_WINDOW, *show_ui_management_window);
 
-    trace!(target: UI_PERFRAME_SPAMMY, "menu bar");
     ui.main_menu_bar(|| {
         ui.menu("Tools", ||
             {
@@ -414,7 +391,6 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
             });
     });
 
-    trace!(target: UI_PERFRAME_SPAMMY, "showing windows");
     if *show_demo_window {
         ui.show_demo_window(show_demo_window);
     }
@@ -422,8 +398,6 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
         ui.show_metrics_window(show_metrics_window);
     }
     // managers.render_ui_managers_window(&ui, show_ui_management_window);
-
-    _span.exit();
 
     Ok(())
 }
@@ -434,8 +408,8 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
 /// [None] - Do nothing
 /// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
 fn process_messages(
-    message_sender: &BroadcastSender<Message>,
-    message_receiver: &BroadcastReceiver<Message>,
+    message_sender: &BroadcastSender<ThreadMessage>,
+    message_receiver: &BroadcastReceiver<ThreadMessage>,
 ) -> Option<eyre::Result<()>> {
     let _span = trace_span!(
         target: THREAD_MESSAGE_PROCESSING_SPAMMY,
@@ -463,18 +437,8 @@ fn process_messages(
                     &message
                 );
                 match message {
-                    Program(_program_message) => {
-                        trace!(
-                            target: THREAD_MESSAGE_PROCESSING_SPAMMY,
-                            "[ui] message for program thread, ignoring"
-                        );
-                        continue 'loop_messages;
-                    }
-                    Engine(_engine_message) => {
-                        trace!(
-                            target: THREAD_MESSAGE_PROCESSING_SPAMMY,
-                            "[ui] message for engine thread, ignoring"
-                        );
+                    Program(_) | Engine (_) => {
+                        ignored_message(message);
                         continue 'loop_messages;
                     }
                     Ui(ui_message) => {

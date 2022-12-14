@@ -1,9 +1,9 @@
+#![feature(panic_update_hook)]
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
 //! # A little test raytracer project
 use std::io;
-use std::process::ExitCode;
 
 use color_eyre::eyre;
 use tracing::level_filters::LevelFilter;
@@ -12,6 +12,9 @@ use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::config::tracing_config::STANDARD_FORMAT;
+use crate::helper::logging::event_targets::*;
+use crate::helper::logging::format_error;
+use crate::helper::panic_pill::red_or_blue_pill;
 
 mod build;
 mod config;
@@ -20,6 +23,7 @@ mod helper;
 mod program;
 mod resources;
 mod ui;
+mod log;
 
 /// Main entrypoint for the program
 ///
@@ -28,25 +32,29 @@ mod ui;
 /// * Initialises [tracing] (for logging)
 /// * TODO: Processes command-line arguments
 /// * Runs the [program] for real
-fn main() -> eyre::Result<ExitCode> {
+fn main() -> eyre::Result<()> {
     init_eyre()?;
     init_tracing()?;
-    debug!("initialised [tracing] and [eyre]");
+    red_or_blue_pill();
 
-    debug!("skipping CLI and Env args");
+    debug!(target: MAIN_DEBUG_GENERAL, "initialised [tracing] and [eyre], skipped cli args");
 
-    //Event loop
-    debug!("main init complete, starting");
+    let args = std::env::args();
+    let args_os = std::env::args_os();
+    debug!(target: MAIN_DEBUG_GENERAL, ?args, ?args_os, "command line");
+    debug!(target: MAIN_DEBUG_GENERAL, "core init done");
 
-    trace!("running program");
+    info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
     return match program::run() {
-        Ok(_) => {
-            info!("program completed successfully");
-            info!("goodbye");
-            Ok(ExitCode::SUCCESS)
+        Ok(program_return_value) => {
+            info!(target: PROGRAM_INFO_LIFECYCLE, ?program_return_value, "program completed successfully");
+            info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :)");
+            Ok(program_return_value)
         }
         Err(report) => {
-            error!("program completed with errors");
+            let formatted_error = format_error(&report);
+            error!(target: PROGRAM_INFO_LIFECYCLE, formatted_error, "program exited unsuccessfully");
+            info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :(");
             Err(report)
         }
     };

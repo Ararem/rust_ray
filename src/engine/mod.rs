@@ -8,22 +8,21 @@ use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug_span, info, instrument, trace};
 
-use crate::helper::logging::event_targets::*;
-use crate::program::program_messages::Message::{Engine, Program, Ui};
-use crate::program::program_messages::{
-    unreachable_never_should_be_disconnected, EngineThreadMessage, Message,
+use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
+use crate::program::thread_messages::{
+    unreachable_never_should_be_disconnected, EngineThreadMessage, ThreadMessage,
 };
-use crate::program::ProgramData;
+use crate::program::program_data::ProgramData;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct EngineData {}
 
 #[instrument(skip_all)]
 pub(crate) fn engine_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
-    message_sender: BroadcastSender<Message>,
-    message_receiver: BroadcastReceiver<Message>,
+    message_sender: BroadcastSender<ThreadMessage>,
+    message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {
     //Create a NoPanicPill to make sure we DON'T PANIC
     let _no_panic_pill = crate::helper::panic_pill::PanicPill {};

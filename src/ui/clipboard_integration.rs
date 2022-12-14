@@ -8,7 +8,7 @@ use color_eyre::Help;
 use imgui::ClipboardBackend;
 use tracing::*;
 
-use crate::helper::logging::{dyn_error_to_report, log_error_as_warning};
+use crate::helper::logging::dyn_panic_to_report;
 
 /// Wrapper struct for [ClipboardContext] that allows integration with [imgui]
 /// Used to implement [ClipboardBackend]
@@ -44,7 +44,7 @@ impl ClipboardBackend for ImguiClipboardSupport {
         let result = self.backing_context.set_contents(text.to_owned());
         if let Err(boxed_error) = result {
             log_error_as_warning(
-                &dyn_error_to_report(&boxed_error)
+                &dyn_panic_to_report(&boxed_error)
                     .wrap_err("could not set clipboard text")
                     .note(format!("tried to set clipboard to {}", text)),
             );
