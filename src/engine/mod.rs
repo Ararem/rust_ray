@@ -1,19 +1,20 @@
-use std::sync::mpsc::TryRecvError;
 use std::sync::{Arc, Barrier, Mutex};
+use std::sync::mpsc::TryRecvError;
 use std::thread;
 use std::time::Duration;
 
 use color_eyre::eyre;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug_span, info, info_span, instrument, trace};
-use crate::helper::logging::event_targets::THREAD_DEBUG_GENERAL;
+use tracing::{debug, debug_span, info, info_span, trace, trace_span};
+use tracing::field::debug;
 
-use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
-use crate::program::thread_messages::{
-    unreachable_never_should_be_disconnected, EngineThreadMessage, ThreadMessage,
-};
+use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
+use crate::program::thread_messages::{
+    EngineThreadMessage, ThreadMessage, unreachable_never_should_be_disconnected,
+};
+use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct EngineData {}
@@ -32,66 +33,72 @@ pub(crate) fn engine_thread(
         thread_start_barrier.wait();
         trace!(target: THREAD_DEBUG_GENERAL, "wait complete, running engine thread");
     }
-    'global: loop {
+
+    let span_global_loop = debug_span!(target: ENGINE_TRACE_GLOBAL_LOOP, "'global");
+    'global: for global_iter in 0usize.. {
+        let span_global_loop_inner = trace_span!(target: ENGINE_TRACE_GLOBAL_LOOP, "inner", global_iter);
+
         // Pretend we're doing work here
         thread::sleep(Duration::from_secs(1));
 
-        let _span = debug_span!("process_messages").entered();
-        'loop_messages: loop {
-            // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
-            let recv = message_receiver.try_recv();
-            match recv {
+        let span_process_messages = debug_span!("process_messages").entered();
+        // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
+        'process_messages: loop {
+            trace!(
+                target: THREAD_TRACE_MESSAGE_LOOP,
+                "message_receiver.try_recv()"
+            );
+            let maybe_message = message_receiver.try_recv();
+            trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?maybe_message);
+            match maybe_message {
                 Err(TryRecvError::Empty) => {
                     trace!(
-                        target: THREAD_MESSAGE_PROCESSING_SPAMMY,
-                        "no messages waiting"
+                        target: THREAD_TRACE_MESSAGE_LOOP,
+                        "no messages (Err::Empty)"
                     );
-                    break 'loop_messages; // Exit the message loop, go into waiting
+                    break 'process_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
                     unreachable_never_should_be_disconnected();
                 }
                 Ok(message) => {
                     trace!(
-                        target: THREAD_MESSAGE_PROCESSING_SPAMMY,
-                        "got message: {:?}",
-                        &message
+                        target: THREAD_TRACE_MESSAGE_LOOP,
+                        ?message,
+                        "got message"
                     );
                     match message {
-                        Ui(_ui_message) => {
-                            trace!(
-                                target: THREAD_MESSAGE_PROCESSING_SPAMMY,
-                                "[engine] message for ui thread, ignoring"
-                            );
-                            continue 'loop_messages;
+                        Ui(_) | Program(_) => {
+                            message.log_ignored();
+                            continue 'process_messages;
                         }
-                        Program(_program_message) => {
-                            trace!(
-                                target: THREAD_MESSAGE_PROCESSING_SPAMMY,
-                                "[engine] message for program thread, ignoring"
-                            );
-                            continue 'loop_messages;
-                        }
-                        Engine(engine_message) => match engine_message {
-                            EngineThreadMessage::ExitEngineThread => {
-                                info!("got exit message for engine thread");
-                                break 'global;
+                        Engine(engine_message) => {
+                            message.log_received();
+                            match engine_message {
+                                EngineThreadMessage::ExitEngineThread => {
+                                    debug!(target: THREAD_DEBUG_GENERAL, "got exit message for engine thread");
+                                    break 'global;
+                                }
                             }
                         },
                     }
                 }
             }
         }
-        drop(_span);
+        drop(span_process_messages);
+
+        drop(span_global_loop_inner);
     }
+    drop(span_global_loop);
 
     // If we get to here, it's time to exit the thread and shutdown
-    info!("engine thread exiting");
+    debug!(target: THREAD_DEBUG_GENERAL, "engine thread exiting");
 
-    trace!("unsubscribing message receiver");
+    debug!(target: THREAD_DEBUG_MESSENGER_LIFETIME, "unsubscribing message receiver");
     message_receiver.unsubscribe();
-    trace!("unsubscribing message sender");
+    debug!(target: THREAD_DEBUG_MESSENGER_LIFETIME, "unsubscribing message sender");
     message_sender.unsubscribe();
 
+    debug!(target: THREAD_DEBUG_GENERAL, "engine thread done");
     Ok(())
 }

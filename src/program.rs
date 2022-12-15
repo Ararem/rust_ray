@@ -130,7 +130,7 @@ pub fn run() -> eyre::Result<()> {
         // Process any messages we might have from the other threads
         let process_messages_span =
             trace_span!(target: THREAD_TRACE_MESSAGE_LOOP, "process_messages").entered();
-        'loop_messages: loop {
+        'process_messages: loop {
             trace!(
                 target: THREAD_TRACE_MESSAGE_LOOP,
                 "message_receiver.try_recv()"
@@ -144,7 +144,7 @@ pub fn run() -> eyre::Result<()> {
                         target: THREAD_TRACE_MESSAGE_LOOP,
                         "no messages (Err::Empty)"
                     );
-                    break 'loop_messages; // Exit the message loop, go into waiting
+                    break 'process_messages; // Exit the message loop, go into waiting
                 }
                 Err(TryRecvError::Disconnected) => {
                     unreachable_never_should_be_disconnected();
@@ -154,7 +154,7 @@ pub fn run() -> eyre::Result<()> {
                     match message {
                         Ui(_) | Engine(_) => {
                             message.log_ignored();
-                            continue 'loop_messages;
+                            continue 'process_messages;
                         }
                         Program(program_message) => {
                             message.log_received();

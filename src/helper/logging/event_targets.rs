@@ -14,6 +14,7 @@ target!(UI_TRACE_BUILD_INTERFACE, r"Log event that traces the execution of the b
 target!(UI_DEBUG_USER_INTERACTION, r"Event for when the user does something to the ui (but why would they want to do that?)");
 
 // ===== Engine =====
+target!(ENGINE_TRACE_GLOBAL_LOOP, r#"poll events when the engine does it's global loop"#);
 
 // ===== Program/Main =====
 target!(MAIN_DEBUG_GENERAL,r#"main.rs general logs, like initialising something"#);
