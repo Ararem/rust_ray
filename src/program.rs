@@ -1,36 +1,36 @@
-use std::fmt::Debug;
-use std::sync::mpsc::{TryRecvError, TrySendError::*};
 use std::sync::{Arc, Barrier, Mutex};
+use std::sync::mpsc::{TryRecvError, TrySendError::*};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use color_eyre::eyre::WrapErr;
 use color_eyre::{eyre, Help, Report, SectionExt};
+use color_eyre::eyre::WrapErr;
 use indoc::formatdoc;
 use multiqueue2::{broadcast_queue, BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn};
+use tracing::{debug, debug_span, error, info, info_span, trace, trace_span};
 
 use program_data::ProgramData;
 use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
 
 use crate::engine::*;
-use crate::helper::logging::event_targets::*;
 use crate::helper::logging::{dyn_panic_to_report, format_error};
-use crate::program::thread_messages::ThreadMessage::*;
+use crate::helper::logging::event_targets::*;
 use crate::program::thread_messages::*;
-use crate::ui::ui_data::UiData;
+use crate::program::thread_messages::ThreadMessage::*;
 use crate::ui::*;
+use crate::ui::ui_data::UiData;
 
 #[macro_use]
 pub(crate) mod thread_messages;
 pub mod program_data;
 
 pub fn run() -> eyre::Result<()> {
-    let run_span = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run));
+    let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
+    let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init");
     // Create new program 'instance'
     debug!(target: PROGRAM_DEBUG_GENERAL, "creating ProgramData");
     let program_data = ProgramData {
@@ -69,6 +69,10 @@ pub fn run() -> eyre::Result<()> {
     let thread_start_barrier = Arc::new(Barrier::new(3));
     // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
     debug!(target: THREAD_DEBUG_GENERAL, "created thread start barrier");
+
+    drop(span_init);
+
+    let span_create_threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads");
 
     debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
     let engine_thread_handle: JoinHandle<eyre::Result<()>> = {
@@ -109,6 +113,8 @@ pub fn run() -> eyre::Result<()> {
     thread_start_barrier.wait();
     debug!(target: THREAD_DEBUG_GENERAL, "threads should now be awake");
 
+    drop(span_create_threads);
+
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits
     debug!(
@@ -116,7 +122,11 @@ pub fn run() -> eyre::Result<()> {
         ?poll_interval,
         "entering 'global loop"
     );
-    'global: loop {
+
+    let span_global_loop = debug_span!(target: PROGRAM_DEBUG_GENERAL, "'global", ?poll_interval);
+    'global: for global_iter in 0usize.. {
+        let span_global_loop_inner = trace_span!(target: PROGRAM_TRACE_GLOBAL_LOOP, "inner", global_iter);
+
         // Process any messages we might have from the other threads
         let process_messages_span =
             trace_span!(target: THREAD_TRACE_MESSAGE_LOOP, "process_messages").entered();
@@ -172,11 +182,17 @@ pub fn run() -> eyre::Result<()> {
         They should only ever safely exit while inside the 'process_messages loop (since that's where they're told to quit)
         So if they have finished here, that's BAAADDDD
         */
-        check_threads_are_running(&engine_thread_handle, &ui_thread_handle).map_or_else(|| Ok(()), |report| Err(report))?;
-        thread::sleep(poll_interval);
-    } //end 'global
+        if let Some(report) = check_threads_are_running(&engine_thread_handle, &ui_thread_handle) {
+            return Err(report.wrap_err("failed thread status check"));
+        }
 
-    debug!("program 'global loop finished");
+        trace!(target: PROGRAM_TRACE_GLOBAL_LOOP, ?poll_interval, "sleeping");
+        thread::sleep(poll_interval);
+        drop(span_global_loop_inner);
+    } //end 'global
+    drop(span_global_loop);
+
+    debug!(target:PROGRAM_DEBUG_GENERAL, "program 'global loop finished");
 
     return Ok(());
 }
@@ -185,6 +201,7 @@ fn check_threads_are_running(
     engine_thread_handle: &JoinHandle<eyre::Result<()>>,
     ui_thread_handle: &JoinHandle<eyre::Result<()>>,
 ) -> Option<Report> {
+    let span = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads");
     trace!(
         target: PROGRAM_TRACE_THREAD_STATUS_POLL,
         "checking ui thread status"
@@ -243,6 +260,7 @@ fn check_threads_are_running(
         );
     }
 
+    drop(span);
     None
 }
 
@@ -261,7 +279,7 @@ fn handle_error_quit(
                                         this should not happen, there is a bug in the error creation code.
                                         ", Arc::strong_count(&_arc)
             };
-            error!("{}", warn);
+            error!(target: REALLY_FUCKING_BAD_UNREACHABLE,"{}", warn);
             Report::msg("quitting app due to an internal error")
                 .with_section(move || format_error(&_arc).header("Error:"))
                 .note("the displayed error may not be correct and/or complete")
@@ -341,10 +359,10 @@ fn handle_user_quit(
         }
 
         // Neither of these errors should happen ever, but better to be safe
-        Err(Disconnected(failed_message)) => {
+        Err(Disconnected(_failed_message)) => {
             unreachable_never_should_be_disconnected();
         }
-        Err(Full(failed_message)) => {
+        Err(Full(_failed_message)) => {
             unreachable_never_should_be_full();
         }
     }
@@ -402,10 +420,10 @@ fn handle_user_quit(
         }
 
         // Neither of these errors should happen ever, but better to be safe
-        Err(Disconnected(failed_message)) => {
+        Err(Disconnected(_failed_message)) => {
             unreachable_never_should_be_disconnected();
         }
-        Err(Full(failed_message)) => {
+        Err(Full(_failed_message)) => {
             unreachable_never_should_be_full();
         }
     }

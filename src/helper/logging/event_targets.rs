@@ -19,7 +19,8 @@ target!(UI_DEBUG_USER_INTERACTION, r"Event for when the user does something to t
 target!(MAIN_DEBUG_GENERAL,r#"main.rs general logs, like initialising something"#);
 target!(PROGRAM_INFO_LIFECYCLE, r###"program lifecycle events like "the app is starting" and "the app completed""###);
 target!(PROGRAM_DEBUG_GENERAL, r###"general program events, initialising something"###);
-target!(PROGRAM_TRACE_THREAD_STATUS_POLL, r#"poll events when the program thread checks the status of everything else"#);
+target!(PROGRAM_TRACE_THREAD_STATUS_POLL, r#"poll events when the program thread checks the status of all the other threads"#);
+target!(PROGRAM_TRACE_GLOBAL_LOOP, r#"poll events when the program does it's global loop"#);
 
 // ===== Threads/Inter-thread communication =====
 target!(THREAD_TRACE_MESSAGE_IGNORED, r"An event that is logged every time a inter-thread message is ignored because it was for the wrong thread. you probably never want to enable this target");

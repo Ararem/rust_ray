@@ -6,7 +6,8 @@ use std::time::Duration;
 use color_eyre::eyre;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug_span, info, instrument, trace};
+use tracing::{debug_span, info, info_span, instrument, trace};
+use crate::helper::logging::event_targets::THREAD_DEBUG_GENERAL;
 
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::program::thread_messages::{
@@ -17,20 +18,20 @@ use crate::program::program_data::ProgramData;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct EngineData {}
 
-#[instrument(skip_all)]
 pub(crate) fn engine_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {
-    //Create a NoPanicPill to make sure we DON'T PANIC
-    let _no_panic_pill = crate::helper::panic_pill::PanicPill {};
+    let _span = info_span!(target: THREAD_DEBUG_GENERAL, "engine_thread");
 
-    trace!("waiting for {}", name_of!(thread_start_barrier));
-    thread_start_barrier.wait();
-    trace!("wait complete, running engine thread");
-
+    {
+        let _span = debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start");
+        trace!(target: THREAD_DEBUG_GENERAL,"waiting for {}", name_of!(thread_start_barrier));
+        thread_start_barrier.wait();
+        trace!(target: THREAD_DEBUG_GENERAL, "wait complete, running engine thread");
+    }
     'global: loop {
         // Pretend we're doing work here
         thread::sleep(Duration::from_secs(1));
