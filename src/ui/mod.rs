@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::fmt::{Debug, Pointer};
 use std::path::PathBuf;
 use std::sync::{Arc, Barrier, Mutex, TryLockError};
 use std::sync::mpsc::TryRecvError;
@@ -17,24 +17,25 @@ use imgui::{Context, StyleVar, WindowFlags};
 use imgui::Condition::Always;
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
-use imgui_winit_support::winit::event_loop::EventLoopBuilder;
+use imgui_winit_support::winit::event_loop::{EventLoopBuilder, EventLoopProxy};
 use imgui_winit_support::winit::window::WindowBuilder;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, debug_span, info, instrument, trace, trace_span, warn};
+use tracing::{debug, debug_span, error, info, info_span, Instrument, trace, trace_span, warn};
+use tracing::field::debug;
 
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
 
-use crate::{log_expr_val, log_variable};
 use crate::config::keybindings_config::standard::*;
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::config::ui_config::{
     DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
 };
-use crate::helper::logging::{log_error, log_error_as_warning};
+use crate::helper::logging::event_targets::*;
+use crate::helper::logging::format_error;
 use crate::program::program_data::ProgramData;
-use crate::program::thread_messages::{ignored_message, ProgramThreadMessage, QuitAppNoErrorReason, ThreadMessage, UiThreadMessage, unreachable_never_should_be_disconnected};
+use crate::program::thread_messages::{ProgramThreadMessage, QuitAppNoErrorReason, ThreadMessage, UiThreadMessage, unreachable_never_should_be_disconnected};
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::ui::docking::UiDockingArea;
 use crate::ui::font_manager::FontManager;
@@ -47,19 +48,20 @@ mod font_manager;
 pub mod ui_data;
 mod ui_system;
 
-#[instrument(skip_all)]
 pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {
-    //Create a NoPanicPill to make sure we exit if anything panics
-    let _no_panic_pill = crate::helper::panic_pill::PanicPill {};
+    let _ui_thread_span = info_span!(target: THREAD_DEBUG_GENERAL, "ui_thread");
 
-    trace!("waiting for {}", name_of!(thread_start_barrier));
-    thread_start_barrier.wait();
-    trace!("wait complete, running ui thread");
+    {
+        let _span = debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start");
+        trace!(target: THREAD_DEBUG_GENERAL,"waiting for {}", name_of!(thread_start_barrier));
+        thread_start_barrier.wait();
+        trace!(target: THREAD_DEBUG_GENERAL, "wait complete, running ui thread");
+    }
 
     /*
     Init ui
@@ -68,6 +70,7 @@ pub(crate) fn ui_thread(
     let system = init_ui_system(APP_TITLE).wrap_err("failed while initialising ui system")?;
 
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
+    // Probably because I was borrowing the whole struct when I only needed one field of it
     let UiSystem {
         backend:
         UiBackend {
@@ -89,21 +92,20 @@ pub(crate) fn ui_thread(
     let result_ref = &mut result;
     let mut last_frame = Instant::now();
 
-    //Enter the imgui_internal span so that any logs will be inside that span by default
-    let imgui_internal_span = debug_span!("imgui_internal");
-    let _guard_imgui_internal_span = imgui_internal_span.enter();
-
-    debug!("running event loop");
+    debug!(target: UI_DEBUG_GENERAL, "running event loop");
+    let span_internal = debug_span!(target: UI_DEBUG_GENERAL, "event_loop_internal").entered();
     event_loop.run_return(|event, _window_target, control_flow| {
+        /// Macro that makes the event loop exit with a specified value
         macro_rules! event_loop_return {
             ($return_value:expr) => {{
-                trace!("expecting event loop to exit");
+                trace!(target: UI_DEBUG_GENERAL, "expecting event loop to exit");
                 *result_ref = $return_value;
                 *control_flow = ControlFlow::Exit;
+                return;
             }};
         }
 
-        let _span = trace_span!(target: UI_PERFRAME_SPAMMY, "process_ui_event", ?event).entered();
+        let _span = trace_span!(target: UI_TRACE_EVENT_LOOP, "process_ui_event", ?event, ?control_flow).entered();
         match event {
             //We have new events, but we don't care what they are, just need to update frame timings
             glutin::event::Event::NewEvents(_) => {
@@ -113,50 +115,61 @@ pub(crate) fn ui_thread(
                 imgui_context.io_mut().update_delta_time(delta);
 
                 trace!(
-                    target: UI_PERFRAME_SPAMMY,
+                    target: UI_TRACE_EVENT_LOOP,
                     "updated deltaT: {}",
                     humantime::format_duration(delta)
                 );
             }
 
             glutin::event::Event::MainEventsCleared => {
-                trace!(target: UI_PERFRAME_SPAMMY, "main events cleared");
-                trace!(target: UI_PERFRAME_SPAMMY, "requesting redraw");
                 let gl_window = display.gl_window();
                 let window = gl_window.window();
-                window.request_redraw();
-                //Pretty sure this makes us render constantly
-                trace!(target: UI_PERFRAME_SPAMMY, "preparing frame");
-                let result = platform.prepare_frame(imgui_context.io_mut(), window);
-                if let Err(error) = result {
-                    let report = Report::new(error);
-                    // let wrapped_report = Report::wrap_err(report, "failed to prepare frame");
-                    // Pretty sure this error isn't harmful, so just log it
-                    warn!("failed to prepare frame: {}", report);
-                }
+                //Pretty sure this makes us render constantly since we always want the app to be drawing (realtime application remember)
+                trace_span!(target: UI_TRACE_EVENT_LOOP, "request_redraw").in_scope(|| window.request_redraw());
+
+                trace_span!(target: UI_TRACE_EVENT_LOOP, "prepare_frame").in_scope(|| {
+                    let result = platform.prepare_frame(imgui_context.io_mut(), window);
+                    if let Err(error) = result {
+                        let report = Report::new(error)
+                            .wrap_err("failed to prepare frame")
+                            .note("this error probably isn't harmful and shouldn't break anything");
+                        // Pretty sure this error isn't harmful, so just log it
+                        warn!(target: GENERAL_WARNING_NON_FATAL, "failed to prepare frame: {}", report);
+                    }
+                });
             }
 
-            //This only gets called when something changes (not constantly), but it doesn't matter too much since it should be real-time
             glutin::event::Event::RedrawRequested(_) => {
-                trace!(target: UI_PERFRAME_SPAMMY, "redraw requested");
+                let span_redraw = trace_span!(target: UI_TRACE_EVENT_LOOP, "redraw");
 
+                const MUTEX_LOCK_RETRY_DELAY: Duration = Duration::from_millis(1);
+                let span_obtain_data = trace_span!(target:THREAD_TRACE_MUTEX_SYNC, "obtain_data", ?MUTEX_LOCK_RETRY_DELAY).entered();
                 let mut program_data = loop {
-                    trace!(target: UI_PERFRAME_SPAMMY,"trying to lock ui data mutex");
                     match program_data_wrapped.try_lock() {
-                        Err(TryLockError::Poisoned(_)) => {}
+                        //Shouldn't get here, since the engine/main threads shouldn't panic (and the app should quit if they do)
+                        Err(TryLockError::Poisoned(_)) => {
+                            let report = Report::msg("program data mutex poisoned")
+                                .note("another thread panicked while holding the lock")
+                                .suggestion("the error did not occur here (and has nothing to do with here), check the other threads and their logs")
+                                .wrap_err("could not lock program data mutex")
+                                .wrap_err("could not obtain program data");
+                            error!(target: DOMINO_EFFECT_FAILURE, ?report);
+                            event_loop_return!(Err(report));
+                        }
                         Err(TryLockError::WouldBlock) => {
-                            const RETRY_DELAY: Duration = Duration::from_millis(1);
-                            trace!(target: UI_PERFRAME_SPAMMY, "mutex locked, waiting and retrying");
-                            sleep(RETRY_DELAY);
+                            trace!(target: THREAD_TRACE_MUTEX_SYNC, "mutex locked, waiting and retrying");
+                            sleep(MUTEX_LOCK_RETRY_DELAY);
                             continue;
                         }
                         Ok(data) => {
+                            trace!(target: THREAD_TRACE_MUTEX_SYNC, ?data, "obtained program data");
                             break data;
                         }
                     }
                 };
+                drop(span_obtain_data);
 
-                let result = outer_render_a_frame(
+                let render_frame_result = outer_render_a_frame(
                     &mut display,
                     &mut imgui_context,
                     &mut platform,
@@ -165,14 +178,14 @@ pub(crate) fn ui_thread(
                     &mut program_data.ui_data,
                 );
 
-                if let Err(e) = result {
-                    let error = Report::wrap_err(
-                        e,
-                        "encountered error while drawing: {err}. program should now exit",
-                    );
-                    warn!("encountered error while drawing");
+                if let Err(error) = render_frame_result {
+                    let error = error.wrap_err("errored while rendering frame")
+                        .note("the program should exit");
+                    error!(target: GENERAL_ERROR_FATAL, ?error);
                     event_loop_return!(Err(error));
                 }
+
+                drop(span_redraw);
             }
 
             //Handle window events, we just do close events
@@ -182,19 +195,20 @@ pub(crate) fn ui_thread(
             } => {
                 // Here, we don't actually want to close the window, but inform the main thread that we'd like to quit
                 // Then, we wait for the main thread to tell us to quit
-                info!(target: UI_USER_EVENT, "got CloseRequested window event");
+                let span = debug_span!(target: UI_DEBUG_USER_INTERACTION, "close_requested").entered();
 
                 let message = Program(QuitAppNoError(QuitInteractionByUser));
-                debug!("sending message to program thread: {:?}", message);
+                debug_span!(target: THREAD_DEBUG_MESSAGE_SEND, "send_quit_signal", ?message).in_scope(||{
                 match message_sender.try_send(message) {
                     Ok(()) => {
                         // We have signalled the thread, wait till the next loop when the main thread wants us to exit
-                        trace!("program thread signalled");
-                        trace!("see you on the other side!")
+                        debug!(target:THREAD_DEBUG_MESSAGE_SEND, "program thread signalled, should exit soon");
+                        debug!(target: UI_DEBUG_GENERAL, "see you on the other side!");
                     }
 
                     // Neither of these errors should happen ever, but better to be safe
                     Err(Disconnected(_failed_message)) => {
+                        unreachable_never_should_be_disconnected();
                         let report = Report::msg(
                             "failed to send quit request to program thread: no message receivers",
                         );
@@ -206,7 +220,8 @@ pub(crate) fn ui_thread(
                         );
                         event_loop_return!(Err(report));
                     }
-                }
+                }});
+                drop (span);
             }
 
             //Catch-all, passes onto the glutin backend
@@ -222,7 +237,7 @@ pub(crate) fn ui_thread(
 
         _span.exit();
     });
-    drop(_guard_imgui_internal_span);
+    drop(span_internal);
 
     // If we get to here, it's time to exit the thread and shutdown
     info!("ui thread exiting");
@@ -437,7 +452,7 @@ fn process_messages(
                     &message
                 );
                 match message {
-                    Program(_) | Engine (_) => {
+                    Program(_) | Engine(_) => {
                         ignored_message(message);
                         continue 'loop_messages;
                     }
@@ -461,81 +476,101 @@ fn process_messages(
 ///Initialises the UI system and returns it
 ///
 /// * `title` - Title of the created window
-#[instrument]
 fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
-    let display;
+    let _span = debug_span!(target: UI_DEBUG_GENERAL, "init_ui");
+
     let mut imgui_context;
     let event_loop;
     let mut platform;
     let renderer;
 
     //TODO: More config options
-    trace!("cloning title");
+    debug!(target: UI_DEBUG_GENERAL, "cloning title");
     let title = title.to_owned();
-    log_variable!(title);
+    debug!(target: UI_DEBUG_GENERAL, title);
 
-    trace!("creating [winit] event loop with [any_thread]=`true`");
+    debug!(target: UI_DEBUG_GENERAL, "creating [winit] event loop with [any_thread]=`true`");
     event_loop = EventLoopBuilder::with_any_thread(&mut EventLoopBuilder::new(), true).build();
+    debug!(target: UI_DEBUG_GENERAL, ?event_loop, "[winit] event loop created");
 
-    trace!("creating [glutin] context builder");
+    debug!(target: UI_DEBUG_GENERAL, "creating [glutin] context builder");
     let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
         .with_vsync(VSYNC)
         .with_hardware_acceleration(HARDWARE_ACCELERATION)
         .with_srgb(true)
         .with_multisampling(MULTISAMPLING);
-    log_variable!(glutin_context_builder:?);
+    debug!(target: UI_DEBUG_GENERAL, ?glutin_context_builder, "created [glutin] context builder");
 
-    trace!("creating [winit] window builder");
+    debug!(target: UI_DEBUG_GENERAL, "creating [winit] window builder");
     let window_builder = WindowBuilder::new()
         .with_title(title)
         .with_inner_size(DEFAULT_WINDOW_SIZE)
         .with_maximized(START_MAXIMIZED);
+    debug!(target: UI_DEBUG_GENERAL, ?window_builder, "created [winit] window builder");
     //TODO: Configure
-    trace!("creating display");
-    display = Display::new(window_builder, glutin_context_builder, &event_loop)
+    debug!(target: UI_DEBUG_GENERAL, "creating [glium] display");
+    let gl_display: Display = Display::new(window_builder, glutin_context_builder, &event_loop)
         .wrap_err("could not initialise display")
         .note(format!("if the error is [NoAvailablePixelFormat] (`{}`), try checking the [glutin::ContextBuilder] settings: vsync, hardware acceleration and srgb may not be a compatible combination on your system", NoAvailablePixelFormat))?;
+    debug!(target: UI_DEBUG_GENERAL, display=?gl_display, "created [glium] display");
 
-    trace!("Creating [imgui] context");
+    debug!(target: UI_DEBUG_GENERAL, "creating [imgui] context");
     imgui_context = Context::create();
-    imgui_context.set_ini_filename(PathBuf::from(log_expr_val!(IMGUI_SETTINGS_FILE_PATH)));
-    imgui_context.set_log_filename(PathBuf::from(log_expr_val!(IMGUI_LOG_FILE_PATH)));
-    trace!("enabling docking config flag");
-    imgui_context.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
+    debug!(target: UI_DEBUG_GENERAL, ?imgui_context, "created [imgui] context");
 
-    trace!("creating font manager");
+    let imgui_settings_path = PathBuf::from(IMGUI_SETTINGS_FILE_PATH);
+    debug!(target: UI_DEBUG_GENERAL, ?imgui_settings_path, "setting [imgui] settings path");
+    imgui_context.set_ini_filename(imgui_settings_path);
+    debug!(target: UI_DEBUG_GENERAL, imgui_settings_path=?imgui_context.ini_filename(), "set [imgui] settings path");
+    let imgui_log_path = PathBuf::from(IMGUI_LOG_FILE_PATH);
+    debug!(target: UI_DEBUG_GENERAL, ?imgui_settings_path, "setting [imgui] log path");
+    imgui_context.set_log_filename(imgui_log_path);
+    debug!(target: UI_DEBUG_GENERAL, imgui_log_path=?imgui_context.log_filename(), "set [imgui] log path");
+    debug!(target: UI_DEBUG_GENERAL, "setting DOCKING_ENABLE flag for [imgui]");
+    imgui_context.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
+    debug!(target: UI_DEBUG_GENERAL, config_flags=?imgui_context.io().config_flags);
+
+    debug!(target: UI_DEBUG_GENERAL, "creating font manager");
     let font_manager = FontManager::new().wrap_err("failed to create font manager")?;
+    debug!(target: UI_DEBUG_GENERAL, ?font_manager, "created font manager");
 
     //TODO: High DPI setting
-    trace!("creating [winit] platform");
+    debug!(target: UI_DEBUG_GENERAL, "creating [winit] platform");
     platform = WinitPlatform::init(&mut imgui_context);
+    debug!(target: UI_DEBUG_GENERAL, ?platform, "created [winit] platform");
 
-    trace!("attaching window");
+    debug!(target: UI_DEBUG_GENERAL, "attaching window to platform");
     platform.attach_window(
         imgui_context.io_mut(),
-        display.gl_window().window(),
+        gl_display.gl_window().window(),
         HiDpiMode::Default,
     );
+    debug!(target: UI_DEBUG_GENERAL, "attached window to platform");
 
-    trace!("creating [glium] renderer");
+    debug!(target: UI_DEBUG_GENERAL, "creating [glium] renderer");
     renderer =
-        Renderer::init(&mut imgui_context, &display).wrap_err("failed to create renderer")?;
+        Renderer::init(&mut imgui_context, &gl_display).wrap_err("failed to create renderer")?;
+    debug!(target: UI_DEBUG_GENERAL, "created [glium] renderer");
 
-    match clipboard_integration::clipboard_init() {
-        Ok(clipboard_backend) => {
-            trace!("have clipboard support: {clipboard_backend:?}");
-            imgui_context.set_clipboard_backend(clipboard_backend);
-        }
-        Err(error) => {
-            warn!("could not initialise clipboard: {error}")
-        }
-    }
+    debug_span!(target: UI_DEBUG_GENERAL, "clipboard_init").in_scope(||
+        match clipboard_integration::clipboard_init() {
+            Ok(clipboard_backend) => {
+                debug!(target: UI_DEBUG_GENERAL, ?clipboard_backend, "have clipboard support");
+                imgui_context.set_clipboard_backend(clipboard_backend);
+                debug!(target: UI_DEBUG_GENERAL, "clipboard backend set");
+            }
+            Err(report) => {
+                let report = report
+                    .wrap_err("could not initialise clipboard");
+                warn!(target: GENERAL_WARNING_NON_FATAL, report=format_error(&report), "could not init clipboard");
+            }
+        });
 
-    trace!("done");
+    debug!(target: UI_DEBUG_GENERAL, "ui init done");
     Ok(UiSystem {
         backend: UiBackend {
             event_loop,
-            display,
+            display: gl_display,
             imgui_context,
             platform,
             renderer,

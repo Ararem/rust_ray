@@ -2,10 +2,14 @@
 
 use std::sync::Arc;
 
-use color_eyre::Report;
+use color_eyre::{Help, Report};
 use tracing::{debug, trace};
+
 use ThreadMessage::{Engine, Program, Ui};
-use crate::helper::logging::event_targets::{THREAD_DEBUG_MESSAGE_RECEIVED, THREAD_TRACE_MESSAGE_IGNORED};
+
+use crate::helper::logging::event_targets::{
+    THREAD_DEBUG_MESSAGE_RECEIVED, THREAD_TRACE_MESSAGE_IGNORED,
+};
 
 /// Base message struct, contains variants for which thread it should be targeted at
 #[derive(Debug, Clone)]
@@ -85,7 +89,6 @@ impl ThreadMessage {
     }
 }
 
-
 /// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_recv] returns [std::sync::mpsc::TryRecvError::Disconnected] in any of the message loops
 ///
 /// # ***THIS IS BAD:***
@@ -96,21 +99,20 @@ impl ThreadMessage {
 /// Also, the main (this) thread sender should never be dropped
 ///
 /// So (in working code) we should never get here
-pub(crate) fn unreachable_never_should_be_disconnected() -> ! {
-    let message_heading = indoc::formatdoc!(
-        r#"
-            all message channel senders were dropped: [try_recv()] returned [{0:?}] "{0}""#,
+pub(crate) fn error_never_should_be_disconnected() -> Report {
+    let report = Report::msg(indoc::formatdoc! {
+        "all message channel senders were dropped: [try_recv()] returned [{0:?}] \"{0}\"",
         ::std::sync::mpsc::TryRecvError::Disconnected
-    );
-    let message_body = indoc::formatdoc!(
-        r"
+    }).wrap_err("critical invalid state")
+      .note(indoc::formatdoc! {r"
             ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
-            something probably went (badly) wrong somewhere else"
-    );
-    panic!("invalid state: {}\n\n{}", message_heading, message_body);
+            something probably went (badly) wrong somewhere else
+    "}
+      );
+    report
 }
 
-/// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_recv] returns [std::sync::mpsc::TryRecvError::Full] in any of the message loops
+/// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_send] returns [std::sync::mpsc::TrySendError::Full] in any of the message loops
 ///
 /// # ***THIS IS BAD:***
 /// The receivers should always be receiving and reading messages as long as they are connected
@@ -118,17 +120,16 @@ pub(crate) fn unreachable_never_should_be_disconnected() -> ! {
 /// If we get here, either we have (massively) overloaded the channel (shouldn't be possible, we have a high limit),
 /// Or, one of the threads is deadlocked/stuck somewhere
 ///
-/// Either way, shouldn't be possible, will cause panic
-pub(crate) fn unreachable_never_should_be_full() -> ! {
-    let message_heading = indoc::formatdoc!(
-        r#"
-            all message channel senders were dropped: [try_recv()] returned [{0:?}] "{0}""#,
-        ::std::sync::mpsc::TryRecvError::Disconnected
+/// Either way, shouldn't be possible, very bad
+pub(crate) fn error_never_should_be_full() -> Report {
+    let report = Report::msg(indoc::formatdoc! {
+        "message channel was full: [try_send()] returned [{0:?}] \"{0}\"",
+        ::std::sync::mpsc::TrySendError::Full(0) //argument is arbitrary
+    }).wrap_err("critical invalid state").note(
+        indoc::formatdoc! {r"
+        message buffer should never be full - it has a high capacity and receivers should constantly be polling.
+        most likely, one of the other threads crashed or deadlocked (and therefore can't receive)
+    "}
     );
-    let message_body = indoc::formatdoc!(
-        r"
-            ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
-            something probably went (badly) wrong somewhere else"
-    );
-    panic!("invalid state: {}\n\n{}", message_heading, message_body);
+    report
 }

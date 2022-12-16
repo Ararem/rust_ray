@@ -6,8 +6,7 @@ use std::time::Duration;
 use color_eyre::eyre;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, debug_span, info, info_span, trace, trace_span};
-use tracing::field::debug;
+use tracing::{debug, debug_span, info_span, trace, trace_span};
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
@@ -25,7 +24,7 @@ pub(crate) fn engine_thread(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {
-    let _span = info_span!(target: THREAD_DEBUG_GENERAL, "engine_thread");
+    let _engine_thread_span = info_span!(target: THREAD_DEBUG_GENERAL, "engine_thread");
 
     {
         let _span = debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start");

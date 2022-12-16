@@ -1,14 +1,14 @@
 //! Support module that allows for using the clipboard in [imgui]
 use std::any::type_name;
-use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 use clipboard::{ClipboardContext, ClipboardProvider};
-use color_eyre::Help;
+use color_eyre::{eyre, Help, SectionExt};
 use imgui::ClipboardBackend;
 use tracing::*;
 
-use crate::helper::logging::dyn_panic_to_report;
+use crate::helper::logging::{dyn_error_to_report, format_error};
+use crate::helper::logging::event_targets::{GENERAL_WARNING_NON_FATAL, UI_DEBUG_USER_INTERACTION};
 
 /// Wrapper struct for [ClipboardContext] that allows integration with [imgui]
 /// Used to implement [ClipboardBackend]
@@ -27,29 +27,51 @@ impl Debug for ImguiClipboardSupport {
 }
 
 /// (Tries to) initialise clipboard support
-#[instrument(ret, level = "trace")]
-pub(in crate::ui) fn clipboard_init() -> Result<ImguiClipboardSupport, Box<dyn Error>> {
-    ClipboardContext::new().map(|val| ImguiClipboardSupport {
-        backing_context: val,
-    })
+pub(in crate::ui) fn clipboard_init() -> eyre::Result<ImguiClipboardSupport> {
+    match ClipboardContext::new()
+    {
+        Ok(val) => Ok(ImguiClipboardSupport {
+            backing_context: val,
+        }),
+        Err(boxed_error) => {
+            let report = dyn_error_to_report(&boxed_error)
+                .wrap_err("could not get clipboard context");
+            Err(report)
+        }
+    }
 }
 
 impl ClipboardBackend for ImguiClipboardSupport {
     fn get(&mut self) -> Option<String> {
-        let contents = self.backing_context.get_contents().ok();
-        trace!("got clipboard: {contents:?}");
-        contents
-    }
-    fn set(&mut self, text: &str) {
-        let result = self.backing_context.set_contents(text.to_owned());
-        if let Err(boxed_error) = result {
-            log_error_as_warning(
-                &dyn_panic_to_report(&boxed_error)
-                    .wrap_err("could not set clipboard text")
-                    .note(format!("tried to set clipboard to {}", text)),
-            );
-        } else {
-            trace!(clipboard_text = text, "set clipboard");
+        let _span = debug_span!(target: UI_DEBUG_USER_INTERACTION, "get_clipboard").entered();
+        let get_result = self.backing_context.get_contents();
+        debug!(target: UI_DEBUG_USER_INTERACTION, ?get_result);
+        return match get_result {
+            Err(boxed_error) => {
+                let report = dyn_error_to_report(&boxed_error)
+                    .wrap_err("could not get clipboard text");
+                warn!(target: GENERAL_WARNING_NON_FATAL, error=format_error(&report), "couldn't get clipboard");
+                None
+            },
+            Ok(clipboard_text) => {
+                trace!(target: UI_DEBUG_USER_INTERACTION, clipboard_text, "got clipboard");
+                Some(clipboard_text)
+            },
         }
+    }
+
+    fn set(&mut self, clipboard_text: &str) {
+        let span = debug_span!(target: UI_DEBUG_USER_INTERACTION, "set_clipboard", clipboard_text).entered();
+        let set_result = self.backing_context.set_contents(clipboard_text.to_owned());
+        debug!(target: UI_DEBUG_USER_INTERACTION, ?set_result);
+        if let Err(boxed_error) = set_result {
+            let report = dyn_error_to_report(&boxed_error)
+                .wrap_err("could not set clipboard text")
+                .section(clipboard_text.header("Clipboard:"));
+            warn!(target: GENERAL_WARNING_NON_FATAL, error=format_error(&report), "couldn't set clipboard")
+        } else {
+            trace!(target: UI_DEBUG_USER_INTERACTION, clipboard_text = clipboard_text, "set clipboard");
+        }
+        drop(span);
     }
 }

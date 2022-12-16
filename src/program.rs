@@ -194,6 +194,7 @@ pub fn run() -> eyre::Result<()> {
 
     debug!(target:PROGRAM_DEBUG_GENERAL, "program 'global loop finished");
 
+    drop(span_run);
     return Ok(());
 }
 
@@ -310,7 +311,9 @@ fn handle_user_quit(
         debug_span!(target: THREAD_DEBUG_GENERAL, "join_threads_and_quit").entered();
 
     debug!(target: THREAD_DEBUG_GENERAL, "signalling ui thread to quit");
-    match message_sender.try_send(Ui(UiThreadMessage::ExitUiThread)) {
+    let message = Ui(UiThreadMessage::ExitUiThread);
+    debug!(target: THREAD_DEBUG_MESSAGE_SEND, ?message);
+    match message_sender.try_send(message) {
         Ok(()) => {
             debug!(
                 target: THREAD_DEBUG_GENERAL,
