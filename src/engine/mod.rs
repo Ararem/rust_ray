@@ -40,7 +40,7 @@ pub(crate) fn engine_thread(
         // Pretend we're doing work here
         thread::sleep(Duration::from_secs(1));
 
-        let span_process_messages = debug_span!("process_messages").entered();
+        let span_process_messages = trace_span!(target: THREAD_TRACE_MESSAGE_LOOP,"process_messages").entered();
         // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
         'process_messages: loop {
             trace!(

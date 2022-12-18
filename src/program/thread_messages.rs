@@ -107,8 +107,7 @@ pub(crate) fn error_never_should_be_disconnected() -> Report {
       .note(indoc::formatdoc! {r"
             ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
             something probably went (badly) wrong somewhere else
-    "}
-      );
+    "});
     report
 }
 

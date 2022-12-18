@@ -207,7 +207,7 @@ impl FontManager {
         if !self.dirty && self.current_font != None {
             return Ok(false);
         }
-        let _guard = trace_span!("rebuild_font_if_needed").entered();
+        let _guard = trace_span!("rebuild_font").entered();
 
         trace!("clearing font atlas");
         font_atlas.clear();
