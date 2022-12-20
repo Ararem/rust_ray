@@ -184,8 +184,9 @@ pub(crate) fn ui_thread(
                 span_obtain_data.exit();
 
 
-                //Makes it easier to separate out frames
-                trace!(target: UI_TRACE_RENDER, "{0} BEGIN RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+                // Makes it easier to separate out frames
+                // Add 1 to the frame count, since "technically" we're in the previous frame, as we haven't started the next one yet (call `new_frame()`)
+                trace!(target: UI_TRACE_RENDER, "{0} BEGIN RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count() + 1);
 
                 let render_frame_result = outer_render_a_frame(
                     &mut display,

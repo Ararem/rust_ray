@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::fs;
 use std::io::Read;
 use std::ops::Deref;
@@ -13,6 +13,7 @@ use color_eyre::{eyre, Help, Report};
 use fs_extra::*;
 use imgui::{FontAtlas, FontConfig, FontId, FontSource, TreeNodeFlags, Ui};
 use indoc::formatdoc;
+use nameof::name_of;
 use tracing::warn;
 use tracing::{debug, debug_span, error, info, trace, trace_span};
 
@@ -132,8 +133,8 @@ impl FontManager {
 
                 trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, base_font_name, weight_name, "inserting font into map");
                 if let Some(old_data_buffer) = base_font_ref.insert(weight_name, font_data_buffer.clone()) {
-                    warn!(target: RESOURCES_WARNING_NON_FATAL, "font entry already existed for {} @ {}", base_font_name, weight_name);
-                    debug!(target: RESOURCES_WARNING_NON_FATAL, ?old_data_buffer);
+                    let buffers_are_equal = old_data_buffer.eq(&font_data_buffer);
+                    warn!(target: RESOURCES_WARNING_NON_FATAL, "font entry already existed for {} @ {}, old {equal} new", base_font_name, weight_name, equal=if buffers_are_equal {"=="} else {"!="});
                 }
                 span_internal_iter.exit();
             });
@@ -512,10 +513,20 @@ pub struct Font {
 }
 
 /// A weight a font can have (i.e. bold, light, regular)
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FontWeight {
     /// Name of the weight (i.e. "light")
     pub(crate) name: String,
     /// Binary font data for this weight
     pub(crate) data: Vec<u8>,
+}
+
+/// Custom [Debug] impl for [FontWeight], doesn't print the actual contents of [FontWeight.data], but the length
+impl Debug for FontWeight {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(name_of!(type FontWeight))
+            .field(name_of!(name in FontWeight), &self.name)
+            .field("data.len", &self.data.len())
+            .finish_non_exhaustive()
+    }
 }

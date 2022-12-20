@@ -48,17 +48,23 @@ lazy_static! {
     pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
         //Standard, these are almost always unnecessary
         LogTargetFilter::is(UI_TRACE_EVENT_LOOP, false),
+        LogTargetFilter::is(UI_TRACE_BUILD_INTERFACE, false),
+        LogTargetFilter::is(UI_TRACE_RENDER, false),
         LogTargetFilter::is(THREAD_TRACE_MESSAGE_LOOP, false),
         LogTargetFilter::is(THREAD_TRACE_MUTEX_SYNC, false),
-        // LogTargetFilter::is(THREAD_TRACE_MESSAGE_IGNORED, false),
+        LogTargetFilter::is(DATA_DEBUG_DUMP_OBJECT, false),
+        LogTargetFilter::is(PROGRAM_TRACE_GLOBAL_LOOP, false),
+        LogTargetFilter::is(ENGINE_TRACE_GLOBAL_LOOP, false),
+        LogTargetFilter::is(THREAD_TRACE_MESSAGE_IGNORED, false),
+        // LogTargetFilter::is(PROGRAM_TRACE_THREAD_STATUS_POLL, false),
     ];
 
     /// Standard format for tracing events
     pub static ref STANDARD_FORMAT:  Format<Compact, Uptime> = format()
         .compact()
         .with_ansi(true)
-        .with_thread_ids(true)
-        .with_thread_names(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
         .with_target(false)
         .with_level(true)
         .with_timer(uptime())
