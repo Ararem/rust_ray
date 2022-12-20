@@ -777,13 +777,18 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     imgui_context.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
     debug!(target: UI_DEBUG_GENERAL, config_flags=?imgui_context.io().config_flags);
 
-    debug!(target: UI_DEBUG_GENERAL, "creating font manager");
-    let font_manager = FontManager::new().wrap_err("failed to create font manager")?;
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?font_manager,
-        "created font manager"
-    );
+    let font_manager =
+        debug_span!(target: UI_DEBUG_GENERAL, "create_font_manager").in_scope(|| {
+            let mut font_manager = FontManager::new().wrap_err("failed to create font manager")?;
+            debug!(target: UI_DEBUG_GENERAL, "loading font manager fonts list"); //Need to call it now or else we don't have any fonts loaded and the manager craps itself later
+            font_manager.reload_list_from_resources()?;
+            debug!(
+                target: UI_DEBUG_GENERAL,
+                ?font_manager,
+                "created font manager"
+            );
+            eyre::Result::<FontManager>::Ok(font_manager)
+        })?;
 
     //TODO: High DPI setting
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] platform");
