@@ -59,7 +59,7 @@ impl ClipboardBackend for ImguiClipboardSupport {
             },
         };
         span_get_clipboard.exit();
-        return maybe_text;
+        maybe_text
     }
 
     fn set(&mut self, clipboard_text: &str) {

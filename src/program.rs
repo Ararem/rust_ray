@@ -440,5 +440,5 @@ fn handle_user_quit(
         Result::<(), Report>::Ok(())
     })?;
 
-    return Ok(());
+    Ok(())
 }

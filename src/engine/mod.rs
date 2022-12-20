@@ -118,5 +118,6 @@ pub(crate) fn engine_thread(
     message_sender.unsubscribe();
 
     debug!(target: THREAD_DEBUG_GENERAL, "engine thread done");
+    span_engine_thread.exit();
     Ok(())
 }

@@ -87,10 +87,10 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     }}
     case! {
        &eyre::Result<()>, type_name, val, {
-           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(&report)) }
+           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(report)) }
     }}
     // Special case since [str] is dynamically sized
-    if let Some(val) = (&**boxed_error).downcast_ref::<&str>() {
+    if let Some(val) = (**boxed_error).downcast_ref::<&str>() {
         formatted_error = format!("[str]: {}", *val);
     }
     Report::msg(formatted_error)

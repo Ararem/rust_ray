@@ -468,7 +468,7 @@ fn outer_render_a_frame(
             target: UI_TRACE_RENDER,
             "preparing platform for render: `platform.prepare_render()`"
         );
-        platform.prepare_render(&ui, gl_window.window());
+        platform.prepare_render(ui, gl_window.window());
         trace!(
             target: UI_TRACE_RENDER,
             "rendering imgui frame: `imgui_context.render()`"

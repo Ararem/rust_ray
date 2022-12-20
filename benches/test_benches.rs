@@ -48,8 +48,8 @@ fn bench_vec(delta: f32) {
     d.truncate(NUM_FRAME_TIMES_TO_TRACK);
     f.truncate(NUM_FRAME_TIMES_TO_TRACK);
 
-    plot_fake(&d);
-    plot_fake(&f);
+    plot_fake(d);
+    plot_fake(f);
 }
 
 fn plot_fake(dummy: &[f32]) {
@@ -71,8 +71,8 @@ fn bench_slice_deque(delta: f32) {
     d.truncate(NUM_FRAME_TIMES_TO_TRACK);
     f.truncate(NUM_FRAME_TIMES_TO_TRACK);
 
-    plot_fake(&d);
-    plot_fake(&f);
+    plot_fake(d);
+    plot_fake(f);
 }
 
 fn criterion_benchmark(criterion: &mut Criterion) {

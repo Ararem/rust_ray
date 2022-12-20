@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // p!("src:{source_path}");
         // p!("dest:{dest_path}");
         remove(format!("{}/{}", dest_path, RESOURCES_FOLDER_NAME))?; //Get rid of the old resources folder
-        copy_items(&vec![source_path], &dest_path, &options)?;
+        copy_items(&[source_path], &dest_path, &options)?;
     }
 
     shadow_rs::new()?;
