@@ -14,7 +14,6 @@ use tracing_subscriber::fmt::format::FmtSpan;
 use crate::config::tracing_config::STANDARD_FORMAT;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_error;
-use crate::helper::panic_pill::red_or_blue_pill;
 
 mod build;
 mod config;
@@ -23,7 +22,6 @@ mod helper;
 mod program;
 mod resources;
 mod ui;
-mod log;
 
 /// Main entrypoint for the program
 ///
@@ -35,7 +33,7 @@ mod log;
 fn main() -> eyre::Result<()> {
     init_eyre()?;
     init_tracing()?;
-    red_or_blue_pill();
+    helper::panic_pill::red_or_blue_pill();
 
     debug!(target: MAIN_DEBUG_GENERAL, "initialised [tracing] and [eyre], skipped cli args");
 

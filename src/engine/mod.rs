@@ -10,9 +10,7 @@ use tracing::{debug, debug_span, info_span, trace, trace_span};
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
-use crate::program::thread_messages::{
-    EngineThreadMessage, ThreadMessage, unreachable_never_should_be_disconnected,
-};
+use crate::program::thread_messages::*;
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -57,8 +55,8 @@ pub(crate) fn engine_thread(
                     );
                     break 'process_messages; // Exit the message loop, go into waiting
                 }
-                Err(TryRecvError::Disconnected) => {
-                    unreachable_never_should_be_disconnected();
+                Err(TryRecvError::Disconnected) => { // Oops!
+                    return Err(error_recv_never_should_be_disconnected());
                 }
                 Ok(message) => {
                     trace!(

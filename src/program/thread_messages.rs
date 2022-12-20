@@ -70,7 +70,7 @@ impl ThreadMessage {
         trace!(
             target: THREAD_TRACE_MESSAGE_IGNORED,
             ?self,
-            "ignoring message for {}"
+            "ignoring message for {}",
             target_thread
         );
     }
@@ -96,10 +96,31 @@ impl ThreadMessage {
 ///
 /// However, this should only happen when the threads are told to quit, after which the main function quits...
 ///
-/// Also, the main (this) thread sender should never be dropped
+/// Also, the main thread sender should never be dropped
 ///
 /// So (in working code) we should never get here
-pub(crate) fn error_never_should_be_disconnected() -> Report {
+pub(crate) fn error_recv_never_should_be_disconnected() -> Report {
+    let report = Report::msg(indoc::formatdoc! {
+        "all message channel senders were dropped: [try_recv()] returned [{0:?}] \"{0}\"",
+        ::std::sync::mpsc::TryRecvError::Disconnected
+    }).wrap_err("critical invalid state")
+      .note(indoc::formatdoc! {r"
+            ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
+            something probably went (badly) wrong somewhere else
+    "});
+    report
+}
+/// Function that contains shared code for the case when [multiqueue2::broadcast::BroadcastReceiver::try_send] returns [std::sync::mpsc::TrySendError::Disconnected] in any of the message loops
+///
+/// # ***THIS IS BAD:***
+/// Should (only) get here once all receivers have disconnected
+///
+/// However, this should only happen when the threads are told to quit, after which the main function quits...
+///
+/// Also, the main thread receiver should never be dropped until shutdown
+///
+/// So (in working code) we should never get here
+pub(crate) fn error_send_never_should_be_disconnected() -> Report {
     let report = Report::msg(indoc::formatdoc! {
         "all message channel senders were dropped: [try_recv()] returned [{0:?}] \"{0}\"",
         ::std::sync::mpsc::TryRecvError::Disconnected

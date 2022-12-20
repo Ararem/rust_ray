@@ -34,11 +34,7 @@ use crate::config::ui_config::{
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_error;
 use crate::program::program_data::ProgramData;
-use crate::program::thread_messages::{
-    error_never_should_be_disconnected, error_never_should_be_full,
-    ProgramThreadMessage, QuitAppNoErrorReason,
-    ThreadMessage, UiThreadMessage,
-};
+use crate::program::thread_messages::*;
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::ui::docking::UiDockingArea;
 use crate::ui::font_manager::FontManager;
@@ -183,6 +179,10 @@ pub(crate) fn ui_thread(
                 };
                 drop(span_obtain_data);
 
+
+                //Makes it easier to separate out frames
+                trace!(target: UI_TRACE_RENDER, "{0} BEGIN RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+
                 let render_frame_result = outer_render_a_frame(
                     &mut display,
                     &mut imgui_context,
@@ -191,6 +191,9 @@ pub(crate) fn ui_thread(
                     &mut managers,
                     &mut program_data.ui_data,
                 );
+
+                trace!(target: UI_TRACE_RENDER, "{0} END RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+
 
                 if let Err(error) = render_frame_result {
                     let error = error.wrap_err("errored while rendering frame")
@@ -222,7 +225,7 @@ pub(crate) fn ui_thread(
 
                         // Neither of these errors should happen ever, but better to be safe
                         Err(Disconnected(_failed_message)) => {
-                            event_loop_return!(Err(error_never_should_be_disconnected()));
+                            event_loop_return!(Err(error_send_never_should_be_disconnected()));
                         }
                         Err(Full(_failed_message)) => {
                             event_loop_return!(Err(error_never_should_be_full()));
@@ -276,6 +279,7 @@ fn outer_render_a_frame(
     managers: &mut UiManagers,
     ui_data: &mut UiData,
 ) -> color_eyre::Result<()> {
+
     let _span_outer_render = trace_span!(
         target: UI_TRACE_RENDER,
         "outer_render",
@@ -397,7 +401,11 @@ fn outer_render_a_frame(
         let docking_area = UiDockingArea {};
         let _dock_node = docking_area.dockspace("Main Dock Area");
 
-        build_ui(ui, managers, ui_data).wrap_err("building ui failed")?;
+        //Makes it easier to separate out frames
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} BEGIN BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+        let build_ui_result = build_ui(ui, managers, ui_data).wrap_err("building ui failed");
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} END BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+        build_ui_result?;
 
         // Technically we should only build the UI if [maybe_window_token] is [Some] ([None] means the window is hidden)
         // The window should never be hidden though, so this is a non-issue and we ignore it
@@ -565,7 +573,7 @@ fn process_messages(
                 break 'process_messages; // Exit the message loop, go into waiting
             }
             Err(TryRecvError::Disconnected) => {
-                return Some(Err(error_never_should_be_disconnected()));
+                return Some(Err(error_recv_never_should_be_disconnected()));
             }
             Ok(message) => {
                 trace!(

@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+use indoc::writedoc;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct UiData {
     pub windows: ShownWindows,
@@ -26,7 +28,9 @@ impl Default for UiData {
 
 impl Display for UiData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
-            ...
+        writedoc! {f, r#"
+            Shown Windows:
+                Demo Window: {demo}, Metrics Window: {metrics}, UI Managers Window: {managers}
+        "#, demo=self.windows.show_demo_window, metrics=self.windows.show_metrics_window, managers=self.windows.show_ui_management_window}
     }
 }

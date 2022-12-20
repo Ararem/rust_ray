@@ -10,7 +10,11 @@ macro_rules! target {
 // ===== Ui =====
 target!(UI_TRACE_EVENT_LOOP, r"Log event that traces the execution of the ui event loop. not important unless debugging the ui event loop");
 target!(UI_TRACE_RENDER, r"Log event that traces the rendering/drawing of the ui. not important unless debugging rendering issues");
-target!(UI_TRACE_BUILD_INTERFACE, r"Log event that traces the execution of the building of the ui. not important unless debugging the ui not working properly");
+target!(UI_TRACE_BUILD_INTERFACE, r"
+    Log event that traces the execution of the building of the ui.
+
+    Leave this off all the time. Like actually it's completely useless to enable it
+");
 target!(UI_DEBUG_USER_INTERACTION, r"Event for when the user does something to the ui (but why would they want to do that?)");
 target!(UI_DEBUG_GENERAL, r"General debug events relating to the UI");
 
@@ -40,7 +44,19 @@ target!(THREAD_TRACE_MUTEX_SYNC, r#"
     Events that are logged when trying to synchronise between threads using [std::sync::mutex::Mutex]
 "#);
 
-// ===== FILESYSTEM =====
+// ===== RESOURCES & FILESYSTEM =====
+target!(RESOURCES_DEBUG_LOAD, r#"
+    Events for when resources are being loaded from disk/memory/etc, or when looking for said resources
+"#);
+target!(RESOURCES_WARNING_NON_FATAL, r"
+    Warnings generated when processing resources.
+
+    Separated from [GENERAL_WARNING_NON_FATAL] since these are more of an assets issue rather than a coding issue
+");
+target!(FONT_MANAGER_TRACE_FONT_LOAD, r"
+    Trace events for when the font manager is loading fonts
+");
+
 // ===== Data/Memory =====
 target!(DATA_DEBUG_DUMP_OBJECT, r"a log event that dumps the value of some object or buffer");
 
