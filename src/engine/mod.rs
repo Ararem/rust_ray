@@ -66,11 +66,11 @@ pub(crate) fn engine_thread(
                     );
                     match message {
                         Ui(_) | Program(_) => {
-                            message.log_ignored();
+                            message.ignore();
                             continue 'process_messages;
                         }
                         Engine(engine_message) => {
-                            message.log_received();
+                            debug!(target: THREAD_DEBUG_MESSAGE_RECEIVED, ?engine_message, "got engine message");
                             match engine_message {
                                 EngineThreadMessage::ExitEngineThread => {
                                     debug!(target: THREAD_DEBUG_GENERAL, "got exit message for engine thread");

@@ -3,13 +3,11 @@
 use std::sync::Arc;
 
 use color_eyre::{Help, Report};
-use tracing::{debug, trace};
+use tracing::{trace};
 
 use ThreadMessage::{Engine, Program, Ui};
 
-use crate::helper::logging::event_targets::{
-    THREAD_DEBUG_MESSAGE_RECEIVED, THREAD_TRACE_MESSAGE_IGNORED,
-};
+use crate::helper::logging::event_targets::THREAD_TRACE_MESSAGE_IGNORED;
 
 /// Base message struct, contains variants for which thread it should be targeted at
 #[derive(Debug, Clone)]
@@ -61,7 +59,10 @@ pub(crate) enum EngineThreadMessage {
 // ========== MACROS AND FUNCTIONS ==========
 
 impl ThreadMessage {
-    pub(crate) fn log_ignored(&self) {
+    /// Consumes a [ThreadMessage], marking it as ignored
+    ///
+    /// Also logs a message that it was ignored
+    pub(crate) fn ignore(self) {
         let target_thread = match self {
             Engine(_) => "engine",
             Program(_) => "program",
@@ -71,19 +72,6 @@ impl ThreadMessage {
             target: THREAD_TRACE_MESSAGE_IGNORED,
             ?self,
             "ignoring message for {}",
-            target_thread
-        );
-    }
-    pub(crate) fn log_received(&self) {
-        let target_thread = match self {
-            Engine(_) => "engine",
-            Program(_) => "program",
-            Ui(_) => "ui",
-        };
-        debug!(
-            target: THREAD_DEBUG_MESSAGE_RECEIVED,
-            ?self,
-            "got {} message",
             target_thread
         );
     }

@@ -27,7 +27,10 @@ use crate::ui::*;
 pub(crate) mod thread_messages;
 pub mod program_data;
 
-pub fn run() -> eyre::Result<()> {
+pub type ThreadReturn = eyre::Result<()>;
+pub type ThreadHandle = JoinHandle<ThreadReturn>;
+
+pub fn run() -> ThreadReturn {
     let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
     let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init");
@@ -72,48 +75,54 @@ pub fn run() -> eyre::Result<()> {
 
     drop(span_init);
 
-    let span_create_threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads");
+    let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads").in_scope(|| -> eyre::Result<Threads>{
+        debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
+        let engine_thread_handle: ThreadHandle = {
+            let data = Arc::clone(&program_data_wrapped);
+            let sender = msg_sender.clone();
+            let receiver = msg_receiver.add_stream();
+            let barrier = Arc::clone(&thread_start_barrier);
+            thread::Builder::new()
+                .name("engine_thread".to_string())
+                .spawn(move || engine_thread(barrier, data, sender, receiver))
+                .wrap_err("failed to create engine thread")
+                .note("this error was most likely due to a failure at the OS level")?
+        };
+        debug!(
+            target: THREAD_DEBUG_GENERAL,
+            ?engine_thread_handle,
+            "created engine thread"
+        );
 
-    debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
-    let engine_thread_handle: JoinHandle<eyre::Result<()>> = {
-        let data = Arc::clone(&program_data_wrapped);
-        let sender = msg_sender.clone();
-        let receiver = msg_receiver.add_stream();
-        let barrier = Arc::clone(&thread_start_barrier);
-        thread::Builder::new()
-            .name("engine_thread".to_string())
-            .spawn(move || engine_thread(barrier, data, sender, receiver))
-            .wrap_err("failed to create engine thread")
-            .note("this error was most likely due to a failure at the OS level")?
-    };
-    debug!(
-        target: THREAD_DEBUG_GENERAL,
-        ?engine_thread_handle,
-        "created engine thread"
-    );
+        debug!(target: THREAD_DEBUG_GENERAL, "creating ui thread");
+        let ui_thread_handle: ThreadHandle = {
+            let data = Arc::clone(&program_data_wrapped);
+            let sender = msg_sender.clone();
+            let receiver = msg_receiver.add_stream();
+            let barrier = Arc::clone(&thread_start_barrier);
+            thread::Builder::new()
+                .name("ui_thread".to_string())
+                .spawn(move || ui_thread(barrier, data, sender, receiver))
+                .wrap_err("failed to create ui thread")
+                .note("this error was most likely due to a failure at the OS level")?
+        };
+        debug!(
+            target: THREAD_DEBUG_GENERAL,
+            ?ui_thread_handle,
+            "created ui thread"
+        );
 
-    debug!(target: THREAD_DEBUG_GENERAL, "creating ui thread");
-    let ui_thread_handle: JoinHandle<eyre::Result<()>> = {
-        let data = Arc::clone(&program_data_wrapped);
-        let sender = msg_sender.clone();
-        let receiver = msg_receiver.add_stream();
-        let barrier = Arc::clone(&thread_start_barrier);
-        thread::Builder::new()
-            .name("ui_thread".to_string())
-            .spawn(move || ui_thread(barrier, data, sender, receiver))
-            .wrap_err("failed to create ui thread")
-            .note("this error was most likely due to a failure at the OS level")?
-    };
-    debug!(target: THREAD_DEBUG_GENERAL, "created ui thread");
-
-    debug!(
-        target: THREAD_DEBUG_GENERAL,
-        "waiting on barrier to enable it"
-    );
-    thread_start_barrier.wait();
-    debug!(target: THREAD_DEBUG_GENERAL, "threads should now be awake");
-
-    drop(span_create_threads);
+        debug!(
+            target: THREAD_DEBUG_GENERAL,
+            "waiting on barrier to enable it"
+        );
+        thread_start_barrier.wait();
+        debug!(target: THREAD_DEBUG_GENERAL, "threads should now be awake");
+        Ok(Threads {
+            engine: engine_thread_handle,
+            ui: ui_thread_handle,
+        })
+    })?;
 
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits
@@ -154,19 +163,18 @@ pub fn run() -> eyre::Result<()> {
                     trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?message, "got message");
                     match message {
                         Ui(_) | Engine(_) => {
-                            message.log_ignored();
+                            message.ignore();
                             continue 'process_messages;
                         }
                         Program(program_message) => {
-                            message.log_received();
+                            debug!(
+                                target: THREAD_DEBUG_MESSAGE_RECEIVED,
+                                ?program_message,
+                                "got program message"
+                            );
                             match program_message {
                                 QuitAppNoError(QuitInteractionByUser) => {
-                                    handle_user_quit(
-                                        msg_sender,
-                                        msg_receiver,
-                                        &engine_thread_handle,
-                                        &ui_thread_handle,
-                                    )?;
+                                    handle_user_quit(msg_sender, msg_receiver, threads)?;
                                     break 'global;
                                 }
                                 QuitAppError(wrapped_error_report) => {
@@ -185,9 +193,7 @@ pub fn run() -> eyre::Result<()> {
         They should only ever safely exit while inside the 'process_messages loop (since that's where they're told to quit)
         So if they have finished here, that's BAAADDDD
         */
-        if let Some(report) = check_threads_are_running(&engine_thread_handle, &ui_thread_handle) {
-            return Err(report.wrap_err("failed thread status check"));
-        }
+        threads = check_threads_are_running(threads).wrap_err("failed thread status check")?;
 
         trace!(
             target: PROGRAM_TRACE_GLOBAL_LOOP,
@@ -205,36 +211,38 @@ pub fn run() -> eyre::Result<()> {
     );
 
     drop(span_run);
-    return Ok(());
+    Ok(())
 }
 
-fn check_threads_are_running(
-    engine_thread_handle: &JoinHandle<eyre::Result<()>>,
-    ui_thread_handle: &JoinHandle<eyre::Result<()>>,
-) -> Option<Report> {
+struct Threads {
+    engine: ThreadHandle,
+    ui: ThreadHandle,
+}
+
+fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
     let span = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads");
     trace!(
         target: PROGRAM_TRACE_THREAD_STATUS_POLL,
         "checking ui thread status"
     );
-    if ui_thread_handle.is_finished() {
+    if threads.ui.is_finished() {
         error!(
             target: THREAD_DEBUG_GENERAL,
             "ui thread finished early when it shouldn't have, joining to get return value"
         );
         // Thread finished so .join() should be wait-free
-        return match ui_thread_handle.join() {
+        return match threads.ui.join() {
             Ok(ret) => {
                 let error = Report::msg("ui thread finished early with return value")
                     .section(format!("Return Value:\n{ret:#?}"));
                 debug!(target: THREAD_DEBUG_GENERAL, ?error);
-                Some(error)
+                Err(error)
             }
             Err(boxed_error) => {
                 let error =
                     dyn_panic_to_report(&boxed_error).wrap_err("ui thread panicked while running");
                 debug!(target: THREAD_DEBUG_GENERAL, ?error);
-                Some(error)
+                Err(error)
             }
         };
     } else {
@@ -244,24 +252,24 @@ fn check_threads_are_running(
         );
     }
 
-    if engine_thread_handle.is_finished() {
+    if threads.engine.is_finished() {
         error!(
             target: THREAD_DEBUG_GENERAL,
             "engine thread finished early when it shouldn't have, joining to get return value"
         );
         // Thread finished so .join() should be wait-free
-        return match engine_thread_handle.join() {
+        return match threads.engine.join() {
             Ok(ret) => {
                 let error = Report::msg("engine thread finished early with return value")
                     .section(format!("Return Value:\n{ret:#?}"));
                 debug!(target: THREAD_DEBUG_GENERAL, ?error);
-                Some(error)
+                Err(error)
             }
             Err(boxed_error) => {
                 let error = dyn_panic_to_report(&boxed_error)
                     .wrap_err("engine thread panicked while running");
                 debug!(target: THREAD_DEBUG_GENERAL, ?error);
-                Some(error)
+                Err(error)
             }
         };
     } else {
@@ -272,7 +280,7 @@ fn check_threads_are_running(
     }
 
     drop(span);
-    None
+    Ok(threads)
 }
 
 fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
@@ -300,8 +308,7 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
 fn handle_user_quit(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
-    engine_thread_handle: &JoinHandle<eyre::Result<()>>,
-    ui_thread_handle: &JoinHandle<eyre::Result<()>>,
+    threads: Threads,
 ) -> eyre::Result<()> {
     info!(target: PROGRAM_INFO_LIFECYCLE, "user wants to quit");
 
@@ -321,26 +328,15 @@ fn handle_user_quit(
             debug!(target: THREAD_DEBUG_MESSAGE_SEND, ?message);
             match message_sender.try_send(message) {
                 Ok(()) => {
-                    debug!(
-                target: THREAD_DEBUG_GENERAL,
-                "ui thread signalled, joining threads"
-            );
-                    let join_result = ui_thread_handle.join();
-                    debug!(
-                target: THREAD_DEBUG_GENERAL,
-                ?join_result,
-                "ui thread joined"
-            );
+                    debug!(target: THREAD_DEBUG_GENERAL, "ui thread signalled, joining threads");
+                    let join_result = threads.ui.join();
+                    debug!(target: THREAD_DEBUG_GENERAL, ?join_result, "ui thread joined");
                     match join_result {
                         // Thread joined normally, [thread_return_value] is what the thread returned
                         Ok(thread_return_value) => {
                             match thread_return_value {
                                 Ok(return_value) => {
-                                    debug!(
-                                target: THREAD_DEBUG_GENERAL,
-                                ?return_value,
-                                "ui thread completed successfully"
-                            );
+                                    debug!(target: THREAD_DEBUG_GENERAL, ?return_value, "ui thread completed successfully");
                                 }
                                 Err(error) => {
                                     // The ui thread failed while shutting down here
@@ -354,14 +350,13 @@ fn handle_user_quit(
                             }
                         }
                         // Thread panicked while quitting
-                        Err(boxed_error) => {
+                        Err(boxed_panic) => {
                             // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                             // So we have to format it as a string
-                            let report = Report::msg(format!(
-                                "ui thread panicked while shutting down:\n{:#?}",
-                                boxed_error
-                            )).note("it is unlikely that the thread failed during normal execution, as that should have been caught earlier");
-                            debug!(target: THREAD_DEBUG_GENERAL, ?boxed_error, ?report);
+                            let report = dyn_panic_to_report(&boxed_panic)
+                                .wrap_err("ui thread panicked while shutting down")
+                                .note("it is unlikely that the thread failed during normal execution, as that should have been caught earlier");
+                            debug!(target: THREAD_DEBUG_GENERAL, ?boxed_panic, ?report);
                             return Err(report);
                         }
                     }
@@ -379,34 +374,20 @@ fn handle_user_quit(
             }
 
             Ok(())
-        })?;
+        })?; //end stop_ui
 
-        debug_span!(
-        target: THREAD_DEBUG_GENERAL,
-        "stop_engine"
-    ).in_scope(|| {
+        debug_span!(target: THREAD_DEBUG_GENERAL, "stop_engine").in_scope(|| {
             match message_sender.try_send(Engine(EngineThreadMessage::ExitEngineThread)) {
                 Ok(()) => {
-                    debug!(
-                target: THREAD_DEBUG_GENERAL,
-                "engine thread signalled, joining threads"
-            );
-                    let join_result = engine_thread_handle.join();
-                    debug!(
-                target: THREAD_DEBUG_GENERAL,
-                ?join_result,
-                "engine thread joined"
-            );
+                    debug!(target: THREAD_DEBUG_GENERAL, "engine thread signalled, joining threads");
+                    let join_result = threads.engine.join();
+                    debug!(target: THREAD_DEBUG_GENERAL, ?join_result, "engine thread joined");
                     match join_result {
                         // Thread joined normally, [thread_return_value] is what the thread returned
                         Ok(thread_return_value) => {
                             match thread_return_value {
                                 Ok(return_value) => {
-                                    debug!(
-                                target: THREAD_DEBUG_GENERAL,
-                                ?return_value,
-                                "engine thread completed successfully"
-                            );
+                                    debug!(target: THREAD_DEBUG_GENERAL, ?return_value, "engine thread completed successfully");
                                 }
                                 Err(error) => {
                                     // The engine thread failed while shutting down here
@@ -420,14 +401,12 @@ fn handle_user_quit(
                             }
                         }
                         // Thread panicked while quitting
-                        Err(boxed_error) => {
+                        Err(boxed_panic) => {
                             // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                             // So we have to format it as a string
-                            let report = Report::msg(format!(
-                                "engine thread panicked while shutting down:\n{:#?}",
-                                boxed_error
-                            ));
-                            debug!(target: THREAD_DEBUG_GENERAL, ?boxed_error, ?report);
+                            let report = dyn_panic_to_report(&boxed_panic)
+                                .wrap_err("engine thread panicked while shutting down");
+                            debug!(target: THREAD_DEBUG_GENERAL, ?boxed_panic, ?report);
                             return Err(report);
                         }
                     }
@@ -445,7 +424,9 @@ fn handle_user_quit(
             }
 
             Ok(())
-        })?;
+        })?;//end stop_engine
+
+
         // We know all is well if we get here, since we return immediately on any error when joining
         debug!(
         target: THREAD_DEBUG_GENERAL,

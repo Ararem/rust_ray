@@ -583,11 +583,11 @@ fn process_messages(
                     );
                 match message {
                     Program(_) | Engine(_) => {
-                        message.log_ignored();
+                        message.ignore();
                         continue 'process_messages;
                     }
                     Ui(ui_message) => {
-                        message.log_received();
+                        debug!(target: THREAD_DEBUG_MESSAGE_RECEIVED, ?ui_message, "got ui message");
                         return match ui_message {
                             UiThreadMessage::ExitUiThread => {
                                 debug!(target: THREAD_DEBUG_GENERAL,"got exit message for Ui thread");
