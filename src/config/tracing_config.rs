@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 use tracing_subscriber::{fmt::format::*, fmt::time::*};
+use crate::helper::logging::event_targets::*;
 
 /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
 pub struct LogTargetFilter {
@@ -12,6 +13,9 @@ impl LogTargetFilter {
     /// Creates a filter that matches if the target starts with a specified string. The input can be regex
     pub fn starts_with(start: &str, enabled: bool) -> LogTargetFilter {
         LogTargetFilter::new(format!("{}.*", start).as_str(), enabled)
+    }
+    pub fn is(val: &str, enabled: bool) -> LogTargetFilter {
+        LogTargetFilter::new(val, enabled)
     }
     /// Creates a new filter from a regex string
     pub fn new(regex: &str, enabled: bool) -> LogTargetFilter {
@@ -42,6 +46,7 @@ lazy_static! {
     ///
     /// Only the first matching filter will be used (the rest will be skipped), and if none match then the event will be logged by default.
     pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
+        LogTargetFilter::is(UI_TRACE_EVENT_LOOP, false),
     ];
 
     /// Standard format for tracing events

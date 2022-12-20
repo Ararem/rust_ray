@@ -6,7 +6,7 @@ use std::time::Duration;
 use color_eyre::eyre;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
-use tracing::{debug, debug_span, info_span, span, trace, trace_span};
+use tracing::{debug, debug_span, info_span, trace, trace_span};
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;

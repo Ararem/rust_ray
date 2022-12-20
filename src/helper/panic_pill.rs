@@ -6,7 +6,7 @@ use crate::helper::logging::event_targets::MAIN_DEBUG_GENERAL;
 use crate::helper::logging::event_targets::REALLY_FUCKING_BAD_UNREACHABLE;
 
 pub(crate) fn red_or_blue_pill() {
-    debug!(target: MAIN_DEBUG_GENERAL, "generating a red an blue pill, choose wisely");
+    debug!(target: MAIN_DEBUG_GENERAL, "generating a red and blue pill, choose wisely");
     // Got panics? We've got a pill for that!
     //
     // Custom panic hook that prints a log message and quits the whole process

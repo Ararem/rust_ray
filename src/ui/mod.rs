@@ -152,7 +152,7 @@ pub(crate) fn ui_thread(
             }
 
             glutin::event::Event::RedrawRequested(_) => {
-                let span_redraw = trace_span!(target: UI_TRACE_EVENT_LOOP, "redraw");
+                let span_redraw = trace_span!(target: UI_TRACE_EVENT_LOOP, "redraw").entered();
 
                 const MUTEX_LOCK_RETRY_DELAY: Duration = Duration::from_millis(1);
                 let span_obtain_data = trace_span!(target:THREAD_TRACE_MUTEX_SYNC, "obtain_data", ?MUTEX_LOCK_RETRY_DELAY).entered();
@@ -495,7 +495,7 @@ fn outer_render_a_frame(
 }
 
 fn build_ui(ui: &imgui::Ui, _managers: &mut UiManagers, data: &mut UiData) -> eyre::Result<()> {
-    let span_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui");
+    let span_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui").entered();
 
     const NO_SHORTCUT: &str = "N/A"; // String that we use as the shortcut text when there isn't one
 
@@ -684,7 +684,7 @@ fn process_messages(
 ///
 /// * `title` - Title of the created window
 fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
-    let span_init_ui = debug_span!(target: UI_DEBUG_GENERAL, "init_ui");
+    let span_init_ui = debug_span!(target: UI_DEBUG_GENERAL, "init_ui").entered();
 
     let mut imgui_context;
     let event_loop;

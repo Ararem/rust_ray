@@ -44,7 +44,8 @@ pub struct FontManager {
 impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
     pub fn reload_list_from_resources(&mut self) -> eyre::Result<()> {
-        let span_reload_fonts_list = debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list");
+        let span_reload_fonts_list = debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
+
         let fonts_directory_path = get_main_resource_folder_path()?.join(FONTS_PATH);
 
         debug!(
@@ -71,7 +72,7 @@ impl FontManager {
         let mut fonts: HashMap<&str, HashMap<&str, Vec<u8>>> = HashMap::new();
         debug_span!(target: RESOURCES_DEBUG_LOAD, "iter_font_dir").in_scope(||
             for file_path in fonts_dir_content.files.iter() {
-                let span_internal_iter = trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "internal_iter", ?file_path);
+                let span_internal_iter = trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "internal_iter", ?file_path).entered();
                 if !filter_regex.is_match(file_path) {
                     trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "skipping non-matching file path at {file_path}");
                     continue;
@@ -147,8 +148,9 @@ impl FontManager {
             for font_entry in fonts {
                 let span_base_font_entry = trace_span!(
                     target: FONT_MANAGER_TRACE_FONT_LOAD,
-                    format!("font_{}", font_entry.0).as_str()
-                );
+                    "process_group",
+                    base_font = font_entry.0
+                ).entered();
                 debug!(target: DATA_DEBUG_DUMP_OBJECT, ?font_entry);
 
                 let base_font_name = font_entry.0;

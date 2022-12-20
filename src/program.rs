@@ -33,7 +33,7 @@ pub type ThreadHandle = JoinHandle<ThreadReturn>;
 pub fn run() -> ThreadReturn {
     let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
-    let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init");
+    let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init").entered();
     // Create new program 'instance'
     debug!(target: PROGRAM_DEBUG_GENERAL, "creating ProgramData");
     let program_data = ProgramData {
@@ -132,7 +132,7 @@ pub fn run() -> ThreadReturn {
         "entering 'global loop"
     );
 
-    let span_global_loop = debug_span!(target: PROGRAM_DEBUG_GENERAL, "'global", ?poll_interval).entered();
+    let span_global_loop = debug_span!(target: PROGRAM_DEBUG_GENERAL, "'global").entered();
     'global: for global_iter in 0usize.. {
         let span_global_loop_inner =
             trace_span!(target: PROGRAM_TRACE_GLOBAL_LOOP, "inner", global_iter).entered();
@@ -220,7 +220,7 @@ struct Threads {
 }
 
 fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
-    let span_check_threads = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads");
+    let span_check_threads = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads").entered();
     trace!(
         target: PROGRAM_TRACE_THREAD_STATUS_POLL,
         "checking ui thread status"
@@ -252,6 +252,10 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
         );
     }
 
+    trace!(
+        target: PROGRAM_TRACE_THREAD_STATUS_POLL,
+        "checking engine thread status"
+    );
     if threads.engine.is_finished() {
         error!(
             target: THREAD_DEBUG_GENERAL,
