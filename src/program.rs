@@ -73,7 +73,7 @@ pub fn run() -> ThreadReturn {
     // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
     debug!(target: THREAD_DEBUG_GENERAL, "created thread start barrier");
 
-    drop(span_init);
+    span_init.exit();
 
     let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads").in_scope(|| -> eyre::Result<Threads>{
         debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
@@ -132,13 +132,13 @@ pub fn run() -> ThreadReturn {
         "entering 'global loop"
     );
 
-    let span_global_loop = debug_span!(target: PROGRAM_DEBUG_GENERAL, "'global", ?poll_interval);
+    let span_global_loop = debug_span!(target: PROGRAM_DEBUG_GENERAL, "'global", ?poll_interval).entered();
     'global: for global_iter in 0usize.. {
         let span_global_loop_inner =
-            trace_span!(target: PROGRAM_TRACE_GLOBAL_LOOP, "inner", global_iter);
+            trace_span!(target: PROGRAM_TRACE_GLOBAL_LOOP, "inner", global_iter).entered();
 
         // Process any messages we might have from the other threads
-        let process_messages_span =
+        let span_process_messages =
             trace_span!(target: THREAD_TRACE_MESSAGE_LOOP, "process_messages").entered();
         'process_messages: loop {
             trace!(
@@ -186,7 +186,7 @@ pub fn run() -> ThreadReturn {
                 }
             }
         } //end 'loop_messages
-        drop(process_messages_span);
+        span_process_messages.exit();
 
         /*
         Ensure the threads are OK (still running)
@@ -201,16 +201,16 @@ pub fn run() -> ThreadReturn {
             "sleeping"
         );
         thread::sleep(poll_interval);
-        drop(span_global_loop_inner);
+        span_global_loop_inner.exit();
     } //end 'global
-    drop(span_global_loop);
+    span_global_loop.exit();
 
     debug!(
         target: PROGRAM_DEBUG_GENERAL,
         "program 'global loop finished"
     );
 
-    drop(span_run);
+    span_run.exit();
     Ok(())
 }
 
@@ -220,7 +220,7 @@ struct Threads {
 }
 
 fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
-    let span = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads");
+    let span_check_threads = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads");
     trace!(
         target: PROGRAM_TRACE_THREAD_STATUS_POLL,
         "checking ui thread status"
@@ -279,7 +279,7 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
         );
     }
 
-    drop(span);
+    span_check_threads.exit();
     Ok(threads)
 }
 

@@ -68,7 +68,7 @@ fn init_tracing() -> eyre::Result<()> {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
     let standard_layer = fmt::layer()
-        .with_span_events(FmtSpan::NONE)
+        .with_span_events(FmtSpan::ACTIVE)
         .log_internal_errors(true)
         .event_format(STANDARD_FORMAT.clone())
         .with_writer(io::stdout)
@@ -84,7 +84,7 @@ fn init_tracing() -> eyre::Result<()> {
                     return filter.enabled;
                 }
             }
-            return true;
+            true
         }));
 
     let error_layer = ErrorLayer::default();

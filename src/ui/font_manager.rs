@@ -44,7 +44,7 @@ pub struct FontManager {
 impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
     pub fn reload_list_from_resources(&mut self) -> eyre::Result<()> {
-        let _span = debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list");
+        let span_reload_fonts_list = debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list");
         let fonts_directory_path = get_main_resource_folder_path()?.join(FONTS_PATH);
 
         debug!(
@@ -71,7 +71,7 @@ impl FontManager {
         let mut fonts: HashMap<&str, HashMap<&str, Vec<u8>>> = HashMap::new();
         debug_span!(target: RESOURCES_DEBUG_LOAD, "iter_font_dir").in_scope(||
             for file_path in fonts_dir_content.files.iter() {
-                let _span_internal_iter = trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "internal_iter", ?file_path);
+                let span_internal_iter = trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "internal_iter", ?file_path);
                 if !filter_regex.is_match(file_path) {
                     trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "skipping non-matching file path at {file_path}");
                     continue;
@@ -133,6 +133,7 @@ impl FontManager {
                     warn!(target: RESOURCES_WARNING_NON_FATAL, "font entry already existed for {} @ {}", base_font_name, weight_name);
                     debug!(target: RESOURCES_WARNING_NON_FATAL, ?old_data_buffer);
                 }
+                span_internal_iter.exit();
             });
 
         // Now we have loaded file data, process into Font{} structs
@@ -144,10 +145,9 @@ impl FontManager {
 
         debug_span!(target: RESOURCES_DEBUG_LOAD, "load_fonts").in_scope(|| {
             for font_entry in fonts {
-                let _span = trace_span!(
+                let span_base_font_entry = trace_span!(
                     target: FONT_MANAGER_TRACE_FONT_LOAD,
-                    "base_font_entry",
-                    base_font = font_entry.0
+                    format!("font_{}", font_entry.0).as_str()
                 );
                 debug!(target: DATA_DEBUG_DUMP_OBJECT, ?font_entry);
 
@@ -178,6 +178,8 @@ impl FontManager {
 
                 // Push the font once it's complete
                 self.fonts.push(font);
+
+                span_base_font_entry.exit();
             }
         });
 
@@ -223,6 +225,7 @@ impl FontManager {
                 }
             });
 
+        span_reload_fonts_list.exit();
         return Ok(());
     }
 
@@ -250,7 +253,7 @@ impl FontManager {
         if !self.dirty && self.current_font != None {
             return Ok(false);
         }
-        let _guard = debug_span!(target: UI_DEBUG_GENERAL, "rebuild_font").entered();
+        let span_rebuild_font = debug_span!(target: UI_DEBUG_GENERAL, "rebuild_font").entered();
 
         debug!(target: UI_DEBUG_GENERAL, "clearing font atlas");
         font_atlas.clear();
@@ -311,6 +314,7 @@ impl FontManager {
 
         self.dirty = false;
 
+        span_rebuild_font.exit();
         return Ok(true);
     }
 
@@ -332,7 +336,7 @@ impl FontManager {
 
     /// Renders the font selector, and returns the selected font
     pub fn render_font_manager(&mut self, ui: &Ui) {
-        let _span = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager");
+        let span_render_font_manager = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager");
         // NOTE: We could get away with a lot of this code, but it's safer to have it, and more informative when something happens
         if !(ui.collapsing_header("Font Manager", TreeNodeFlags::empty())) {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "font manager collapsed");

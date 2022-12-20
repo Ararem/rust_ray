@@ -43,10 +43,10 @@ pub(in crate::ui) fn clipboard_init() -> eyre::Result<ImguiClipboardSupport> {
 
 impl ClipboardBackend for ImguiClipboardSupport {
     fn get(&mut self) -> Option<String> {
-        let _span = debug_span!(target: UI_DEBUG_USER_INTERACTION, "get_clipboard").entered();
+        let span_get_clipboard = debug_span!(target: UI_DEBUG_USER_INTERACTION, "get_clipboard").entered(); //Dropped on return
         let get_result = self.backing_context.get_contents();
         debug!(target: UI_DEBUG_USER_INTERACTION, ?get_result);
-        return match get_result {
+        let maybe_text = match get_result {
             Err(boxed_error) => {
                 let report = dyn_error_to_report(&boxed_error)
                     .wrap_err("could not get clipboard text");
@@ -57,11 +57,13 @@ impl ClipboardBackend for ImguiClipboardSupport {
                 trace!(target: UI_DEBUG_USER_INTERACTION, clipboard_text, "got clipboard");
                 Some(clipboard_text)
             },
-        }
+        };
+        span_get_clipboard.exit();
+        return maybe_text;
     }
 
     fn set(&mut self, clipboard_text: &str) {
-        let span = debug_span!(target: UI_DEBUG_USER_INTERACTION, "set_clipboard", clipboard_text).entered();
+        let span_set_clipboard = debug_span!(target: UI_DEBUG_USER_INTERACTION, "set_clipboard", clipboard_text).entered();
         let set_result = self.backing_context.set_contents(clipboard_text.to_owned());
         debug!(target: UI_DEBUG_USER_INTERACTION, ?set_result);
         if let Err(boxed_error) = set_result {
@@ -72,6 +74,6 @@ impl ClipboardBackend for ImguiClipboardSupport {
         } else {
             trace!(target: UI_DEBUG_USER_INTERACTION, clipboard_text = clipboard_text, "set clipboard");
         }
-        drop(span);
+        span_set_clipboard.exit();
     }
 }
