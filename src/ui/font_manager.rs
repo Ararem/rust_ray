@@ -227,7 +227,7 @@ impl FontManager {
     }
 
     pub fn new() -> eyre::Result<Self> {
-        let mut manager = FontManager {
+        let manager = FontManager {
             fonts: vec![],
             selected_font_index: 0,
             selected_weight_index: 0,
@@ -285,7 +285,7 @@ impl FontManager {
             weight = weight.name,
             size = *size
         );
-        debug!(target: DATA_DEBUG_DUMP_OBJECT, data = debug(weight.data));
+        debug!(target: DATA_DEBUG_DUMP_OBJECT, data = ?weight.data);
 
         let full_name = format!(
             "{name} - {weight} ({size}px)",

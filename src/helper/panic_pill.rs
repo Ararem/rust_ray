@@ -10,10 +10,10 @@ pub(crate) fn red_or_blue_pill() {
     // Got panics? We've got a pill for that!
     //
     // Custom panic hook that prints a log message and quits the whole process
-    panic::update_hook(|_old_hook, panic_info|{
+    panic::set_hook(Box::new(|panic_info| {
         error!("you chose the red pill, please stand by while process is be ejected from OS matrix");
         error!(target: REALLY_FUCKING_BAD_UNREACHABLE,?panic_info, "process panicked. process will now exit");
         std::process::abort();
-    });
+    }));
     debug!(target: MAIN_DEBUG_GENERAL, "pills have been handed over");
 }

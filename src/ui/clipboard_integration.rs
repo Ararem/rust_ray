@@ -67,7 +67,7 @@ impl ClipboardBackend for ImguiClipboardSupport {
         if let Err(boxed_error) = set_result {
             let report = dyn_error_to_report(&boxed_error)
                 .wrap_err("could not set clipboard text")
-                .section(clipboard_text.header("Clipboard:"));
+                .section(clipboard_text.to_owned().header("Clipboard:"));
             warn!(target: GENERAL_WARNING_NON_FATAL, error=format_error(&report), "couldn't set clipboard")
         } else {
             trace!(target: UI_DEBUG_USER_INTERACTION, clipboard_text = clipboard_text, "set clipboard");

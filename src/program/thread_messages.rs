@@ -34,7 +34,7 @@ pub(crate) enum ProgramThreadMessage {
 }
 
 /// Reasons why the app should quit, but not because of an error (a good quit)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum QuitAppNoErrorReason {
     /// The user made an interaction that means the app should quit
     QuitInteractionByUser,
@@ -43,7 +43,7 @@ pub(crate) enum QuitAppNoErrorReason {
 // ========== UI THREAD ==========
 
 /// A message that will be read by the UI thread
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum UiThreadMessage {
     /// The UI thread should exit
     ExitUiThread,
@@ -52,7 +52,7 @@ pub(crate) enum UiThreadMessage {
 // ========== ENGINE THREAD ==========
 
 /// A message that will be read by the engine thread, and acted upon according to it's contents
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum EngineThreadMessage {
     /// The engine thread should exit
     ExitEngineThread,

@@ -1,4 +1,3 @@
-#![feature(panic_update_hook)]
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
