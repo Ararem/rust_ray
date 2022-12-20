@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 
 use fs_extra::copy_items;
-use fs_extra::dir::{CopyOptions, remove};
+use fs_extra::dir::{remove, CopyOptions};
 
 // macro_rules! p {
 //     ($($tokens: tt)*) => {

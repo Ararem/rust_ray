@@ -44,7 +44,8 @@ pub struct FontManager {
 impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
     pub fn reload_list_from_resources(&mut self) -> eyre::Result<()> {
-        let span_reload_fonts_list = debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
+        let span_reload_fonts_list =
+            debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
 
         let fonts_directory_path = get_main_resource_folder_path()?.join(FONTS_PATH);
 
@@ -150,7 +151,8 @@ impl FontManager {
                     target: FONT_MANAGER_TRACE_FONT_LOAD,
                     "process_group",
                     base_font = font_entry.0
-                ).entered();
+                )
+                .entered();
                 debug!(target: DATA_DEBUG_DUMP_OBJECT, ?font_entry);
                 //
                 let base_font_name = font_entry.0;
@@ -338,7 +340,8 @@ impl FontManager {
 
     /// Renders the font selector, and returns the selected font
     pub fn render_font_manager(&mut self, ui: &Ui) {
-        let span_render_font_manager = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager").entered();
+        let span_render_font_manager =
+            trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager").entered();
         // NOTE: We could get away with a lot of this code, but it's safer to have it, and more informative when something happens
         if !(ui.collapsing_header("Font Manager", TreeNodeFlags::empty())) {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "font manager collapsed");
@@ -455,9 +458,15 @@ impl FontManager {
             );
             *dirty = true;
         }
-        trace!(target: UI_TRACE_BUILD_INTERFACE, "[tooltip] weight selector");
+        trace!(
+            target: UI_TRACE_BUILD_INTERFACE,
+            "[tooltip] weight selector"
+        );
         if ui.is_item_hovered() {
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "[hovered] weight selector");
+            trace!(
+                target: UI_TRACE_BUILD_INTERFACE,
+                "[hovered] weight selector"
+            );
             ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
         }
 
@@ -465,13 +474,22 @@ impl FontManager {
         let size = &mut self.selected_size;
         trace!(target: UI_TRACE_BUILD_INTERFACE, "[slider] font size");
         if ui.slider("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE, size) {
-            trace!(target: UI_DEBUG_USER_INTERACTION, "changed font size to {size} px");
+            trace!(
+                target: UI_DEBUG_USER_INTERACTION,
+                "changed font size to {size} px"
+            );
             if *size < MIN_FONT_SIZE {
-                warn!(target: GENERAL_WARNING_NON_FATAL, "font size ({size}) was < MIN_FONT_SIZE ({MIN_FONT_SIZE}), clamping");
+                warn!(
+                    target: GENERAL_WARNING_NON_FATAL,
+                    "font size ({size}) was < MIN_FONT_SIZE ({MIN_FONT_SIZE}), clamping"
+                );
                 *size = MIN_FONT_SIZE;
             }
             if *size > MAX_FONT_SIZE {
-                warn!(target: GENERAL_WARNING_NON_FATAL,"font size ({size}) was > MAX_FONT_SIZE ({MAX_FONT_SIZE}), clamping");
+                warn!(
+                    target: GENERAL_WARNING_NON_FATAL,
+                    "font size ({size}) was > MAX_FONT_SIZE ({MAX_FONT_SIZE}), clamping"
+                );
                 *size = MAX_FONT_SIZE;
             }
             *dirty = true;

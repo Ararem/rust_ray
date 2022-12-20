@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use color_eyre::{Help, Report};
-use tracing::{trace};
+use tracing::trace;
 
 use ThreadMessage::{Engine, Program, Ui};
 

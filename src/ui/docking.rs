@@ -4,7 +4,7 @@
 
 use std::os::raw::c_char;
 
-use imgui::{Direction, sys};
+use imgui::{sys, Direction};
 
 /// Rust version of  the Dear ImGUI struct DockNode
 #[repr(C)]
@@ -45,10 +45,15 @@ impl DockNode {
     /// * [child_a] - Closure to build the first child (see [split_side]).
     /// * [child_b] - Closure to build the second child (opposite of [child_a])
     #[doc(alias = "DockBuilder::SplitNode")]
-    pub fn split<BuildChildA, BuildChildB>(&self, split_side: Direction, size_ratio: f32, child_a: BuildChildA, child_b: BuildChildB)
-                                           where
-                                               BuildChildA: FnOnce(DockNode),
-                                               BuildChildB: FnOnce(DockNode),
+    pub fn split<BuildChildA, BuildChildB>(
+        &self,
+        split_side: Direction,
+        size_ratio: f32,
+        child_a: BuildChildA,
+        child_b: BuildChildB,
+    ) where
+        BuildChildA: FnOnce(DockNode),
+        BuildChildB: FnOnce(DockNode),
     {
         if self.is_split() {
             // Can't split an already split node (need to split the

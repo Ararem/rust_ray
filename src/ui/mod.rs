@@ -53,10 +53,12 @@ pub(crate) fn ui_thread(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {
-    let span_ui_thread = info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
+    let span_ui_thread =
+        info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
 
     {
-        let span_sync_thread_start = debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start").entered();
+        let span_sync_thread_start =
+            debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start").entered();
         trace!(
             target: THREAD_DEBUG_GENERAL,
             "waiting for {}",
@@ -338,7 +340,8 @@ fn outer_render_a_frame(
     trace!(target: UI_TRACE_RENDER, new_frame=?ui);
     //Build the UI
     {
-        let span_outer_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "outer_build_ui").entered();
+        let span_outer_build_ui =
+            trace_span!(target: UI_TRACE_BUILD_INTERFACE, "outer_build_ui").entered();
         // Try to set our custom font
         let maybe_font_token = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "apply_custom_font")
             .in_scope(|| match managers.font_manager.get_font_id() {
@@ -516,11 +519,14 @@ fn build_ui(ui: &imgui::Ui, _managers: &mut UiManagers, data: &mut UiData) -> ey
                         None => NO_SHORTCUT.to_owned(),
                         Some(ref s) => format!("{}", s),
                     }
-                ).entered();
+                )
+                .entered();
 
                 // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
                 if let Some(keybinding) = maybe_shortcut {
-                    let span_with_shortcut = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "with_shortcut", %keybinding).entered();
+                    let span_with_shortcut =
+                        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "with_shortcut", %keybinding)
+                            .entered();
                     if ui
                         .menu_item_config(name)
                         .shortcut(keybinding.shortcut_text)
@@ -553,7 +559,8 @@ fn build_ui(ui: &imgui::Ui, _managers: &mut UiManagers, data: &mut UiData) -> ey
 
                     span_with_shortcut.exit();
                 } else {
-                    let span_no_shortcut = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "no_shortcut").entered();
+                    let span_no_shortcut =
+                        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "no_shortcut").entered();
                     if ui
                         .menu_item_config(name)
                         .shortcut(NO_SHORTCUT)

@@ -1,7 +1,7 @@
+use crate::helper::logging::event_targets::*;
 use lazy_static::lazy_static;
 use regex::Regex;
 use tracing_subscriber::{fmt::format::*, fmt::time::*};
-use crate::helper::logging::event_targets::*;
 
 /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
 pub struct LogTargetFilter {

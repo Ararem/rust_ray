@@ -75,54 +75,55 @@ pub fn run() -> ThreadReturn {
 
     span_init.exit();
 
-    let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads").in_scope(|| -> eyre::Result<Threads>{
-        debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
-        let engine_thread_handle: ThreadHandle = {
-            let data = Arc::clone(&program_data_wrapped);
-            let sender = msg_sender.clone();
-            let receiver = msg_receiver.add_stream();
-            let barrier = Arc::clone(&thread_start_barrier);
-            thread::Builder::new()
-                .name("engine_thread".to_string())
-                .spawn(move || engine_thread(barrier, data, sender, receiver))
-                .wrap_err("failed to create engine thread")
-                .note("this error was most likely due to a failure at the OS level")?
-        };
-        debug!(
-            target: THREAD_DEBUG_GENERAL,
-            ?engine_thread_handle,
-            "created engine thread"
-        );
+    let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads")
+        .in_scope(|| -> eyre::Result<Threads> {
+            debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
+            let engine_thread_handle: ThreadHandle = {
+                let data = Arc::clone(&program_data_wrapped);
+                let sender = msg_sender.clone();
+                let receiver = msg_receiver.add_stream();
+                let barrier = Arc::clone(&thread_start_barrier);
+                thread::Builder::new()
+                    .name("engine_thread".to_string())
+                    .spawn(move || engine_thread(barrier, data, sender, receiver))
+                    .wrap_err("failed to create engine thread")
+                    .note("this error was most likely due to a failure at the OS level")?
+            };
+            debug!(
+                target: THREAD_DEBUG_GENERAL,
+                ?engine_thread_handle,
+                "created engine thread"
+            );
 
-        debug!(target: THREAD_DEBUG_GENERAL, "creating ui thread");
-        let ui_thread_handle: ThreadHandle = {
-            let data = Arc::clone(&program_data_wrapped);
-            let sender = msg_sender.clone();
-            let receiver = msg_receiver.add_stream();
-            let barrier = Arc::clone(&thread_start_barrier);
-            thread::Builder::new()
-                .name("ui_thread".to_string())
-                .spawn(move || ui_thread(barrier, data, sender, receiver))
-                .wrap_err("failed to create ui thread")
-                .note("this error was most likely due to a failure at the OS level")?
-        };
-        debug!(
-            target: THREAD_DEBUG_GENERAL,
-            ?ui_thread_handle,
-            "created ui thread"
-        );
+            debug!(target: THREAD_DEBUG_GENERAL, "creating ui thread");
+            let ui_thread_handle: ThreadHandle = {
+                let data = Arc::clone(&program_data_wrapped);
+                let sender = msg_sender.clone();
+                let receiver = msg_receiver.add_stream();
+                let barrier = Arc::clone(&thread_start_barrier);
+                thread::Builder::new()
+                    .name("ui_thread".to_string())
+                    .spawn(move || ui_thread(barrier, data, sender, receiver))
+                    .wrap_err("failed to create ui thread")
+                    .note("this error was most likely due to a failure at the OS level")?
+            };
+            debug!(
+                target: THREAD_DEBUG_GENERAL,
+                ?ui_thread_handle,
+                "created ui thread"
+            );
 
-        debug!(
-            target: THREAD_DEBUG_GENERAL,
-            "waiting on barrier to enable it"
-        );
-        thread_start_barrier.wait();
-        debug!(target: THREAD_DEBUG_GENERAL, "threads should now be awake");
-        Ok(Threads {
-            engine: engine_thread_handle,
-            ui: ui_thread_handle,
-        })
-    })?;
+            debug!(
+                target: THREAD_DEBUG_GENERAL,
+                "waiting on barrier to enable it"
+            );
+            thread_start_barrier.wait();
+            debug!(target: THREAD_DEBUG_GENERAL, "threads should now be awake");
+            Ok(Threads {
+                engine: engine_thread_handle,
+                ui: ui_thread_handle,
+            })
+        })?;
 
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits
@@ -220,7 +221,8 @@ struct Threads {
 }
 
 fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
-    let span_check_threads = trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads").entered();
+    let span_check_threads =
+        trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads").entered();
     trace!(
         target: PROGRAM_TRACE_THREAD_STATUS_POLL,
         "checking ui thread status"

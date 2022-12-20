@@ -1,7 +1,7 @@
 use std::ops::DerefMut;
 use std::sync::Mutex;
 
-use criterion::{black_box, Criterion, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use lazy_static::*;
 use slice_deque::SliceDeque;
 

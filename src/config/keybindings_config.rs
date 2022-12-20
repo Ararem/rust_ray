@@ -5,12 +5,12 @@ use std::fmt::{Display, Formatter};
 pub type KEY = imgui_winit_support::winit::event::VirtualKeyCode;
 
 #[derive(Debug)]
-pub struct KeyBinding<'a>{
+pub struct KeyBinding<'a> {
     pub shortcut: KEY,
-    pub shortcut_text: &'a str
+    pub shortcut_text: &'a str,
 }
 
-impl<'a> Display for KeyBinding<'a>{
+impl<'a> Display for KeyBinding<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} ({})", self.shortcut_text, self.shortcut as i32)
     }
@@ -18,16 +18,16 @@ impl<'a> Display for KeyBinding<'a>{
 
 macro_rules! keybind {
     ($key:expr) => {
-        crate::config::keybindings_config::KeyBinding{
+        crate::config::keybindings_config::KeyBinding {
             shortcut: $key,
-            shortcut_text: stringify!($key)
+            shortcut_text: stringify!($key),
         }
     };
 }
 
 /// Normal keybindings, not specific to any super-special actions or windows
 pub mod standard {
-    use crate::config::keybindings_config::{KEY, KeyBinding};
+    use crate::config::keybindings_config::{KeyBinding, KEY};
 
     /// Toggles the visibility of the [imgui] metrics window (see [imgui::Ui::show_metrics_window()])
     pub const KEY_TOGGLE_METRICS_WINDOW: KeyBinding = keybind!(KEY::F3);

@@ -34,7 +34,10 @@ fn main() -> eyre::Result<()> {
     init_tracing()?;
     helper::panic_pill::red_or_blue_pill();
 
-    debug!(target: MAIN_DEBUG_GENERAL, "initialised [tracing] and [eyre], skipped cli args");
+    debug!(
+        target: MAIN_DEBUG_GENERAL,
+        "initialised [tracing] and [eyre], skipped cli args"
+    );
 
     let args = std::env::args();
     let args_os = std::env::args_os();
@@ -44,13 +47,20 @@ fn main() -> eyre::Result<()> {
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
     return match program::run() {
         Ok(program_return_value) => {
-            info!(target: PROGRAM_INFO_LIFECYCLE, ?program_return_value, "program completed successfully");
+            info!(
+                target: PROGRAM_INFO_LIFECYCLE,
+                ?program_return_value,
+                "program completed successfully"
+            );
             info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :)");
             Ok(program_return_value)
         }
         Err(report) => {
             let formatted_error = format_error(&report);
-            error!(target: PROGRAM_INFO_LIFECYCLE, formatted_error, "program exited unsuccessfully");
+            error!(
+                target: PROGRAM_INFO_LIFECYCLE,
+                formatted_error, "program exited unsuccessfully"
+            );
             info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :(");
             Err(report)
         }

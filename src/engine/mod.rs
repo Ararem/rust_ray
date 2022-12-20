@@ -26,7 +26,8 @@ pub(crate) fn engine_thread(
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "engine_thread").entered();
 
     {
-        let span_sync_thread_start = debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start").entered();
+        let span_sync_thread_start =
+            debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start").entered();
         trace!(
             target: THREAD_DEBUG_GENERAL,
             "waiting for {}",
