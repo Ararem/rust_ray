@@ -18,7 +18,7 @@ pub struct EngineData {}
 
 pub(crate) fn engine_thread(
     thread_start_barrier: Arc<Barrier>,
-    program_data_wrapped: Arc<Mutex<ProgramData>>,
+    _program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {

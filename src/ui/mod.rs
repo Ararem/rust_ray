@@ -333,7 +333,8 @@ fn outer_render_a_frame(
     let ui = imgui_context.new_frame();
     trace!(target: UI_TRACE_RENDER, new_frame=?ui);
     //Build the UI
-    trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui").in_scope(|| {
+    {
+        let _span_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui").entered();
         // Try to set our custom font
         let maybe_font_token = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "apply_custom_font")
             .in_scope(|| match managers.font_manager.get_font_id() {
@@ -402,9 +403,9 @@ fn outer_render_a_frame(
         let _dock_node = docking_area.dockspace("Main Dock Area");
 
         //Makes it easier to separate out frames
-        trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} BEGIN BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} BEGIN BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = ui.frame_count());
         let build_ui_result = build_ui(ui, managers, ui_data).wrap_err("building ui failed");
-        trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} END BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} END BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = ui.frame_count());
         build_ui_result?;
 
         // Technically we should only build the UI if [maybe_window_token] is [Some] ([None] means the window is hidden)
@@ -428,13 +429,11 @@ fn outer_render_a_frame(
                 "no custom font token to pop"
             );
         }
-
-        #[allow(unused)] // No compiler, you're wrong and I'm right
-        eyre::Result::<()>::Ok(())
-    })?;
+    }
 
     // Start drawing to our OpenGL context (via glium/glutin)
-    return trace_span!(target: UI_TRACE_RENDER, "draw_frame").in_scope(|| {
+    {
+        let _span_draw_frame =trace_span!(target: UI_TRACE_RENDER, "draw_frame").entered();
         let gl_window = display.gl_window();
         trace!(
             target: UI_TRACE_RENDER,
@@ -470,11 +469,12 @@ fn outer_render_a_frame(
         target.finish().wrap_err("failed to swap buffers")?;
 
         trace!(target: UI_TRACE_RENDER, "render complete");
-        Ok(())
-    });
+    }
+
+    Ok(())
 }
 
-fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyre::Result<()> {
+fn build_ui(ui: &imgui::Ui, _managers: &mut UiManagers, data: &mut UiData) -> eyre::Result<()> {
     let _span_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui");
 
     const NO_SHORTCUT: &str = "N/A"; // String that we use as the shortcut text when there isn't one
@@ -486,8 +486,8 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
 
 
     trace_span!(target: UI_TRACE_BUILD_INTERFACE, "main_menu_bar").in_scope(|| {
-        let toggle_menu_item = |name: &str, toggle: &mut bool, maybe_shortcut: Option<KeyBinding>| {
-            let _span = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "create_toggle_menu_item", name, toggle, shortcut=maybe_shortcut.map_or(NO_SHORTCUT, |s| format!("{}", s).as_str()));
+        let toggle_menu_item = |name: &str, toggle: &mut bool, maybe_shortcut: &Option<KeyBinding>| {
+            let _span = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "create_toggle_menu_item", name, toggle, shortcut=match maybe_shortcut {None => NO_SHORTCUT.to_owned(), Some(ref s) => format!("{}", s)});
 
             // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
             if let Some(keybinding) = maybe_shortcut {
@@ -517,9 +517,9 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
         ui.main_menu_bar(|| {
             ui.menu("Tools", ||
                 {
-                    toggle_menu_item("Metrics", show_metrics_window, Some(KEY_TOGGLE_METRICS_WINDOW));
-                    toggle_menu_item("Demo Window", show_demo_window, Some(KEY_TOGGLE_DEMO_WINDOW));
-                    toggle_menu_item("UI Management", show_ui_management_window, Some(KEY_TOGGLE_UI_MANAGERS_WINDOW));
+                    toggle_menu_item("Metrics", show_metrics_window, &Some(KEY_TOGGLE_METRICS_WINDOW));
+                    toggle_menu_item("Demo Window", show_demo_window, &Some(KEY_TOGGLE_DEMO_WINDOW));
+                    toggle_menu_item("UI Management", show_ui_management_window, &Some(KEY_TOGGLE_UI_MANAGERS_WINDOW));
                 });
         })
     });
@@ -548,7 +548,7 @@ fn build_ui(ui: &imgui::Ui, managers: &mut UiManagers, data: &mut UiData) -> eyr
 /// [None] - Do nothing
 /// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
 fn process_messages(
-    message_sender: &BroadcastSender<ThreadMessage>,
+    _message_sender: &BroadcastSender<ThreadMessage>,
     message_receiver: &BroadcastReceiver<ThreadMessage>,
 ) -> Option<eyre::Result<()>> {
     let _span = trace_span!(
@@ -682,7 +682,7 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     let imgui_log_path = PathBuf::from(IMGUI_LOG_FILE_PATH);
     debug!(
         target: UI_DEBUG_GENERAL,
-        ?imgui_settings_path,
+        ?imgui_log_path,
         "setting [imgui] log path"
     );
     imgui_context.set_log_filename(imgui_log_path);
