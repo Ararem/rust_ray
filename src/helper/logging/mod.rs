@@ -23,6 +23,7 @@ pub fn format_error_string(report: &Report) -> String {
 }
 
 /// Function to convert a boxed error (`&Box<dyn Error>`) to an owned [Report]
+#[allow(clippy::borrowed_box)] // Can't do it because it's a dyn Trait, also needs this signature for compat reasons
 pub fn dyn_error_to_report(error: &Box<dyn Error>) -> Report {
     let formatted_error = match ERROR_LOG_STYLE {
         ErrorLogStyle::Short => {
@@ -38,8 +39,8 @@ pub fn dyn_error_to_report(error: &Box<dyn Error>) -> Report {
             format!("{error:#?}")
         }
     };
-    return Report::msg(formatted_error)
-        .note("this error was converted from a `&Box<dyn Error>`, information may be missing and/or incorrect");
+    Report::msg(formatted_error)
+        .note("this error was converted from a `&Box<dyn Error>`, information may be missing and/or incorrect")
 }
 
 /// Function to convert a boxed panic error (`&Box<dyn Any + Send>`) to an owned [Report]
@@ -47,8 +48,7 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     // Default case
     let mut formatted_error = formatdoc! {r"
         <unable to convert panic, does not implement any known types>
-     "}
-    .to_string();
+     "};
     macro_rules! case {
         ($( &$type:ty )| *, $type_str:ident, $val:ident, $case:expr) => {$(
             //When the [Box] contains an object T -> &T
@@ -93,6 +93,6 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     if let Some(val) = (&**boxed_error).downcast_ref::<&str>() {
         formatted_error = format!("[str]: {}", *val);
     }
-    return Report::msg(formatted_error)
-        .note("this error was converted from a `&Box<dyn Any+Send>`, information may be missing and/or incorrect");
+    Report::msg(formatted_error)
+        .note("this error was converted from a `&Box<dyn Any+Send>`, information may be missing and/or incorrect")
 }

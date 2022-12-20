@@ -152,7 +152,7 @@ impl FontManager {
                     base_font = font_entry.0
                 ).entered();
                 debug!(target: DATA_DEBUG_DUMP_OBJECT, ?font_entry);
-
+                //
                 let base_font_name = font_entry.0;
                 let mut font = Font {
                     name: base_font_name.to_string(),
@@ -252,7 +252,7 @@ impl FontManager {
     /// If this returns `Ok(true)`, you ***MUST*** call `renderer.reload_font_texture(imgui_context)` or the app will crash
     pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlas) -> eyre::Result<bool> {
         // Don't need to update if we already have a font and we're not dirty
-        if !self.dirty && self.current_font != None {
+        if !self.dirty && self.current_font.is_some() {
             return Ok(false);
         }
         let span_rebuild_font = debug_span!(target: UI_DEBUG_GENERAL, "rebuild_font").entered();
@@ -263,8 +263,8 @@ impl FontManager {
         let fonts = &mut self.fonts;
         let font_index = &mut self.selected_font_index;
 
-        if fonts.len() == 0 {
-            let error = Report::msg("could not rebuild font: not fonts loaded")
+        if fonts.is_empty() {
+            let error = Report::msg("could not rebuild font: no fonts loaded (`fonts.is_empty() == true`)")
                 .suggestion("try ensuring that [reload_list_from_resources] has been called, and that it loaded fonts correctly (completes without error)");
             return Err(error);
         }
@@ -338,7 +338,7 @@ impl FontManager {
 
     /// Renders the font selector, and returns the selected font
     pub fn render_font_manager(&mut self, ui: &Ui) {
-        let span_render_font_manager = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager");
+        let span_render_font_manager = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager").entered();
         // NOTE: We could get away with a lot of this code, but it's safer to have it, and more informative when something happens
         if !(ui.collapsing_header("Font Manager", TreeNodeFlags::empty())) {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "font manager collapsed");
@@ -481,6 +481,7 @@ impl FontManager {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "[hovered] font size");
             ui.tooltip_text("Change the size of the font (in logical pixels)");
         }
+        span_render_font_manager.exit();
     }
 }
 
