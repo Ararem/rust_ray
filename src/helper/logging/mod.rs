@@ -3,13 +3,17 @@ use std::error::Error;
 
 use color_eyre::{eyre, Help, Report};
 use indoc::formatdoc;
+use tracing::field::{display, DisplayValue};
 
-use crate::config::tracing_config::{ERROR_LOG_STYLE, ErrorLogStyle};
+use crate::config::tracing_config::{ErrorLogStyle, ERROR_LOG_STYLE};
 
 pub(crate) mod event_targets;
 
 /// Function that logs an error in whichever way the app is configured to log errors
-pub fn format_error(report: &Report) -> String {
+pub fn format_error(report: &Report) -> DisplayValue<String> {
+    display(format_error_string(report))
+}
+pub fn format_error_string(report: &Report) -> String {
     match ERROR_LOG_STYLE {
         ErrorLogStyle::Short => format!("{}", report),
         ErrorLogStyle::ShortWithCause => format!("{:#}", report),
@@ -43,7 +47,8 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     // Default case
     let mut formatted_error = formatdoc! {r"
         <unable to convert panic, does not implement any known types>
-     "}.to_string();
+     "}
+    .to_string();
     macro_rules! case {
         ($( &$type:ty )| *, $type_str:ident, $val:ident, $case:expr) => {$(
             //When the [Box] contains an object T -> &T
@@ -73,17 +78,17 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     }}
     // Special cases
     case! {
-        &(), type_name, _val, {
-            format!("[{type_name}]: ()")
-        }}
+    &(), type_name, _val, {
+        format!("[{type_name}]: ()")
+    }}
     case! {
-        &Report, type_name, val, {
-            format!("[{type_name}]: {}", format_error(val))
-     }}
+       &Report, type_name, val, {
+           format!("[{type_name}]: {}", format_error(val))
+    }}
     case! {
-        &eyre::Result<()>, type_name, val, {
-            match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(&report)) }
-     }}
+       &eyre::Result<()>, type_name, val, {
+           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(&report)) }
+    }}
     // Special case since [str] is dynamically sized
     if let Some(val) = (&**boxed_error).downcast_ref::<&str>() {
         formatted_error = format!("[str]: {}", *val);

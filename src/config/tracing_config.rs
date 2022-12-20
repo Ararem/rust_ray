@@ -36,7 +36,7 @@ pub enum ErrorLogStyle {
     Debug,
 }
 
-pub static ERROR_LOG_STYLE: ErrorLogStyle = ErrorLogStyle::Short;
+pub static ERROR_LOG_STYLE: ErrorLogStyle = ErrorLogStyle::WithBacktrace;
 
 lazy_static! {
 
@@ -47,6 +47,7 @@ lazy_static! {
     /// Only the first matching filter will be used (the rest will be skipped), and if none match then the event will be logged by default.
     pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
         LogTargetFilter::is(UI_TRACE_EVENT_LOOP, false),
+        LogTargetFilter::is(THREAD_TRACE_MESSAGE_LOOP, false),
     ];
 
     /// Standard format for tracing events
