@@ -108,7 +108,7 @@ impl FontManager {
                 if let Some(pat) = fonts_directory_path.to_str() {
                     weight_name = weight_name
                         .trim_start_matches(pat)
-                        .trim_start_matches(&['/', '\\']);
+                        .trim_start_matches(['/', '\\']);
                 } else {
                     trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "could not trim file path: could not convert base resources path to valid  UTF-8 [&str]")
                 }
@@ -228,7 +228,7 @@ impl FontManager {
             });
 
         span_reload_fonts_list.exit();
-        return Ok(());
+        Ok(())
     }
 
     pub fn new() -> eyre::Result<Self> {
@@ -241,7 +241,7 @@ impl FontManager {
             current_font: None,
             dirty: true,
         };
-        return Ok(manager);
+        Ok(manager)
     }
 
     /// Rebuilds the font texture if required
@@ -317,7 +317,7 @@ impl FontManager {
         self.dirty = false;
 
         span_rebuild_font.exit();
-        return Ok(true);
+        Ok(true)
     }
 
     pub fn get_font_id(&mut self) -> eyre::Result<&FontId> {
