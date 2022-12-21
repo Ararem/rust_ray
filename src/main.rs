@@ -96,7 +96,6 @@ fn init_tracing() -> eyre::Result<()> {
             }
             true
         }));
-
     let error_layer = ErrorLayer::default();
 
     tracing_subscriber::registry()

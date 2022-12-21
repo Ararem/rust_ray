@@ -1886,8 +1886,7 @@ dependencies = [
  "pretty_assertions",
  "rand",
  "regex",
- "shadow-rs 0.18.0",
- "shadow-rs 0.19.0",
+ "shadow-rs",
  "slice-deque",
  "tracing",
  "tracing-error",
@@ -2075,19 +2074,6 @@ name = "sha1_smol"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae1a47186c03a32177042e55dbc5fd5aee900b8e0069a8d70fba96a9375cd012"
-
-[[package]]
-name = "shadow-rs"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bf8e33626554dd9027d240a3b91d73be43054c0f9ef645cdf0483b6ebe822fa"
-dependencies = [
- "const_format",
- "git2",
- "is_debug",
- "time 0.3.17",
- "tzdb",
-]
 
 [[package]]
 name = "shadow-rs"
