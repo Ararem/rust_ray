@@ -9,6 +9,7 @@ use tracing::level_filters::LevelFilter;
 use tracing::*;
 use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::try_init;
 
 use crate::config::tracing_config::STANDARD_FORMAT;
 use crate::helper::logging::event_targets::*;
@@ -101,6 +102,7 @@ fn init_tracing() -> eyre::Result<()> {
     tracing_subscriber::registry()
         .with(standard_layer)
         .with(error_layer)
+        // .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
         .try_init()?;
 
     Ok(())

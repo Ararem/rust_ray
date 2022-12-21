@@ -47,11 +47,12 @@ lazy_static! {
     /// Only the first matching filter will be used (the rest will be skipped), and if none match then the event will be logged by default.
     pub static ref LOG_FILTERS: Vec<LogTargetFilter> = vec![
         //Standard, these are almost always unnecessary
+        // Most of these are here just-in-case, or for profiling (like inferno/[tracing-flame])
         LogTargetFilter::is(UI_TRACE_EVENT_LOOP, false),
         LogTargetFilter::is(UI_TRACE_BUILD_INTERFACE, false),
         LogTargetFilter::is(UI_TRACE_RENDER, false),
         LogTargetFilter::is(THREAD_TRACE_MESSAGE_LOOP, false),
-        // LogTargetFilter::is(THREAD_TRACE_MUTEX_SYNC, false),
+        LogTargetFilter::is(THREAD_TRACE_MUTEX_SYNC, false),
         LogTargetFilter::is(DATA_DEBUG_DUMP_OBJECT, false),
         LogTargetFilter::is(PROGRAM_TRACE_GLOBAL_LOOP, false),
         LogTargetFilter::is(ENGINE_TRACE_GLOBAL_LOOP, false),
