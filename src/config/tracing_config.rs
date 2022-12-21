@@ -51,12 +51,12 @@ lazy_static! {
         LogTargetFilter::is(UI_TRACE_BUILD_INTERFACE, false),
         LogTargetFilter::is(UI_TRACE_RENDER, false),
         LogTargetFilter::is(THREAD_TRACE_MESSAGE_LOOP, false),
-        LogTargetFilter::is(THREAD_TRACE_MUTEX_SYNC, false),
+        // LogTargetFilter::is(THREAD_TRACE_MUTEX_SYNC, false),
         LogTargetFilter::is(DATA_DEBUG_DUMP_OBJECT, false),
         LogTargetFilter::is(PROGRAM_TRACE_GLOBAL_LOOP, false),
         LogTargetFilter::is(ENGINE_TRACE_GLOBAL_LOOP, false),
         LogTargetFilter::is(THREAD_TRACE_MESSAGE_IGNORED, false),
-        // LogTargetFilter::is(PROGRAM_TRACE_THREAD_STATUS_POLL, false),
+        LogTargetFilter::is(PROGRAM_TRACE_THREAD_STATUS_POLL, false),
     ];
 
     /// Standard format for tracing events

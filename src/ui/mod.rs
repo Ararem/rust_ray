@@ -21,6 +21,7 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn};
+use tracing::field::Empty;
 
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
@@ -156,32 +157,39 @@ pub(crate) fn ui_thread(
             glutin::event::Event::RedrawRequested(_) => {
                 let span_redraw = trace_span!(target: UI_TRACE_EVENT_LOOP, "redraw").entered();
 
-                const MUTEX_LOCK_RETRY_DELAY: Duration = Duration::from_millis(1);
-                let span_obtain_data = trace_span!(target:THREAD_TRACE_MUTEX_SYNC, "obtain_data", ?MUTEX_LOCK_RETRY_DELAY).entered();
-                let mut program_data = loop {
-                    match program_data_wrapped.try_lock() {
-                        //Shouldn't get here, since the engine/main threads shouldn't panic (and the app should quit if they do)
-                        Err(TryLockError::Poisoned(_)) => {
-                            let report = Report::msg("program data mutex poisoned")
-                                .note("another thread panicked while holding the lock")
-                                .suggestion("the error did not occur here (and has nothing to do with here), check the other threads and their logs")
-                                .wrap_err("could not lock program data mutex")
-                                .wrap_err("could not obtain program data");
-                            error!(target: DOMINO_EFFECT_FAILURE, ?report);
-                            event_loop_return!(Err(report));
+                let mut program_data = {
+                    const MUTEX_LOCK_RETRY_DELAY: Duration = Duration::from_millis(1);
+
+                    let span_obtain_data = trace_span!(target:THREAD_TRACE_MUTEX_SYNC, "obtain_data", ?MUTEX_LOCK_RETRY_DELAY, tries = Empty, time_taken_to_obtain = Empty).entered();
+
+                    let mut tries = 0;
+                    let start = Instant::now();
+                    let mut program_data = loop {
+                        tries += 1;
+                        match program_data_wrapped.try_lock() {
+                            //Shouldn't get here, since the engine/main threads shouldn't panic (and the app should quit if they do)
+                            Err(TryLockError::Poisoned(_)) => {
+                                let report = Report::msg("program data mutex poisoned").note("another thread panicked while holding the lock").suggestion("the error did not occur here (and has nothing to do with here), check the other threads and their logs").wrap_err("could not lock program data mutex").wrap_err("could not obtain program data");
+                                error!(target: DOMINO_EFFECT_FAILURE, ?report);
+                                event_loop_return!(Err(report));
+                            }
+                            Err(TryLockError::WouldBlock) => {
+                                trace!(target: THREAD_TRACE_MUTEX_SYNC, "mutex locked, waiting and retrying");
+                                sleep(MUTEX_LOCK_RETRY_DELAY);
+                                continue;
+                            }
+                            Ok(data) => {
+                                trace!(target: THREAD_TRACE_MUTEX_SYNC, ?data, "obtained program data");
+                                break data;
+                            }
                         }
-                        Err(TryLockError::WouldBlock) => {
-                            trace!(target: THREAD_TRACE_MUTEX_SYNC, "mutex locked, waiting and retrying");
-                            sleep(MUTEX_LOCK_RETRY_DELAY);
-                            continue;
-                        }
-                        Ok(data) => {
-                            trace!(target: THREAD_TRACE_MUTEX_SYNC, ?data, "obtained program data");
-                            break data;
-                        }
-                    }
+                    };
+                    span_obtain_data.record("tries", tries);
+                    span_obtain_data.record("time_taken_to_obtain", tracing::field::debug(Instant::now() - start));
+                    span_obtain_data.exit();
+
+                    program_data
                 };
-                span_obtain_data.exit();
 
 
                 // Makes it easier to separate out frames
@@ -290,9 +298,11 @@ fn outer_render_a_frame(
     let span_outer_render = trace_span!(
         target: UI_TRACE_RENDER,
         "outer_render",
-        frame = imgui_context.frame_count()
+        frame = imgui_context.frame_count() + 1, // haven't called [new_frame()] yet, so the count hasn't incremented
+        "time_to_render" = Empty
     )
     .entered();
+    let start_outer_render = Instant::now();
 
     trace_span!(target: UI_TRACE_RENDER, "maybe_rebuild_font").in_scope(|| {
         let fonts = imgui_context.fonts();
