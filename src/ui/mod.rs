@@ -34,24 +34,23 @@ use crate::config::ui_config::{
 };
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_error;
+use crate::program::program_data::ProgramData;
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::program::thread_messages::*;
 use crate::ui::docking::UiDockingArea;
 use crate::ui::font_manager::FontManager;
+use crate::ui::ui_data::UiData;
 use crate::ui::ui_system::{UiBackend, UiManagers, UiSystem};
 
 mod clipboard_integration;
 mod docking;
 mod font_manager;
+pub mod ui_data;
 mod ui_system;
-mod ui_data;
-
-pub use ui_data::*;
-use crate::thread_data::ThreadData;
 
 pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,
-    program_data_wrapped: Arc<Mutex<ThreadData>>,
+    program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> eyre::Result<()> {

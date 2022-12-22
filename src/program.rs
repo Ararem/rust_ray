@@ -7,9 +7,11 @@ use std::time::Duration;
 use color_eyre::eyre::WrapErr;
 use color_eyre::{eyre, Help, Report, SectionExt};
 use indoc::formatdoc;
-use multiqueue2::{BroadcastReceiver, BroadcastSender};
-use tracing::{debug, debug_span, error, info, trace, trace_span};
+use multiqueue2::{broadcast_queue, BroadcastReceiver, BroadcastSender};
+use nameof::name_of;
+use tracing::{debug, debug_span, error, info, info_span, trace, trace_span};
 
+use program_data::ProgramData;
 use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
 
@@ -18,18 +20,60 @@ use crate::helper::logging::event_targets::*;
 use crate::helper::logging::{dyn_panic_to_report, format_error};
 use crate::program::thread_messages::ThreadMessage::*;
 use crate::program::thread_messages::*;
+use crate::ui::ui_data::UiData;
 use crate::ui::*;
 
 #[macro_use]
 pub(crate) mod thread_messages;
-mod program_data;
-pub use program_data::*;
+pub mod program_data;
 
 pub type ThreadReturn = eyre::Result<()>;
 pub type ThreadHandle = JoinHandle<ThreadReturn>;
 
 pub fn run() -> ThreadReturn {
+    let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
+    let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init").entered();
+    // Create new program 'instance'
+    debug!(target: PROGRAM_DEBUG_GENERAL, "creating ProgramData");
+    let program_data = ProgramData {
+        ui_data: UiData::default(),
+        engine_data: EngineData {},
+    };
+    debug!(target: PROGRAM_DEBUG_GENERAL, ?program_data);
+
+    // Wrap the program data inside an Arc(Mutex(T))
+    // This allows us to:
+    // (Arc): Share a reference of the Mutex(ProgramData) across the threads safely
+    // (Mutex): Use that reference to give a single thread access to the ProgramData at one time
+    debug!(
+        target: PROGRAM_DEBUG_GENERAL,
+        "wrapping program data for thread-safety"
+    );
+    let program_data_wrapped = Arc::new(Mutex::new(program_data));
+    debug!(target: PROGRAM_DEBUG_GENERAL, ?program_data_wrapped);
+
+    // The engine/ui threads use the command_sender to send messages back to the main thread, in order to do stuff (like quit the app)
+    debug!(
+        target: THREAD_DEBUG_MESSENGER_LIFETIME,
+        "creating MPMC channel for thread communication"
+    );
+    let (msg_sender, msg_receiver) = broadcast_queue::<ThreadMessage>(100);
+    debug!(
+        target: THREAD_DEBUG_MESSENGER_LIFETIME,
+        "created MPMC channel"
+    );
+
+    // This barrier blocks our UI and engine thread from starting until the program is ready for them
+    debug!(
+        target: THREAD_DEBUG_GENERAL,
+        "creating thread start barrier for threads"
+    );
+    let thread_start_barrier = Arc::new(Barrier::new(3));
+    // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
+    debug!(target: THREAD_DEBUG_GENERAL, "created thread start barrier");
+
+    span_init.exit();
 
     let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads")
         .in_scope(|| -> eyre::Result<Threads> {
@@ -51,8 +95,8 @@ pub fn run() -> ThreadReturn {
                 "created engine thread"
             );
 
-            debug!(target: THREAD_DEBUG_GENERAL, "creating program thread");
-            let program_thread_handle: ThreadHandle = {
+            debug!(target: THREAD_DEBUG_GENERAL, "creating ui thread");
+            let ui_thread_handle: ThreadHandle = {
                 let data = Arc::clone(&program_data_wrapped);
                 let sender = msg_sender.clone();
                 let receiver = msg_receiver.add_stream();
@@ -65,8 +109,8 @@ pub fn run() -> ThreadReturn {
             };
             debug!(
                 target: THREAD_DEBUG_GENERAL,
-                ?program_thread_handle,
-                "created program thread"
+                ?ui_thread_handle,
+                "created ui thread"
             );
 
             debug!(
@@ -77,10 +121,9 @@ pub fn run() -> ThreadReturn {
             debug!(target: THREAD_DEBUG_GENERAL, "threads should now be awake");
             Ok(Threads {
                 engine: engine_thread_handle,
-                ui: program_thread_handle,
+                ui: ui_thread_handle,
             })
         })?;
-    thread::current()
 
     let poll_interval = Duration::from_millis(1000);
     // Should loop until program exits

@@ -13,7 +13,6 @@ use tracing_subscriber::fmt::format::FmtSpan;
 use crate::config::tracing_config::STANDARD_FORMAT;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_error;
-use crate::program::thread_data::ThreadData;
 
 mod build;
 mod config;
@@ -22,7 +21,6 @@ mod helper;
 mod program;
 mod resources;
 mod ui;
-mod thread_data;
 
 /// Main entrypoint for the program
 ///
@@ -45,51 +43,6 @@ fn main() -> eyre::Result<()> {
     let args_os = std::env::args_os();
     debug!(target: MAIN_DEBUG_GENERAL, ?args, ?args_os, "command line");
     debug!(target: MAIN_DEBUG_GENERAL, "core init done");
-
-
-    let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init").entered();
-    // Create new program 'instance'
-    debug!(target: PROGRAM_DEBUG_GENERAL, "creating ProgramData");
-    let program_data = ThreadData {
-        ui_data: UiData::default(),
-        engine_data: EngineData {},
-    };
-    debug!(target: PROGRAM_DEBUG_GENERAL, ?program_data);
-
-    // Wrap the program data inside an Arc(Mutex(T))
-    // This allows us to:
-    // (Arc): Share a reference of the Mutex(ProgramData) across the threads safely
-    // (Mutex): Use that reference to give a single thread access to the ProgramData at one time
-    debug!(
-        target: PROGRAM_DEBUG_GENERAL,
-        "wrapping program data for thread-safety"
-    );
-    let program_data_wrapped = Arc::new(Mutex::new(program_data));
-    debug!(target: PROGRAM_DEBUG_GENERAL, ?program_data_wrapped);
-
-    // The engine/ui threads use the command_sender to send messages back to the main thread, in order to do stuff (like quit the app)
-    debug!(
-        target: THREAD_DEBUG_MESSENGER_LIFETIME,
-        "creating MPMC channel for thread communication"
-    );
-    let (msg_sender, msg_receiver) = broadcast_queue::<ThreadMessage>(100);
-    debug!(
-        target: THREAD_DEBUG_MESSENGER_LIFETIME,
-        "created MPMC channel"
-    );
-
-    // This barrier blocks our UI and engine thread from starting until the program is ready for them
-    debug!(
-        target: THREAD_DEBUG_GENERAL,
-        "creating thread start barrier for threads"
-    );
-    let thread_start_barrier = Arc::new(Barrier::new(3));
-    // 3 = 1 (engine) + 1 (ui) + 1 (main thread)
-    debug!(target: THREAD_DEBUG_GENERAL, "created thread start barrier");
-
-    span_init.exit();
-
-
 
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
     return match program::run() {
