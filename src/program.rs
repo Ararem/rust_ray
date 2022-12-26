@@ -1,4 +1,4 @@
-use std::sync::mpsc::{TryRecvError, TrySendError::*};
+use std::sync::mpsc::{TrySendError::*};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
@@ -16,6 +16,7 @@ use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
 
 use crate::engine::*;
+use crate::FallibleFn;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::{dyn_panic_to_report, format_error};
 use crate::program::thread_messages::ThreadMessage::*;
@@ -27,7 +28,7 @@ use crate::ui::*;
 pub(crate) mod thread_messages;
 pub mod program_data;
 
-pub type ThreadReturn = eyre::Result<()>;
+pub type ThreadReturn = FallibleFn;
 pub type ThreadHandle = JoinHandle<ThreadReturn>;
 
 pub fn run() -> ThreadReturn {
@@ -136,55 +137,39 @@ pub fn run() -> ThreadReturn {
     let span_global_loop = debug_span!(target: PROGRAM_DEBUG_GENERAL, "'global").entered();
     'global: for global_iter in 0usize.. {
         let span_global_loop_inner =
-            trace_span!(target: PROGRAM_TRACE_GLOBAL_LOOP, "inner", global_iter).entered();
+            trace_span!(target: PROGRAM_TRACE_GLOBAL_LOOP, "inner", %global_iter).entered();
 
         // Process any messages we might have from the other threads
         let span_process_messages =
             trace_span!(target: THREAD_TRACE_MESSAGE_LOOP, "process_messages").entered();
         'process_messages: loop {
-            trace!(
-                target: THREAD_TRACE_MESSAGE_LOOP,
-                "message_receiver.try_recv()"
-            );
-            // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
-            let maybe_message = msg_receiver.try_recv();
-            trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?maybe_message);
-            match maybe_message {
-                Err(TryRecvError::Empty) => {
-                    trace!(
-                        target: THREAD_TRACE_MESSAGE_LOOP,
-                        "no messages (Err::Empty)"
-                    );
-                    break 'process_messages; // Exit the message loop, go into waiting
-                }
-                Err(TryRecvError::Disconnected) => {
-                    return Err(error_recv_never_should_be_disconnected());
-                }
-                Ok(message) => {
-                    trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?message, "got message");
-                    match message {
-                        Ui(_) | Engine(_) => {
-                            message.ignore();
-                            continue 'process_messages;
-                        }
-                        Program(program_message) => {
-                            debug!(
-                                target: THREAD_DEBUG_MESSAGE_RECEIVED,
-                                ?program_message,
-                                "got program message"
-                            );
-                            match program_message {
-                                QuitAppNoError(QuitInteractionByUser) => {
-                                    handle_user_quit(msg_sender, msg_receiver, threads)?;
-                                    break 'global;
-                                }
-                                QuitAppError(wrapped_error_report) => {
-                                    return Err(handle_error_quit(wrapped_error_report))
-                                }
+            if let Some(message) = receive_message(&msg_receiver)? {
+                match message {
+                    Ui(_) | Engine(_) => {
+                        message.ignore();
+                        continue 'process_messages;
+                    }
+                    Program(program_message) => {
+                        debug!(
+                            target: THREAD_DEBUG_MESSAGE_RECEIVED,
+                            ?program_message,
+                            "got program message"
+                        );
+                        match program_message {
+                            QuitAppNoError(QuitInteractionByUser) => {
+                                handle_user_quit(msg_sender, msg_receiver, threads)?;
+                                break 'global;
+                            }
+                            QuitAppError(wrapped_error_report) => {
+                                return Err(handle_error_quit(wrapped_error_report))
                             }
                         }
                     }
                 }
+            }
+            // No messages waiting
+            else {
+                break 'process_messages;
             }
         } //end 'loop_messages
         span_process_messages.exit();
@@ -292,7 +277,7 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
 fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
     info!(target: PROGRAM_INFO_LIFECYCLE, "quitting app due to error");
     // try and return the error directly, but just in case we can't (which should never happen), print the error and return a generic one
-    return match Arc::try_unwrap(wrapped_error_report) {
+    match Arc::try_unwrap(wrapped_error_report) {
         //Only one strong reference to the arc ([wrapped_error_report]), so we got ownership
         // Should always happen
         Ok(owned_error) => owned_error.wrap_err("quitting app due to internal error"),
@@ -308,14 +293,14 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
                 .note("the displayed error may not be correct and/or complete")
                 .warning(warn)
         }
-    };
+    }
 }
 
 fn handle_user_quit(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
     threads: Threads,
-) -> eyre::Result<()> {
+) -> FallibleFn {
     info!(target: PROGRAM_INFO_LIFECYCLE, "user wants to quit");
 
     // We have to unsubscribe from out receiver or it blocks the other threads because we haven't received the [ExitXXXThread] messages

@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::TrySendError::{Disconnected, Full};
 use std::sync::{Arc, Barrier, Mutex, TryLockError};
 use std::thread::sleep;
@@ -20,14 +19,9 @@ use imgui_winit_support::winit::window::WindowBuilder;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
+use tracing::field::{debug, Empty};
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn};
-use tracing::field::Empty;
 
-use ProgramThreadMessage::QuitAppNoError;
-use QuitAppNoErrorReason::QuitInteractionByUser;
-
-use crate::config::keybindings_config::standard::*;
-use crate::config::keybindings_config::KeyBinding;
 use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
 use crate::config::ui_config::{
     DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
@@ -37,11 +31,16 @@ use crate::helper::logging::format_error;
 use crate::program::program_data::ProgramData;
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::program::thread_messages::*;
+use crate::ui::build_ui_impl::build_ui;
 use crate::ui::docking::UiDockingArea;
 use crate::ui::font_manager::FontManager;
 use crate::ui::ui_data::UiData;
-use crate::ui::ui_system::{UiBackend, UiManagers, UiSystem};
+use crate::ui::ui_system::{FrameInfo, UiBackend, UiManagers, UiSystem};
+use crate::FallibleFn;
+use ProgramThreadMessage::QuitAppNoError;
+use QuitAppNoErrorReason::QuitInteractionByUser;
 
+mod build_ui_impl;
 mod clipboard_integration;
 mod docking;
 mod font_manager;
@@ -53,7 +52,7 @@ pub(crate) fn ui_thread(
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
-) -> eyre::Result<()> {
+) -> FallibleFn {
     let span_ui_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
 
@@ -98,7 +97,7 @@ pub(crate) fn ui_thread(
     Let the event loop take ownership of `result_ref`, and use `result` afterwards.
     Neat!
     */
-    let mut result: eyre::Result<()> = Ok(());
+    let mut result: FallibleFn = Ok(());
     #[allow(unused_variables)]
     //It's not unused [event_loop_return()] macro uses it but it's not recognised
     let result_ref = &mut result;
@@ -164,7 +163,7 @@ pub(crate) fn ui_thread(
 
                     let mut tries = 0;
                     let start = Instant::now();
-                    let mut program_data = loop {
+                    let program_data = loop {
                         tries += 1;
                         match program_data_wrapped.try_lock() {
                             //Shouldn't get here, since the engine/main threads shouldn't panic (and the app should quit if they do)
@@ -203,6 +202,8 @@ pub(crate) fn ui_thread(
                     &mut renderer,
                     &mut managers,
                     &mut program_data.ui_data,
+                    &message_sender,
+                    &message_receiver
                 );
 
                 trace!(target: UI_TRACE_RENDER, "{0} END RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
@@ -257,7 +258,7 @@ pub(crate) fn ui_thread(
             }
         }
 
-        if let Some(ret) = process_messages(&message_sender, &message_receiver) {
+        if let Some(ret) = process_messages_with_return(&message_sender, &message_receiver) {
             event_loop_return!(ret);
         }
 
@@ -287,6 +288,7 @@ pub(crate) fn ui_thread(
 /// Called every frame, handles everything required to draw an entire frame
 ///
 /// Sets up all the boilerplate, then calls [inner_render] to create (build) the actual ui
+#[allow(clippy::too_many_arguments)/*I literally can't join them into a type, or I can't borrow*/]
 fn outer_render_a_frame(
     display: &mut Display,
     imgui_context: &mut Context,
@@ -294,7 +296,9 @@ fn outer_render_a_frame(
     renderer: &mut Renderer,
     managers: &mut UiManagers,
     ui_data: &mut UiData,
-) -> color_eyre::Result<()> {
+    message_sender: &BroadcastSender<ThreadMessage>,
+    message_receiver: &BroadcastReceiver<ThreadMessage>,
+) -> FallibleFn {
     let span_outer_render = trace_span!(
         target: UI_TRACE_RENDER,
         "outer_render",
@@ -421,21 +425,8 @@ fn outer_render_a_frame(
         let docking_area = UiDockingArea {};
         let _dock_node = docking_area.dockspace("Main Dock Area");
 
-        //Makes it easier to separate out frames
-        trace!(
-            target: UI_TRACE_BUILD_INTERFACE,
-            "{0} BEGIN BUILD FRAME {frame} {0}",
-            str::repeat("=", 50),
-            frame = ui.frame_count()
-        );
-        let build_ui_result = build_ui(ui, managers, ui_data).wrap_err("building ui failed");
-        trace!(
-            target: UI_TRACE_BUILD_INTERFACE,
-            "{0} END BUILD FRAME {frame} {0}",
-            str::repeat("=", 50),
-            frame = ui.frame_count()
-        );
-        build_ui_result?;
+        build_ui(ui, managers, ui_data, message_sender, message_receiver)
+            .wrap_err("building ui failed")?;
 
         // Technically we should only build the UI if [maybe_window_token] is [Some] ([None] means the window is hidden)
         // The window should never be hidden though, so this is a non-issue and we ignore it
@@ -504,131 +495,8 @@ fn outer_render_a_frame(
         span_draw_frame.exit();
     }
 
+    span_outer_render.record("time_to_render", debug(Instant::now() - start_outer_render));
     span_outer_render.exit();
-    Ok(())
-}
-
-fn build_ui(ui: &imgui::Ui, _managers: &mut UiManagers, data: &mut UiData) -> eyre::Result<()> {
-    let span_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui").entered();
-
-    const NO_SHORTCUT: &str = "N/A"; // String that we use as the shortcut text when there isn't one
-
-    // refs to reduce clutter
-    let show_demo_window = &mut data.windows.show_demo_window;
-    let show_metrics_window = &mut data.windows.show_metrics_window;
-    let show_ui_management_window = &mut data.windows.show_ui_management_window;
-
-    trace_span!(target: UI_TRACE_BUILD_INTERFACE, "main_menu_bar").in_scope(|| {
-        let toggle_menu_item =
-            |name: &str, toggle: &mut bool, maybe_shortcut: &Option<KeyBinding>| {
-                let span_create_toggle_menu_item = trace_span!(
-                    target: UI_TRACE_BUILD_INTERFACE,
-                    "create_toggle_menu_item",
-                    name,
-                    toggle,
-                    shortcut = match maybe_shortcut {
-                        None => NO_SHORTCUT.to_owned(),
-                        Some(ref s) => format!("{}", s),
-                    }
-                )
-                .entered();
-
-                // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
-                if let Some(keybinding) = maybe_shortcut {
-                    let span_with_shortcut =
-                        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "with_shortcut", %keybinding)
-                            .entered();
-                    if ui
-                        .menu_item_config(name)
-                        .shortcut(keybinding.shortcut_text)
-                        .build_with_ref(toggle)
-                    {
-                        // Don't need to toggle manually since it's handled by ImGui (we passed in a mut ref to the variable)
-                        debug!(
-                            target: UI_DEBUG_USER_INTERACTION,
-                            mode = "ui",
-                            "toggle menu item '{}': {}",
-                            name,
-                            *toggle
-                        );
-                    } else {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled");
-                    }
-
-                    if ui.is_key_index_pressed_no_repeat(keybinding.shortcut as i32) {
-                        *toggle ^= true;
-                        debug!(
-                            target: UI_DEBUG_USER_INTERACTION,
-                            mode = "shortcut",
-                            "toggle menu item '{}': {}",
-                            name,
-                            *toggle
-                        );
-                    } else {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled");
-                    }
-
-                    span_with_shortcut.exit();
-                } else {
-                    let span_no_shortcut =
-                        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "no_shortcut").entered();
-                    if ui
-                        .menu_item_config(name)
-                        .shortcut(NO_SHORTCUT)
-                        .build_with_ref(toggle)
-                    {
-                        debug!(
-                            target: UI_DEBUG_USER_INTERACTION,
-                            mode = "ui",
-                            "toggle menu item {} => {}",
-                            name,
-                            *toggle
-                        );
-                    } else {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled");
-                    }
-
-                    span_no_shortcut.exit();
-                }
-                span_create_toggle_menu_item.exit();
-            };
-        ui.main_menu_bar(|| {
-            ui.menu("Tools", || {
-                toggle_menu_item(
-                    "Metrics",
-                    show_metrics_window,
-                    &Some(KEY_TOGGLE_METRICS_WINDOW),
-                );
-                toggle_menu_item(
-                    "Demo Window",
-                    show_demo_window,
-                    &Some(KEY_TOGGLE_DEMO_WINDOW),
-                );
-                toggle_menu_item(
-                    "UI Management",
-                    show_ui_management_window,
-                    &Some(KEY_TOGGLE_UI_MANAGERS_WINDOW),
-                );
-            });
-        })
-    });
-
-    if *show_demo_window {
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_demo_window")
-            .in_scope(|| ui.show_demo_window(show_demo_window));
-    } else {
-        trace!(target: UI_TRACE_BUILD_INTERFACE, "demo window hidden");
-    }
-    if *show_metrics_window {
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_metrics_window")
-            .in_scope(|| ui.show_metrics_window(show_metrics_window));
-    } else {
-        trace!(target: UI_TRACE_BUILD_INTERFACE, "metrics window hidden");
-    }
-    //TODO: ui managers window
-    // managers.render_ui_managers_window(&ui, show_ui_management_window);
-
-    span_build_ui.exit();
     Ok(())
 }
 
@@ -637,36 +505,23 @@ fn build_ui(ui: &imgui::Ui, _managers: &mut UiManagers, data: &mut UiData) -> ey
 /// # Return Value
 /// [None] - Do nothing
 /// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
-fn process_messages(
+fn process_messages_with_return(
     _message_sender: &BroadcastSender<ThreadMessage>,
     message_receiver: &BroadcastReceiver<ThreadMessage>,
-) -> Option<eyre::Result<()>> {
+) -> Option<FallibleFn> {
     let span_process_messages = trace_span!(
         target: THREAD_TRACE_MESSAGE_LOOP,
-        name_of!(process_messages)
+        name_of!(process_messages_with_return)
     )
     .entered();
     // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
     'process_messages: loop {
-        trace!(
-            target: THREAD_TRACE_MESSAGE_LOOP,
-            "message_receiver.try_recv()"
-        );
-        let maybe_message = message_receiver.try_recv();
-        trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?maybe_message);
-        match maybe_message {
-            Err(TryRecvError::Empty) => {
-                trace!(
-                    target: THREAD_TRACE_MESSAGE_LOOP,
-                    "no messages (Err::Empty)"
-                );
-                break 'process_messages; // Exit the message loop, go into waiting
-            }
-            Err(TryRecvError::Disconnected) => {
-                return Some(Err(error_recv_never_should_be_disconnected()));
-            }
-            Ok(message) => {
-                trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?message, "got message");
+        match receive_message(message_receiver) {
+            // Couldn't receive, ***~~BAD~~***, UI Thread should return with the receive error
+            Err(recv_error) => return Some(Err(recv_error)),
+            //No messages waiting
+            Ok(None) => break 'process_messages,
+            Ok(Some(message)) => {
                 match message {
                     Program(_) | Engine(_) => {
                         message.ignore();
@@ -855,6 +710,9 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
             platform,
             renderer,
         },
-        managers: UiManagers { font_manager },
+        managers: UiManagers {
+            font_manager,
+            frame_info: FrameInfo::new(),
+        },
     })
 }

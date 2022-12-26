@@ -1,12 +1,11 @@
-use std::sync::mpsc::TryRecvError;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use color_eyre::eyre;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, info_span, trace, trace_span};
+use crate::FallibleFn;
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
@@ -21,7 +20,7 @@ pub(crate) fn engine_thread(
     _program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
-) -> eyre::Result<()> {
+) -> FallibleFn {
     let span_engine_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "engine_thread").entered();
 
@@ -53,49 +52,33 @@ pub(crate) fn engine_thread(
             trace_span!(target: THREAD_TRACE_MESSAGE_LOOP, "process_messages").entered();
         // Loops until [command_receiver] is empty (tries to 'flush' out all messages)
         'process_messages: loop {
-            trace!(
-                target: THREAD_TRACE_MESSAGE_LOOP,
-                "message_receiver.try_recv()"
-            );
-            let maybe_message = message_receiver.try_recv();
-            trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?maybe_message);
-            match maybe_message {
-                Err(TryRecvError::Empty) => {
-                    trace!(
-                        target: THREAD_TRACE_MESSAGE_LOOP,
-                        "no messages (Err::Empty)"
-                    );
-                    break 'process_messages; // Exit the message loop, go into waiting
-                }
-                Err(TryRecvError::Disconnected) => {
-                    // Oops!
-                    return Err(error_recv_never_should_be_disconnected());
-                }
-                Ok(message) => {
-                    trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?message, "got message");
-                    match message {
-                        Ui(_) | Program(_) => {
-                            message.ignore();
-                            continue 'process_messages;
-                        }
-                        Engine(engine_message) => {
-                            debug!(
-                                target: THREAD_DEBUG_MESSAGE_RECEIVED,
-                                ?engine_message,
-                                "got engine message"
-                            );
-                            match engine_message {
-                                EngineThreadMessage::ExitEngineThread => {
-                                    debug!(
-                                        target: THREAD_DEBUG_GENERAL,
-                                        "got exit message for engine thread"
-                                    );
-                                    break 'global;
-                                }
+            if let Some(message) = receive_message(&message_receiver)? {
+                match message {
+                    Ui(_) | Program(_) => {
+                        message.ignore();
+                        continue 'process_messages;
+                    }
+                    Engine(engine_message) => {
+                        debug!(
+                            target: THREAD_DEBUG_MESSAGE_RECEIVED,
+                            ?engine_message,
+                            "got engine message"
+                        );
+                        match engine_message {
+                            EngineThreadMessage::ExitEngineThread => {
+                                debug!(
+                                    target: THREAD_DEBUG_GENERAL,
+                                    "got exit message for engine thread"
+                                );
+                                break 'global;
                             }
                         }
                     }
                 }
+            }
+            // No messages waiting
+            else {
+                break 'process_messages;
             }
         }
         span_process_messages.exit();

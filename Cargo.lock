@@ -1867,6 +1867,7 @@ dependencies = [
  "imgui-glium-renderer",
  "imgui-winit-support",
  "indoc",
+ "itertools",
  "lazy_static",
  "multiqueue2",
  "nameof",

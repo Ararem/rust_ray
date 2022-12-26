@@ -22,6 +22,8 @@ mod program;
 mod resources;
 mod ui;
 
+pub type FallibleFn = eyre::Result<()>;
+
 /// Main entrypoint for the program
 ///
 /// Handles the important setup before handing control over to the actual program:
@@ -29,7 +31,7 @@ mod ui;
 /// * Initialises [tracing] (for logging)
 /// * TODO: Processes command-line arguments
 /// * Runs the [program] for real
-fn main() -> eyre::Result<()> {
+fn main() -> FallibleFn {
     init_eyre()?;
     init_tracing()?;
     helper::panic_pill::red_or_blue_pill();
@@ -45,7 +47,7 @@ fn main() -> eyre::Result<()> {
     debug!(target: MAIN_DEBUG_GENERAL, "core init done");
 
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
-    return match program::run() {
+    match program::run() {
         Ok(program_return_value) => {
             info!(
                 target: PROGRAM_INFO_LIFECYCLE,
@@ -64,17 +66,16 @@ fn main() -> eyre::Result<()> {
             info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :(");
             Err(report)
         }
-    };
+    }
 }
 
 /// Initialises [eyre]. Called as part of the core init
-fn init_eyre() -> eyre::Result<()> {
+fn init_eyre() -> FallibleFn {
     color_eyre::install()
 }
 
 /// Initialises the [tracing] system. Called as part of the core init
-fn init_tracing() -> eyre::Result<()> {
-    use tracing_error::*;
+fn init_tracing() -> FallibleFn {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
     let standard_layer = fmt::layer()
@@ -96,12 +97,10 @@ fn init_tracing() -> eyre::Result<()> {
             }
             true
         }));
-    let error_layer = ErrorLayer::default();
 
     tracing_subscriber::registry()
         .with(standard_layer)
-        .with(error_layer)
-        .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
+        // .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
         .try_init()?;
 
     Ok(())

@@ -28,6 +28,9 @@ pub const HARDWARE_ACCELERATION: Option<bool> = Some(true);
 pub const DEFAULT_FONT_SIZE: f32 = 20f32;
 pub const MIN_FONT_SIZE: f32 = 8f32;
 pub const MAX_FONT_SIZE: f32 = 128f32;
+/// The maximum number of frames (see [crate::ui::ui_system::FrameInfo]) that should be tracked
+pub const HARD_LIMIT_MAX_FRAMES_TO_TRACK: usize = 64_000;
+pub const FRAME_INFO_SMOOTH_SPEED: f32 = 0.01;
 
 pub fn base_font_config() -> FontConfig {
     FontConfig {

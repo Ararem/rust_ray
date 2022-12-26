@@ -14,6 +14,7 @@ pub struct ShownWindows {
     pub show_ui_management_window: bool,
 }
 
+
 impl Default for UiData {
     fn default() -> Self {
         Self {
