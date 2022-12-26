@@ -44,10 +44,12 @@ pub(in crate::ui) struct FrameInfo {
     pub num_frames_to_display: usize,
     pub num_frames_to_track: usize,
     // Moving average
+    //TODO: Create some kind of settings/config thingy
     pub smooth_delta_min: f32,
     pub smooth_delta_max: f32,
     pub smooth_fps_min: f32,
     pub smooth_fps_max: f32,
+    pub scale_smoothing: usize
 }
 
 impl FrameInfo {
@@ -60,6 +62,7 @@ impl FrameInfo {
             smooth_delta_max:0.0,
             smooth_fps_min: 0.0,
             smooth_fps_max: 0.0,
+            scale_smoothing: 8
         }
     }
 }

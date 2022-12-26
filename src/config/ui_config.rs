@@ -30,7 +30,8 @@ pub const MIN_FONT_SIZE: f32 = 8f32;
 pub const MAX_FONT_SIZE: f32 = 128f32;
 /// The maximum number of frames (see [crate::ui::ui_system::FrameInfo]) that should be tracked
 pub const HARD_LIMIT_MAX_FRAMES_TO_TRACK: usize = 64_000;
-pub const FRAME_INFO_SMOOTH_SPEED: f32 = 0.01;
+/// Value that controls how fast the range for the frame info values is lerped. lower values make a smoother (slower) lerp
+pub const FRAME_INFO_RANGE_SMOOTH_SPEED: f32 = 0.03;
 
 pub fn base_font_config() -> FontConfig {
     FontConfig {

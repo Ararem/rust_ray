@@ -1,11 +1,11 @@
-use std::cmp::{min, max};
-use crate::config::ui_config::{FRAME_INFO_SMOOTH_SPEED, HARD_LIMIT_MAX_FRAMES_TO_TRACK};
+use crate::config::ui_config::{FRAME_INFO_RANGE_SMOOTH_SPEED, HARD_LIMIT_MAX_FRAMES_TO_TRACK};
 use crate::helper::logging::event_targets::*;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::ui_system::FrameInfo;
 use crate::FallibleFn;
 use imgui::{SliderFlags, TreeNodeFlags, Ui};
 use itertools::*;
+use std::cmp::{max, min};
 use tracing::field::Empty;
 use tracing::{trace, trace_span, warn};
 
@@ -61,8 +61,8 @@ impl UiItem for FrameInfo {
             1,
             HARD_LIMIT_MAX_FRAMES_TO_TRACK as SliderType,
         )
-            .display_format(format!("%u ({capped})", capped = num_frame_infos).as_str()) // Also display how many frames we are actually tracking currently.
-            .flags(SliderFlags::LOGARITHMIC)
+        .display_format(format!("%u ({capped})", capped = num_frame_infos).as_str()) // Also display how many frames we are actually tracking currently.
+        .flags(SliderFlags::LOGARITHMIC)
         .build(&mut num_track_frames_compat);
         *track_frames = num_track_frames_compat as usize;
         if ui.is_item_hovered() {
@@ -76,7 +76,7 @@ impl UiItem for FrameInfo {
             1,
             min(HARD_LIMIT_MAX_FRAMES_TO_TRACK, *track_frames) as SliderType,
         )
-            .display_format(format!("%u ({capped})", capped = info_range_end+1).as_str()) // Also display how many frames we are actually displaying (in case there aren't enough to show)
+        .display_format(format!("%u ({capped})", capped = info_range_end + 1).as_str()) // Also display how many frames we are actually displaying (in case there aren't enough to show)
         .flags(SliderFlags::LOGARITHMIC)
         .build(&mut num_displayed_frames_compat);
         *displayed_frames = num_displayed_frames_compat as usize;
@@ -84,7 +84,37 @@ impl UiItem for FrameInfo {
             ui.tooltip_text("The number of frames that will be displayed in the plot. Must be <= [Num Tracked Frames]. Will also be automatically limited if there are not enough frames stored to be displayed (until there are enough)");
         }
 
+        let mut smoothing_compat: SliderType = self.scale_smoothing as SliderType; // Might fail on 128-bit systems, but eh
+        ui.slider_config(
+            "Plot Range Smoothing",
+            1,
+            256 as SliderType,
+        )
+        .flags(SliderFlags::LOGARITHMIC)
+        .build(&mut smoothing_compat);
+        self.scale_smoothing = smoothing_compat as usize;
+        if ui.is_item_hovered() {
+            ui.tooltip_text("Amount of smoothing to apply when calculating the range values for plotting. Higher values increase smoothing, de-focusing peaks and spikes");
+        }
+
         //// ===== Plots =====
+
+        fn chunked_smooth_minmax(vec: &[f32], chunk_size: usize) -> (f32, f32){
+            vec.iter().chunks(chunk_size) // Group by 8 frames at a time
+                .into_iter()
+                .map(|chunk| {
+                    let mut count: f32 = 0.0;
+                    let mut avg = 0.0;
+                    for &val in chunk {
+                        avg += val;
+                        count += 1.0;
+                    }
+                    avg / count
+                }) //Average each chunk
+                .minmax()
+                .into_option()
+                .unwrap_or((0.0, 0.0))
+        }
 
         //Try and find a rough range that the frame info values fall into. The values are smoothed so that they don't change instantaneously, or include outliers
         let (smooth_delta_min, smooth_delta_max);
@@ -98,23 +128,25 @@ impl UiItem for FrameInfo {
                 smooth_delta_max = Empty,
             )
             .entered();
+            let (sharp_delta_min, sharp_delta_max) = chunked_smooth_minmax(&deltas[0..info_range_end], self.scale_smoothing);
 
             // Update the local value, and then copy it across to the self value
-            let (&sharp_delta_min, &sharp_delta_max) = deltas[0..info_range_end] // Slice the area that we're going to be displaying, or else we calculate on the area that isn't visible
-                .iter()
-                .minmax()
-                .into_option()
-                .unwrap_or((&0.0,&0.0));
+            // let (&sharp_delta_min, &sharp_delta_max) = deltas[0..info_range_end] // Slice the area that we're going to be displaying, or else we calculate on the area that isn't visible
+            //     .iter()
+            //     .minmax()
+            //     .into_option()
+            //     .unwrap_or((&0.0, &0.0));
+
             smooth_delta_min = vek::Lerp::lerp(
                 self.smooth_delta_min,
                 sharp_delta_min,
-                FRAME_INFO_SMOOTH_SPEED,
+                FRAME_INFO_RANGE_SMOOTH_SPEED,
             );
-            self.smooth_delta_min =  smooth_delta_min;
+            self.smooth_delta_min = smooth_delta_min;
             smooth_delta_max = vek::Lerp::lerp(
                 self.smooth_delta_max,
                 sharp_delta_max,
-                FRAME_INFO_SMOOTH_SPEED,
+                FRAME_INFO_RANGE_SMOOTH_SPEED,
             );
             self.smooth_delta_max = smooth_delta_max;
 
@@ -125,11 +157,17 @@ impl UiItem for FrameInfo {
             span_calculate_approx_range.exit();
         }
 
-        ui.plot_histogram(format!("{:0>5.2} .. {:0>5.2} ms", smooth_delta_min, smooth_delta_max), &deltas[0..info_range_end])
-            .overlay_text("ms/frame")
-            .scale_min(smooth_delta_min)
-            .scale_max(smooth_delta_max)
-            .build();
+        ui.plot_histogram(
+            format!(
+                "{:0>5.2} .. {:0>5.2} ms",
+                smooth_delta_min, smooth_delta_max
+            ),
+            &deltas[0..info_range_end],
+        )
+        .overlay_text("ms/frame")
+        .scale_min(smooth_delta_min)
+        .scale_max(smooth_delta_max)
+        .build();
 
         //Try and find a rough range that the frame info values fall into
         // These outer variables are the smoothed values (averaged across frames), inner ones are instantaneous
@@ -145,17 +183,19 @@ impl UiItem for FrameInfo {
             )
             .entered();
 
-            let (&sharp_fps_min, &sharp_fps_max) = fps[0..info_range_end] // Slice the area that we're going to be displaying, or else we calculate on the area that isn't visible
-                .iter()
-                .minmax()
-                .into_option()
-                .unwrap_or((&0.0, &0.0));
+            let (sharp_fps_min, sharp_fps_max) = chunked_smooth_minmax(&fps[0..info_range_end], self.scale_smoothing);
             // Update the local value, and then copy it across to the self value
-            smooth_fps_min =
-                vek::Lerp::lerp(self.smooth_fps_min, sharp_fps_min, FRAME_INFO_SMOOTH_SPEED);
+            smooth_fps_min = vek::Lerp::lerp(
+                self.smooth_fps_min,
+                sharp_fps_min,
+                FRAME_INFO_RANGE_SMOOTH_SPEED,
+            );
             self.smooth_fps_min = smooth_fps_min;
-            smooth_fps_max =
-                vek::Lerp::lerp(self.smooth_fps_max, sharp_fps_max, FRAME_INFO_SMOOTH_SPEED);
+            smooth_fps_max = vek::Lerp::lerp(
+                self.smooth_fps_max,
+                sharp_fps_max,
+                FRAME_INFO_RANGE_SMOOTH_SPEED,
+            );
             self.smooth_fps_max = smooth_fps_max;
 
             span_calculate_approx_range.record("sharp_fps_min", sharp_fps_min);
@@ -165,11 +205,14 @@ impl UiItem for FrameInfo {
             span_calculate_approx_range.exit();
         }
 
-        ui.plot_histogram(format!("{:0>6.2} .. {:>6.2} fps", smooth_fps_min, smooth_fps_max), &fps[0..info_range_end])
-            .overlay_text("frames/s")
-            .scale_min(smooth_fps_min*0.0)
-            .scale_max(smooth_fps_max)
-            .build();
+        ui.plot_histogram(
+            format!("{:0>6.2} .. {:>6.2} fps", smooth_fps_min, smooth_fps_max),
+            &fps[0..info_range_end],
+        )
+        .overlay_text("frames/s")
+        .scale_min(smooth_fps_min * 0.0)
+        .scale_max(smooth_fps_max)
+        .build();
 
         span_render_framerate_graph.exit();
 
