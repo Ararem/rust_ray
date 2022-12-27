@@ -35,8 +35,7 @@ use crate::ui::ui_system::{FrameInfo, UiBackend, UiManagers, UiSystem};
 use crate::FallibleFn;
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
-use crate::config::init_time::InitTimeAppConfig;
-use crate::config::run_time::RuntimeAppConfig;
+use crate::config::Config;
 
 mod build_ui_impl;
 mod clipboard_integration;
@@ -46,12 +45,11 @@ pub mod ui_data;
 mod ui_system;
 
 pub(crate) fn ui_thread(
-    init_config: &'static mut InitTimeAppConfig,
-    runtime_config: &'static mut RuntimeAppConfig,
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
+    config: Config
 ) -> FallibleFn {
     let span_ui_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
@@ -76,7 +74,7 @@ pub(crate) fn ui_thread(
     Init ui
     If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
     */
-    let system = init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str(), init_config).wrap_err("failed while initialising ui system")?;
+    let system = init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str(), config).wrap_err("failed while initialising ui system")?;
 
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
     // Probably because I was borrowing the whole struct when I only needed one field of it
@@ -203,7 +201,8 @@ pub(crate) fn ui_thread(
                     &mut managers,
                     &mut program_data.ui_data,
                     &message_sender,
-                    &message_receiver
+                    &message_receiver,
+                     config
                 );
 
                 trace!(target: UI_TRACE_RENDER, "{0} END RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
@@ -298,6 +297,7 @@ fn outer_render_a_frame(
     ui_data: &mut UiData,
     message_sender: &BroadcastSender<ThreadMessage>,
     message_receiver: &BroadcastReceiver<ThreadMessage>,
+    config: Config
 ) -> FallibleFn {
     let span_outer_render = trace_span!(
         target: UI_TRACE_RENDER,
@@ -315,7 +315,7 @@ fn outer_render_a_frame(
                 let report = report.wrap_err("font manager was not able to rebuild font");
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    report = format_error(&report)
+                    report = format_error(&report, config)
                 );
             }
             // Font atlas was rebuilt
@@ -335,7 +335,7 @@ fn outer_render_a_frame(
                             Report::new(err).wrap_err("renderer could not reload font texture");
                         warn!(
                             target: GENERAL_WARNING_NON_FATAL,
-                            report = format_error(&report)
+                            report = format_error(&report, config)
                         );
                     }
                 }
@@ -364,7 +364,7 @@ fn outer_render_a_frame(
                     let report = report.wrap_err("font manager failed to return font");
                     warn!(
                         target: GENERAL_WARNING_NON_FATAL,
-                        report = format_error(&report)
+                        report = format_error(&report, config)
                     );
                     trace!(
                         target: UI_TRACE_BUILD_INTERFACE,
@@ -425,7 +425,7 @@ fn outer_render_a_frame(
         let docking_area = UiDockingArea {};
         let _dock_node = docking_area.dockspace("Main Dock Area");
 
-        build_ui(ui, managers, ui_data, message_sender, message_receiver)
+        build_ui(ui, managers, ui_data, message_sender, message_receiver, config)
             .wrap_err("building ui failed")?;
 
         // Technically we should only build the UI if [maybe_window_token] is [Some] ([None] means the window is hidden)
@@ -556,7 +556,7 @@ fn process_messages_with_return(
 ///Initialises the UI system and returns it
 ///
 /// * `title` - Title of the created window
-fn init_ui_system(title: &str, config: &mut InitTimeAppConfig) -> eyre::Result<UiSystem> {
+fn init_ui_system(title: &str, config: Config) -> eyre::Result<UiSystem> {
     let span_init_ui = debug_span!(target: UI_DEBUG_GENERAL, "init_ui").entered();
 
     let mut imgui_context;
@@ -585,10 +585,10 @@ fn init_ui_system(title: &str, config: &mut InitTimeAppConfig) -> eyre::Result<U
         "creating [glutin] context builder"
     );
     let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
-        .with_vsync(config.ui_config.vsync)
-        .with_hardware_acceleration(config.ui_config.hardware_acceleration)
+        .with_vsync(config.init.ui_config.vsync)
+        .with_hardware_acceleration(config.init.ui_config.hardware_acceleration)
         .with_srgb(true)
-        .with_multisampling(config.ui_config.multisampling);
+        .with_multisampling(config.init.ui_config.multisampling);
     debug!(
         target: UI_DEBUG_GENERAL,
         ?glutin_context_builder,
@@ -598,8 +598,8 @@ fn init_ui_system(title: &str, config: &mut InitTimeAppConfig) -> eyre::Result<U
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] window builder");
     let window_builder = WindowBuilder::new()
         .with_title(title)
-        .with_inner_size(config.ui_config.default_window_size)
-        .with_maximized(config.ui_config.start_maximised);
+        .with_inner_size(config.init.ui_config.default_window_size)
+        .with_maximized(config.init.ui_config.start_maximised);
     debug!(
         target: UI_DEBUG_GENERAL,
         ?window_builder,
@@ -677,7 +677,7 @@ fn init_ui_system(title: &str, config: &mut InitTimeAppConfig) -> eyre::Result<U
                 let report = report.wrap_err("could not initialise clipboard");
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    report = format_error(&report),
+                    report = format_error(&report, config),
                     "could not init clipboard"
                 );
             }

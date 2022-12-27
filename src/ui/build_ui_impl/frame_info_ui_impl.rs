@@ -1,4 +1,3 @@
-use crate::config::ui_config::{FRAME_INFO_RANGE_SMOOTH_SPEED, HARD_LIMIT_MAX_FRAMES_TO_TRACK};
 use crate::helper::logging::event_targets::*;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::ui_system::FrameInfo;

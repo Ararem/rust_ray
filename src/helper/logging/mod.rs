@@ -1,22 +1,24 @@
 use std::any::Any;
 use std::error::Error;
 
+use crate::config::run_time::tracing_config::ErrorLogStyle;
+use crate::config::run_time::RuntimeAppConfig;
+use crate::config::Config;
 use color_eyre::{Help, Report};
 use indoc::formatdoc;
 use tracing::field::{display, DisplayValue};
 
-use crate::config::tracing_config::{ErrorLogStyle, ERROR_LOG_STYLE};
 use crate::FallibleFn;
 
 pub mod event_targets;
 pub mod span_time_elapsed_field;
 
 /// Function that logs an error in whichever way the app is configured to log errors
-pub fn format_error(report: &Report) -> DisplayValue<String> {
-    display(format_error_string(report))
+pub fn format_error(report: &Report, config: Config) -> DisplayValue<String> {
+    display(format_error_string(report, config))
 }
-pub fn format_error_string(report: &Report) -> String {
-    match ERROR_LOG_STYLE {
+pub fn format_error_string(report: &Report, config: Config) -> String {
+    match config.runtime.tracing.error_style {
         ErrorLogStyle::Short => format!("{}", report),
         ErrorLogStyle::ShortWithCause => format!("{:#}", report),
         ErrorLogStyle::WithBacktrace => format!("{:?}", report),
@@ -26,8 +28,8 @@ pub fn format_error_string(report: &Report) -> String {
 
 /// Function to convert a boxed error (`&Box<dyn Error>`) to an owned [Report]
 #[allow(clippy::borrowed_box)] // Can't do it because it's a dyn Trait, also needs this signature for compat reasons
-pub fn dyn_error_to_report(error: &Box<dyn Error>) -> Report {
-    let formatted_error = match ERROR_LOG_STYLE {
+pub fn dyn_error_to_report(error: &Box<dyn Error>, config: Config) -> Report {
+    let formatted_error = match config.runtime.tracing.error_style {
         ErrorLogStyle::Short => {
             format!("{error:}")
         }
@@ -46,7 +48,7 @@ pub fn dyn_error_to_report(error: &Box<dyn Error>) -> Report {
 }
 
 /// Function to convert a boxed panic error (`&Box<dyn Any + Send>`) to an owned [Report]
-pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
+pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>, config: Config) -> Report {
     // Default case
     let mut formatted_error = formatdoc! {r"
         <unable to convert panic, does not implement any known types>
@@ -85,11 +87,11 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     }}
     case! {
        &Report, type_name, val, {
-           format!("[{type_name}]: {}", format_error(val))
+           format!("[{type_name}]: {}", format_error(val, config))
     }}
     case! {
        &FallibleFn, type_name, val, {
-           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(report)) }
+           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(report, config)) }
     }}
     // Special case since [str] is dynamically sized
     if let Some(val) = (**boxed_error).downcast_ref::<&str>() {

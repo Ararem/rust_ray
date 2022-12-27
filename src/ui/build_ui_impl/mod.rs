@@ -1,39 +1,75 @@
-mod ui_manager_ui_impl;
+mod config_ui_impl;
 mod font_manager_ui_impl;
 mod frame_info_ui_impl;
-mod config_ui_impl;
+mod ui_manager_ui_impl;
 
-use imgui::Condition;
+use crate::config::run_time::keybindings_config::KeyBinding;
+use crate::config::Config;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::span_time_elapsed_field::SpanTimeElapsedField;
-use crate::program::thread_messages::*;
-use crate::program::thread_messages::ThreadMessage::*;
 use crate::program::thread_messages::ProgramThreadMessage::*;
+use crate::program::thread_messages::QuitAppNoErrorReason::QuitInteractionByUser;
+use crate::program::thread_messages::ThreadMessage::*;
+use crate::program::thread_messages::*;
 use crate::ui::ui_data::UiData;
 use crate::ui::ui_system::UiManagers;
-use multiqueue2::{BroadcastReceiver, BroadcastSender};
-use tracing::*;
-use tracing::field::*;
-use crate::config::keybindings_config::*;
-use indoc::*;
-use crate::config::keybindings_config::standard::*;
 use crate::FallibleFn;
-use crate::program::thread_messages::QuitAppNoErrorReason::QuitInteractionByUser;
+use imgui::Condition;
+use indoc::*;
+use multiqueue2::{BroadcastReceiver, BroadcastSender};
+use tracing::field::*;
+use tracing::*;
 
 pub trait UiItem {
-    fn render(&mut self, ui: &imgui::Ui) -> FallibleFn;
+    fn render(&mut self, ui: &imgui::Ui, config: Config) -> FallibleFn;
 }
 
-fn build_window<T: UiItem>(label: &str, item: &mut T, opened: &mut bool, ui: &imgui::Ui) -> FallibleFn{
-    let span_window = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_window", window=label).entered();
+fn build_window<T: UiItem>(
+    label: &str,
+    item: &mut T,
+    opened: &mut bool,
+    ui: &imgui::Ui,
+    config: Config,
+) -> FallibleFn {
+    let span_window = trace_span!(
+        target: UI_TRACE_BUILD_INTERFACE,
+        "build_window",
+        window = label
+    )
+    .entered();
     let mut result = Ok(());
     if *opened {
         ui.window(label)
-              .opened(opened)
-              .size([300.0, 110.0], Condition::FirstUseEver)
-              .build(|| {
-              result = item.render(ui);
-          });
+            .opened(opened)
+            .size([300.0, 110.0], Condition::FirstUseEver)
+            .build(|| {
+                result = item.render(ui, config);
+            });
+    }
+    span_window.exit();
+    result
+}
+fn build_window_fn(
+    label: &str,
+    func: fn(&imgui::Ui, Config) -> FallibleFn,
+    opened: &mut bool,
+    ui: &imgui::Ui,
+    config: Config,
+) -> FallibleFn {
+    let span_window = trace_span!(
+        target: UI_TRACE_BUILD_INTERFACE,
+        "build_window",
+        window = label
+    )
+    .entered();
+    let mut result = Ok(());
+    if *opened {
+        ui.window(label)
+            .opened(opened)
+            .size([300.0, 110.0], Condition::FirstUseEver)
+            .build(|| {
+                result = func(ui, config);
+            });
     }
     span_window.exit();
     result
@@ -45,6 +81,7 @@ pub(super) fn build_ui(
     data: &mut UiData,
     message_sender: &BroadcastSender<ThreadMessage>,
     message_receiver: &BroadcastReceiver<ThreadMessage>,
+    config: Config,
 ) -> FallibleFn {
     //Makes it easier to separate out frames
     trace!(
@@ -67,10 +104,12 @@ pub(super) fn build_ui(
     let show_demo_window = &mut data.windows.show_demo_window;
     let show_metrics_window = &mut data.windows.show_metrics_window;
     let show_ui_management_window = &mut data.windows.show_ui_management_window;
+    let show_config_window = &mut data.windows.show_config_window;
+    let keys = &mut config.runtime.keybindings;
 
     trace_span!(target: UI_TRACE_BUILD_INTERFACE, "main_menu_bar").in_scope(|| {
         let toggle_menu_item =
-            |name: &str, toggle: &mut bool, maybe_shortcut: &Option<KeyBinding>, tooltip: &str| {
+            |name: &str, toggle: &mut bool, maybe_shortcut: &Option<&KeyBinding>, tooltip: &str| {
                 let span_create_toggle_menu_item = trace_span!(
                     target: UI_TRACE_BUILD_INTERFACE,
                     "create_toggle_menu_item",
@@ -86,7 +125,7 @@ pub(super) fn build_ui(
                             .entered();
                     if ui
                         .menu_item_config(name)
-                        .shortcut(keybinding.shortcut_text)
+                        .shortcut(keybinding.to_string())
                         .build_with_ref(toggle)
                     {
                         // Don't need to toggle manually since it's handled by ImGui (we passed in a mut ref to the variable)
@@ -101,10 +140,8 @@ pub(super) fn build_ui(
                         trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled via ui");
                     }
 
-                    if keybinding
-                        .shortcut_i32
-                        .iter()
-                        .all(|index: &i32| ui.is_key_index_pressed_no_repeat(*index))
+                    if ui.is_key_index_pressed_no_repeat(keybinding.shortcut as i32)
+                        && keybinding.all_modifiers_held(ui)
                     {
                         *toggle ^= true;
                         debug!(
@@ -180,7 +217,7 @@ pub(super) fn build_ui(
             toggle_menu_item(
                 "Metrics",
                 show_metrics_window,
-                &Some(KEY_TOGGLE_METRICS_WINDOW),
+                &Some(&keys.toggle_metrics_window),
                 indoc! {r"
                     Toggles the metrics window.
 
@@ -190,7 +227,7 @@ pub(super) fn build_ui(
             toggle_menu_item(
                 "Demo Window",
                 show_demo_window,
-                &Some(KEY_TOGGLE_DEMO_WINDOW),
+                &Some(&keys.toggle_demo_window),
                 indoc! {r"
                     Toggles the ImGUI demo window
                 "},
@@ -198,7 +235,7 @@ pub(super) fn build_ui(
             toggle_menu_item(
                 "UI Management",
                 show_ui_management_window,
-                &Some(KEY_TOGGLE_UI_MANAGERS_WINDOW),
+                &Some(&keys.toggle_ui_managers_window),
                 indoc! {r"
                     Toggles the UI management window.
 
@@ -212,7 +249,7 @@ pub(super) fn build_ui(
             toggle_menu_item(
                 "Exit",
                 &mut exit, // Doesn't show any checkboxes or anything
-                &Some(KEY_EXIT_APP),
+                &Some(&keys.exit_app),
                 indoc! {r"
                     Exits the application. Exactly the same as clicking the close button
                 "},
@@ -247,8 +284,20 @@ pub(super) fn build_ui(
     } else {
         trace!(target: UI_TRACE_BUILD_INTERFACE, "metrics window hidden");
     }
-    build_window("UI Management", managers, show_ui_management_window, ui)?;
-    build_window("Config", )
+    build_window(
+        "UI Management",
+        managers,
+        show_ui_management_window,
+        ui,
+        config,
+    )?;
+    build_window_fn(
+        "Config",
+        build_config_window,
+        show_config_window,
+        ui,
+        config,
+    )?;
 
     span_build_ui.record("elapsed", display(timer));
     span_build_ui.exit();
@@ -261,3 +310,11 @@ pub(super) fn build_ui(
     Ok(())
 }
 
+fn build_config_window(ui: &imgui::Ui, config: Config) -> FallibleFn {
+    ui.text_colored(config.runtime.ui.colours.error, "error");
+    ui.text_colored(config.runtime.ui.colours.warning, "warning");
+    ui.text_colored(config.runtime.ui.colours.good, "good");
+    ui.text_colored(config.runtime.ui.colours.severe_error, "severe_error");
+
+    Ok(())
+}

@@ -8,6 +8,7 @@ use crate::FallibleFn;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, info_span, trace, trace_span};
+use crate::config::Config;
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
@@ -18,12 +19,11 @@ use crate::program::thread_messages::*;
 pub struct EngineData {}
 
 pub(crate) fn engine_thread(
-    init_config: &'static mut InitTimeAppConfig,
-    runtime_config: &'static mut RuntimeAppConfig,
     thread_start_barrier: Arc<Barrier>,
     _program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
+    config: Config
 ) -> FallibleFn {
     let span_engine_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "engine_thread").entered();

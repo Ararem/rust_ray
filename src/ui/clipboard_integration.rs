@@ -1,11 +1,13 @@
 //! Support module that allows for using the clipboard in [imgui]
 use std::any::type_name;
 use std::fmt::{Debug, Formatter};
+use std::simd::simd_swizzle;
 
 use clipboard::{ClipboardContext, ClipboardProvider};
 use color_eyre::{eyre, Help, SectionExt};
 use imgui::ClipboardBackend;
 use tracing::*;
+use crate::config::Config;
 
 use crate::helper::logging::event_targets::{GENERAL_WARNING_NON_FATAL, UI_DEBUG_USER_INTERACTION};
 use crate::helper::logging::{dyn_error_to_report, format_error};
@@ -27,14 +29,14 @@ impl Debug for ImguiClipboardSupport {
 }
 
 /// (Tries to) initialise clipboard support
-pub(in crate::ui) fn clipboard_init() -> eyre::Result<ImguiClipboardSupport> {
+pub(in crate::ui) fn clipboard_init(config: Config) -> eyre::Result<ImguiClipboardSupport> {
     match ClipboardContext::new() {
         Ok(val) => Ok(ImguiClipboardSupport {
             backing_context: val,
         }),
         Err(boxed_error) => {
             let report =
-                dyn_error_to_report(&boxed_error).wrap_err("could not get clipboard context");
+                dyn_error_to_report(&boxed_error, config).wrap_err("could not get clipboard context");
             Err(report)
         }
     }

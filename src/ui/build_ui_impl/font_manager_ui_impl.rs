@@ -2,8 +2,6 @@ use std::borrow::Cow::Borrowed;
 use color_eyre::{Help, Report};
 use imgui::{TreeNodeFlags, Ui};
 use tracing::{debug, error, info, trace, trace_span, warn};
-use crate::config::ui_config::colours::COLOUR_ERROR;
-use crate::config::ui_config::{MAX_FONT_SIZE, MIN_FONT_SIZE};
 use crate::FallibleFn;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::font_manager::FontManager;

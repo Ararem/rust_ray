@@ -45,6 +45,7 @@ pub(in crate::ui) struct FrameInfo {
     pub num_frames_to_track: usize,
     // Moving average
     //TODO: Create some kind of settings/config thingy
+    //  Move these to the new config files (once they start working)
     pub smooth_delta_min: f32,
     pub smooth_delta_max: f32,
     pub smooth_fps_min: f32,

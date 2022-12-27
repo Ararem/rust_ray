@@ -4,8 +4,7 @@
 //! # A little test raytracer project
 use std::io;
 
-use crate::config::run_time::RuntimeAppConfig;
-use crate::config::{load_init_config, load_runtime_config};
+use crate::config::{load_config, Config};
 use color_eyre::eyre;
 use tracing::level_filters::LevelFilter;
 use tracing::*;
@@ -37,10 +36,10 @@ pub type FallibleFn = eyre::Result<()>;
 fn main() -> FallibleFn {
     init_eyre()?;
 
-    let mut init_config = load_init_config()?;
-    let mut runtime_config = load_runtime_config()?;
+    let mut owned_app_config = load_config()?;
+    let config: Config = &mut owned_app_config;
 
-    init_tracing(&runtime_config)?;
+    init_tracing(config)?;
 
     helper::panic_pill::red_or_blue_pill();
 
@@ -55,7 +54,7 @@ fn main() -> FallibleFn {
     debug!(target: MAIN_DEBUG_GENERAL, "core init done");
 
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
-    match program::run(&mut init_config, &mut runtime_config) {
+    match program::run(config) {
         Ok(program_return_value) => {
             info!(
                 target: PROGRAM_INFO_LIFECYCLE,
@@ -66,7 +65,7 @@ fn main() -> FallibleFn {
             Ok(program_return_value)
         }
         Err(report) => {
-            let formatted_error = format_error(&report);
+            let formatted_error = format_error(&report, config);
             error!(
                 target: PROGRAM_INFO_LIFECYCLE,
                 formatted_error, "program exited unsuccessfully"
@@ -83,7 +82,7 @@ fn init_eyre() -> FallibleFn {
 }
 
 /// Initialises the [tracing] system. Called as part of the core init
-fn init_tracing(config: &RuntimeAppConfig) -> FallibleFn {
+fn init_tracing(config: Config) -> FallibleFn {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
     let standard_format = format()
@@ -109,7 +108,7 @@ fn init_tracing(config: &RuntimeAppConfig) -> FallibleFn {
         )
         .with_filter(FilterFn::new(|meta| {
             let target = meta.target();
-            for filter in config.tracing.target_filters.iter() {
+            for filter in config.runtime.tracing.target_filters.iter() {
                 if filter.target == target {
                     return filter.enabled;
                 }

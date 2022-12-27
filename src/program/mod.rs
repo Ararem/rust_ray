@@ -14,6 +14,7 @@ use tracing::{debug, debug_span, error, info, info_span, trace, trace_span};
 use program_data::ProgramData;
 use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
+use crate::config::Config;
 use crate::config::init_time::InitTimeAppConfig;
 use crate::config::run_time::RuntimeAppConfig;
 
@@ -33,7 +34,7 @@ pub mod program_data;
 pub type ThreadReturn = FallibleFn;
 pub type ThreadHandle = JoinHandle<ThreadReturn>;
 
-pub fn run(init_config: &'static mut InitTimeAppConfig, runtime_config: &'static mut RuntimeAppConfig) -> ThreadReturn {
+pub fn run(config: Config) -> ThreadReturn {
     let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
     let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init").entered();

@@ -1,7 +1,7 @@
 //! This config file contains keybindings for actions within the app
 //! Note that ***THESE ARE BACKEND SPECIFIC*** - the current keybindings will *only* work with [`imgui_winit_support`]
-use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 pub type KeyCode = imgui_winit_support::winit::event::VirtualKeyCode;
 
@@ -42,6 +42,33 @@ impl Display for KeyBinding {
             f.write_str("Shift + ")?
         }
         write!(f, "{:?}", self.shortcut)
+    }
+}
+
+impl KeyBinding {
+    /// Checks whether all the *required* modifiers are being held for the keybinding. Ignores modifiers that aren't required (e.g. if [Self::modifier_shift] == false)
+    pub fn all_modifiers_held(&self, ui: &imgui::Ui) -> bool {
+        /*
+        # Mini little truth table of what we want
+        |Want|Down| Output|
+        |Yes | Yes| Yes   |
+        |Yes | No | No    |
+        |No  | Yes| Yes   |
+        |No  | No | Yes   |
+         */
+        // true if we don't have the modifier, or either of the L/R shifts is held
+        let shift = !self.modifier_shift
+            || (ui.is_key_index_down(KeyCode::LShift as i32)
+                || ui.is_key_index_down(KeyCode::RShift as i32));
+        let ctrl = !self.modifier_ctrl
+            || (ui.is_key_index_down(KeyCode::LControl as i32)
+                || ui.is_key_index_down(KeyCode::RControl as i32));
+        let alt = !self.modifier_alt
+            || (ui.is_key_index_down(KeyCode::LAlt as i32)
+                || ui.is_key_index_down(KeyCode::RAlt as i32));
+
+        // If all modifiers are pressed (or not required), then we are happy
+        ctrl && shift && alt
     }
 }
 
