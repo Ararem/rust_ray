@@ -2,7 +2,6 @@ use std::any::Any;
 use std::error::Error;
 
 use crate::config::run_time::tracing_config::ErrorLogStyle;
-use crate::config::run_time::RuntimeAppConfig;
 use crate::config::Config;
 use color_eyre::{Help, Report};
 use indoc::formatdoc;

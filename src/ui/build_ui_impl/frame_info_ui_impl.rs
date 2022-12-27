@@ -1,15 +1,17 @@
+use crate::config::compile_time::ui_config::MAX_FRAMES_TO_TRACK;
+use crate::config::Config;
 use crate::helper::logging::event_targets::*;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::ui_system::FrameInfo;
 use crate::FallibleFn;
 use imgui::{SliderFlags, TreeNodeFlags, Ui};
 use itertools::*;
-use std::cmp::{max, min};
+use std::cmp::{min};
 use tracing::field::Empty;
 use tracing::{trace, trace_span, warn};
 
 impl UiItem for FrameInfo {
-    fn render(&mut self, ui: &Ui) -> FallibleFn {
+    fn render(&mut self, ui: &Ui, config: Config) -> FallibleFn {
         let span_render_framerate_graph =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_framerate_graph").entered();
 
@@ -55,14 +57,10 @@ impl UiItem for FrameInfo {
         // usize can't be used in a slider, so we have to cast to u64, use that, then case back
         type SliderType = u64; // Might fail on 128-bit systems where usize > u64, but eh
         let mut num_track_frames_compat: SliderType = *track_frames as SliderType;
-        ui.slider_config(
-            "Num Tracked Frames",
-            1,
-            HARD_LIMIT_MAX_FRAMES_TO_TRACK as SliderType,
-        )
-        .display_format(format!("%u ({capped})", capped = num_frame_infos).as_str()) // Also display how many frames we are actually tracking currently.
-        .flags(SliderFlags::LOGARITHMIC)
-        .build(&mut num_track_frames_compat);
+        ui.slider_config("Num Tracked Frames", 1, MAX_FRAMES_TO_TRACK as SliderType)
+            .display_format(format!("%u ({capped})", capped = num_frame_infos).as_str()) // Also display how many frames we are actually tracking currently.
+            .flags(SliderFlags::LOGARITHMIC)
+            .build(&mut num_track_frames_compat);
         *track_frames = num_track_frames_compat as usize;
         if ui.is_item_hovered() {
             ui.tooltip_text("The maximum amount of frames that can be stored at one time. You probably want to leave this alone and modify [Num Displayed Frames] instead");
@@ -73,7 +71,7 @@ impl UiItem for FrameInfo {
         ui.slider_config(
             "Num Displayed Frames",
             1,
-            min(HARD_LIMIT_MAX_FRAMES_TO_TRACK, *track_frames) as SliderType,
+            min(MAX_FRAMES_TO_TRACK, *track_frames) as SliderType,
         )
         .display_format(format!("%u ({capped})", capped = info_range_end + 1).as_str()) // Also display how many frames we are actually displaying (in case there aren't enough to show)
         .flags(SliderFlags::LOGARITHMIC)
@@ -84,13 +82,9 @@ impl UiItem for FrameInfo {
         }
 
         let mut smoothing_compat: SliderType = self.scale_smoothing as SliderType; // Might fail on 128-bit systems, but eh
-        ui.slider_config(
-            "Plot Range Smoothing",
-            1,
-            256 as SliderType,
-        )
-        .flags(SliderFlags::LOGARITHMIC)
-        .build(&mut smoothing_compat);
+        ui.slider_config("Plot Range Smoothing", 1, 256 as SliderType)
+            .flags(SliderFlags::LOGARITHMIC)
+            .build(&mut smoothing_compat);
         self.scale_smoothing = smoothing_compat as usize;
         if ui.is_item_hovered() {
             ui.tooltip_text("Amount of smoothing to apply when calculating the range values for plotting. Higher values increase smoothing, de-focusing peaks and spikes");
@@ -98,8 +92,9 @@ impl UiItem for FrameInfo {
 
         //// ===== Plots =====
 
-        fn chunked_smooth_minmax(vec: &[f32], chunk_size: usize) -> (f32, f32){
-            vec.iter().chunks(chunk_size) // Group by 8 frames at a time
+        fn chunked_smooth_minmax(vec: &[f32], chunk_size: usize) -> (f32, f32) {
+            vec.iter()
+                .chunks(chunk_size) // Group by 8 frames at a time
                 .into_iter()
                 .map(|chunk| {
                     let mut count: f32 = 0.0;
@@ -127,7 +122,8 @@ impl UiItem for FrameInfo {
                 smooth_delta_max = Empty,
             )
             .entered();
-            let (sharp_delta_min, sharp_delta_max) = chunked_smooth_minmax(&deltas[0..info_range_end], self.scale_smoothing);
+            let (sharp_delta_min, sharp_delta_max) =
+                chunked_smooth_minmax(&deltas[0..info_range_end], self.scale_smoothing);
 
             // Update the local value, and then copy it across to the self value
             // let (&sharp_delta_min, &sharp_delta_max) = deltas[0..info_range_end] // Slice the area that we're going to be displaying, or else we calculate on the area that isn't visible
@@ -139,13 +135,13 @@ impl UiItem for FrameInfo {
             smooth_delta_min = vek::Lerp::lerp(
                 self.smooth_delta_min,
                 sharp_delta_min,
-                FRAME_INFO_RANGE_SMOOTH_SPEED,
+                config.runtime.ui.frame_info_range_smooth_speed,
             );
             self.smooth_delta_min = smooth_delta_min;
             smooth_delta_max = vek::Lerp::lerp(
                 self.smooth_delta_max,
                 sharp_delta_max,
-                FRAME_INFO_RANGE_SMOOTH_SPEED,
+                config.runtime.ui.frame_info_range_smooth_speed,
             );
             self.smooth_delta_max = smooth_delta_max;
 
@@ -182,18 +178,19 @@ impl UiItem for FrameInfo {
             )
             .entered();
 
-            let (sharp_fps_min, sharp_fps_max) = chunked_smooth_minmax(&fps[0..info_range_end], self.scale_smoothing);
+            let (sharp_fps_min, sharp_fps_max) =
+                chunked_smooth_minmax(&fps[0..info_range_end], self.scale_smoothing);
             // Update the local value, and then copy it across to the self value
             smooth_fps_min = vek::Lerp::lerp(
                 self.smooth_fps_min,
                 sharp_fps_min,
-                FRAME_INFO_RANGE_SMOOTH_SPEED,
+                config.runtime.ui.frame_info_range_smooth_speed,
             );
             self.smooth_fps_min = smooth_fps_min;
             smooth_fps_max = vek::Lerp::lerp(
                 self.smooth_fps_max,
                 sharp_fps_max,
-                FRAME_INFO_RANGE_SMOOTH_SPEED,
+                config.runtime.ui.frame_info_range_smooth_speed,
             );
             self.smooth_fps_max = smooth_fps_max;
 

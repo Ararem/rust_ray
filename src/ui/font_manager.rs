@@ -14,11 +14,12 @@ use nameof::name_of;
 use tracing::warn;
 use tracing::{debug, debug_span, trace, trace_span};
 
-use crate::config::resources_config::{
-    FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER, FONTS_PATH,
+use crate::config::compile_time::resources_config::{
+    FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER
 };
-use crate::config::ui_config::*;
+use crate::config::Config;
 use crate::FallibleFn;
+use crate::config::compile_time::ui_config::{MAX_FONT_SIZE, MIN_FONT_SIZE};
 use crate::helper::logging::event_targets::*;
 use crate::resources::resource_manager::get_main_resource_folder_path;
 
@@ -40,7 +41,7 @@ pub struct FontManager {
 
 impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
-    pub fn reload_list_from_resources(&mut self) -> FallibleFn {
+    pub fn reload_list_from_resources(&mut self, config: Config) -> FallibleFn {
         let span_reload_fonts_list =
             debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
 
@@ -51,7 +52,7 @@ impl FontManager {
         */
         self.dirty = true;
 
-        let fonts_directory_path = get_main_resource_folder_path()?.join(FONTS_PATH);
+        let fonts_directory_path = get_main_resource_folder_path(config)?.join(config.runtime.resources.fonts_path.clone());
 
         debug!(
             target: RESOURCES_DEBUG_LOAD,
@@ -242,7 +243,7 @@ impl FontManager {
             fonts: vec![],
             selected_font_index: 0,
             selected_weight_index: 0,
-            selected_size: DEFAULT_FONT_SIZE,
+            selected_size: 20f32, //TODO: Font size and weights in config
 
             current_font: None,
             dirty: true,
@@ -256,7 +257,7 @@ impl FontManager {
     ///
     /// Note:
     /// If this returns `Ok(true)`, you ***MUST*** call `renderer.reload_font_texture(imgui_context)` or the app will crash
-    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlas) -> eyre::Result<bool> {
+    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlas, config: Config) -> eyre::Result<bool> {
         // Don't need to update if we already have a font and we're not dirty
         if !self.dirty && self.current_font.is_some() {
             return Ok(false);
@@ -309,7 +310,9 @@ impl FontManager {
             data: &weight.data,
             config: Some(FontConfig {
                 name: full_name,
-                ..base_font_config()
+                oversample_v: config.runtime.ui.font_oversampling,
+                oversample_h: config.runtime.ui.font_oversampling,
+                ..FontConfig::default()
             }),
             size_pixels: *size,
         }]);
@@ -327,8 +330,6 @@ impl FontManager {
     }
 
     pub fn get_font_id(&mut self) -> eyre::Result<&FontId> {
-        //TODO: Better error handling (actually try to get the index then fail, rather than failing early - we might be wrong)
-
         return match &self.current_font {
             Some(font) => Ok(font),
             None => Err(

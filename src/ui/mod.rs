@@ -310,7 +310,7 @@ fn outer_render_a_frame(
 
     trace_span!(target: UI_TRACE_RENDER, "maybe_rebuild_font").in_scope(|| {
         let fonts = imgui_context.fonts();
-        match managers.font_manager.rebuild_font_if_needed(fonts) {
+        match managers.font_manager.rebuild_font_if_needed(fonts, config) {
             Err(report) => {
                 let report = report.wrap_err("font manager was not able to rebuild font");
                 warn!(
@@ -631,7 +631,7 @@ fn init_ui_system(title: &str, config: Config) -> eyre::Result<UiSystem> {
         debug_span!(target: UI_DEBUG_GENERAL, "create_font_manager").in_scope(|| {
             let mut font_manager = FontManager::new().wrap_err("failed to create font manager")?;
             debug!(target: UI_DEBUG_GENERAL, "loading font manager fonts list"); //Need to call it now or else we don't have any fonts loaded and the manager craps itself later
-            font_manager.reload_list_from_resources()?;
+            font_manager.reload_list_from_resources(config)?;
             debug!(
                 target: UI_DEBUG_GENERAL,
                 ?font_manager,
@@ -663,7 +663,7 @@ fn init_ui_system(title: &str, config: Config) -> eyre::Result<UiSystem> {
     debug!(target: UI_DEBUG_GENERAL, "created [glium] renderer");
 
     debug_span!(target: UI_DEBUG_GENERAL, "clipboard_init").in_scope(|| {
-        match clipboard_integration::clipboard_init() {
+        match clipboard_integration::clipboard_init(config) {
             Ok(clipboard_backend) => {
                 debug!(
                     target: UI_DEBUG_GENERAL,

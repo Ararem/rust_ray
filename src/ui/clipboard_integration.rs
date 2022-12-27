@@ -1,7 +1,6 @@
 //! Support module that allows for using the clipboard in [imgui]
 use std::any::type_name;
 use std::fmt::{Debug, Formatter};
-use std::simd::simd_swizzle;
 
 use clipboard::{ClipboardContext, ClipboardProvider};
 use color_eyre::{eyre, Help, SectionExt};
@@ -17,6 +16,7 @@ use crate::helper::logging::{dyn_error_to_report, format_error};
 pub(in crate::ui) struct ImguiClipboardSupport {
     /// The wrapped [ClipboardContext] object that the operations are passed to
     backing_context: ClipboardContext,
+    config: Config
 }
 
 impl Debug for ImguiClipboardSupport {
@@ -33,6 +33,7 @@ pub(in crate::ui) fn clipboard_init(config: Config) -> eyre::Result<ImguiClipboa
     match ClipboardContext::new() {
         Ok(val) => Ok(ImguiClipboardSupport {
             backing_context: val,
+            config
         }),
         Err(boxed_error) => {
             let report =
@@ -51,10 +52,10 @@ impl ClipboardBackend for ImguiClipboardSupport {
         let maybe_text = match get_result {
             Err(boxed_error) => {
                 let report =
-                    dyn_error_to_report(&boxed_error).wrap_err("could not get clipboard text");
+                    dyn_error_to_report(&boxed_error,self.config).wrap_err("could not get clipboard text");
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    error = format_error(&report),
+                    error = format_error(&report,self.config),
                     "couldn't get clipboard"
                 );
                 None
@@ -82,12 +83,12 @@ impl ClipboardBackend for ImguiClipboardSupport {
         let set_result = self.backing_context.set_contents(clipboard_text.to_owned());
         debug!(target: UI_DEBUG_USER_INTERACTION, ?set_result);
         if let Err(boxed_error) = set_result {
-            let report = dyn_error_to_report(&boxed_error)
+            let report = dyn_error_to_report(&boxed_error, self.config)
                 .wrap_err("could not set clipboard text")
                 .section(clipboard_text.to_owned().header("Clipboard:"));
             warn!(
                 target: GENERAL_WARNING_NON_FATAL,
-                error = format_error(&report),
+                error = format_error(&report,self.config),
                 "couldn't set clipboard"
             )
         } else {

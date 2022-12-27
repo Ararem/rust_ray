@@ -1,4 +1,4 @@
-use std::sync::mpsc::{TrySendError::*};
+use std::sync::mpsc::TrySendError::*;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
@@ -11,21 +11,19 @@ use multiqueue2::{broadcast_queue, BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span};
 
+use crate::config::Config;
 use program_data::ProgramData;
 use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
-use crate::config::Config;
-use crate::config::init_time::InitTimeAppConfig;
-use crate::config::run_time::RuntimeAppConfig;
 
 use crate::engine::*;
-use crate::FallibleFn;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::{dyn_panic_to_report, format_error};
 use crate::program::thread_messages::ThreadMessage::*;
 use crate::program::thread_messages::*;
 use crate::ui::ui_data::UiData;
 use crate::ui::*;
+use crate::FallibleFn;
 
 #[macro_use]
 pub(crate) mod thread_messages;
@@ -80,8 +78,7 @@ pub fn run(config: Config) -> ThreadReturn {
     span_init.exit();
 
     let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads")
-        .in_scope(
-            || -> eyre::Result<Threads> {
+        .in_scope(|| -> eyre::Result<Threads> {
             debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
             let engine_thread_handle: ThreadHandle = {
                 let data = Arc::clone(&program_data_wrapped);
@@ -90,7 +87,7 @@ pub fn run(config: Config) -> ThreadReturn {
                 let barrier = Arc::clone(&thread_start_barrier);
                 thread::Builder::new()
                     .name("engine_thread".to_string())
-                    .spawn(move || engine_thread(init_config, runtime_config, barrier, data, sender, receiver))
+                    .spawn(move || engine_thread(barrier, data, sender, receiver, config))
                     .wrap_err("failed to create engine thread")
                     .note("this error was most likely due to a failure at the OS level")?
             };
@@ -108,7 +105,7 @@ pub fn run(config: Config) -> ThreadReturn {
                 let barrier = Arc::clone(&thread_start_barrier);
                 thread::Builder::new()
                     .name("ui_thread".to_string())
-                    .spawn(|| ui_thread(init_config, runtime_config, barrier, data, sender, receiver))
+                    .spawn(|| ui_thread(barrier, data, sender, receiver, config))
                     .wrap_err("failed to create ui thread")
                     .note("this error was most likely due to a failure at the OS level")?
             };
@@ -161,11 +158,11 @@ pub fn run(config: Config) -> ThreadReturn {
                         );
                         match program_message {
                             QuitAppNoError(QuitInteractionByUser) => {
-                                handle_user_quit(msg_sender, msg_receiver, threads)?;
+                                handle_user_quit(msg_sender, msg_receiver, threads, config)?;
                                 break 'global;
                             }
                             QuitAppError(wrapped_error_report) => {
-                                return Err(handle_error_quit(wrapped_error_report))
+                                return Err(handle_error_quit(wrapped_error_report, config))
                             }
                         }
                     }
@@ -183,7 +180,8 @@ pub fn run(config: Config) -> ThreadReturn {
         They should only ever safely exit while inside the 'process_messages loop (since that's where they're told to quit)
         So if they have finished here, that's BAAADDDD
         */
-        threads = check_threads_are_running(threads).wrap_err("failed thread status check")?;
+        threads =
+            check_threads_are_running(threads, config).wrap_err("failed thread status check")?;
 
         trace!(
             target: PROGRAM_TRACE_GLOBAL_LOOP,
@@ -209,7 +207,7 @@ struct Threads {
     ui: ThreadHandle,
 }
 
-fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
+fn check_threads_are_running(threads: Threads, config: Config) -> eyre::Result<Threads> {
     let span_check_threads =
         trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads").entered();
     trace!(
@@ -224,15 +222,15 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
         // Thread finished so .join() should be wait-free
         return match threads.ui.join() {
             Ok(ret) => {
-                let error = Report::msg("ui thread finished early with return value")
+                let error = Report::msg("ui thread finished early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, ?error);
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
                 Err(error)
             }
             Err(boxed_error) => {
-                let error =
-                    dyn_panic_to_report(&boxed_error).wrap_err("ui thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, ?error);
+                let error = dyn_panic_to_report(&boxed_error, config)
+                    .wrap_err("ui thread panicked while running");
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
                 Err(error)
             }
         };
@@ -255,15 +253,15 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
         // Thread finished so .join() should be wait-free
         return match threads.engine.join() {
             Ok(ret) => {
-                let error = Report::msg("engine thread finished early with return value")
+                let error = Report::msg("engine thread exited early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, ?error);
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
                 Err(error)
             }
             Err(boxed_error) => {
-                let error = dyn_panic_to_report(&boxed_error)
+                let error = dyn_panic_to_report(&boxed_error, config)
                     .wrap_err("engine thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, ?error);
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
                 Err(error)
             }
         };
@@ -278,7 +276,7 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
     Ok(threads)
 }
 
-fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
+fn handle_error_quit(wrapped_error_report: Arc<Report>, config: Config) -> Report {
     info!(target: PROGRAM_INFO_LIFECYCLE, "quitting app due to error");
     // try and return the error directly, but just in case we can't (which should never happen), print the error and return a generic one
     match Arc::try_unwrap(wrapped_error_report) {
@@ -293,7 +291,7 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
             };
             error!(target: REALLY_FUCKING_BAD_UNREACHABLE, "{}", warn);
             Report::msg("quitting app due to an internal error")
-                .with_section(move || format_error(&_arc).header("Error:"))
+                .with_section(move || format_error(&_arc, config).header("Error:"))
                 .note("the displayed error may not be correct and/or complete")
                 .warning(warn)
         }
@@ -304,6 +302,7 @@ fn handle_user_quit(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
     threads: Threads,
+    config: Config,
 ) -> FallibleFn {
     info!(target: PROGRAM_INFO_LIFECYCLE, "user wants to quit");
 
@@ -348,7 +347,7 @@ fn handle_user_quit(
                         Err(boxed_panic) => {
                             // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                             // So we have to format it as a string
-                            let report = dyn_panic_to_report(&boxed_panic)
+                            let report = dyn_panic_to_report(&boxed_panic, config )
                                 .wrap_err("ui thread panicked while shutting down")
                                 .note("it is unlikely that the thread failed during normal execution, as that should have been caught earlier");
                             debug!(target: THREAD_DEBUG_GENERAL, ?boxed_panic, ?report);
@@ -399,7 +398,7 @@ fn handle_user_quit(
                         Err(boxed_panic) => {
                             // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                             // So we have to format it as a string
-                            let report = dyn_panic_to_report(&boxed_panic)
+                            let report = dyn_panic_to_report(&boxed_panic,config )
                                 .wrap_err("engine thread panicked while shutting down");
                             debug!(target: THREAD_DEBUG_GENERAL, ?boxed_panic, ?report);
                             return Err(report);
