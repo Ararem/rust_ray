@@ -1,6 +1,7 @@
 mod ui_manager_ui_impl;
 mod font_manager_ui_impl;
 mod frame_info_ui_impl;
+mod config_ui_impl;
 
 use imgui::Condition;
 use crate::helper::logging::event_targets::*;
@@ -247,6 +248,7 @@ pub(super) fn build_ui(
         trace!(target: UI_TRACE_BUILD_INTERFACE, "metrics window hidden");
     }
     build_window("UI Management", managers, show_ui_management_window, ui)?;
+    build_window("Config", )
 
     span_build_ui.record("elapsed", display(timer));
     span_build_ui.exit();

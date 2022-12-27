@@ -1,29 +1,11 @@
-use std::env;
 use std::path::PathBuf;
 
-use color_eyre::{eyre, Report};
-use tracing::trace;
+use color_eyre::{eyre};
+use crate::config::run_time::RuntimeAppConfig;
 
-use crate::config::resources_config::*;
+use crate::helper::file_helper::app_current_directory;
 
-pub fn get_main_resource_folder_path() -> eyre::Result<PathBuf> {
-    // Directory of the .exe
-    let current_dir = match env::current_exe() {
-        Err(error) => Err(Report::new(error).wrap_err("was not able to find current process file location")),
-        //Have to convert, since `.parent()` returns a [Path] (reference) not owned variable, so won't live after `exe_path` goes out of scope
-        Ok(exe_path) => Ok(exe_path.parent().map(PathBuf::from)),
-    }.map(
-        // maps the returned Ok() value of `exe_path.parent()`
-        |maybe_dir| {
-            match maybe_dir {
-                None => Err(Report::msg("could not get parent (directory) of executable: `exe_path.parent()` returned [None]")),
-                Some(dir) => Ok(dir),
-            }
-        }
-    )??;
-    //Propagate errors
-    trace!("current directory is {current_dir:?}");
-
-    //Add the fonts path onto the base path
-    Ok(current_dir.join(RESOURCES_PATH))
+pub fn get_main_resource_folder_path(config: RuntimeAppConfig) -> eyre::Result<PathBuf> {
+    let mut current_dir = app_current_directory()?;
+    Ok(current_dir.join(config.resources.resources_path))
 }

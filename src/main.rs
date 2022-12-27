@@ -4,13 +4,16 @@
 //! # A little test raytracer project
 use std::io;
 
+use crate::config::run_time::RuntimeAppConfig;
+use crate::config::{load_init_config, load_runtime_config};
 use color_eyre::eyre;
 use tracing::level_filters::LevelFilter;
 use tracing::*;
 use tracing_subscriber::filter::FilterFn;
+use tracing_subscriber::fmt::format;
 use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::time::uptime;
 
-use crate::config::tracing_config::STANDARD_FORMAT;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_error;
 
@@ -33,7 +36,12 @@ pub type FallibleFn = eyre::Result<()>;
 /// * Runs the [program] for real
 fn main() -> FallibleFn {
     init_eyre()?;
-    init_tracing()?;
+
+    let mut init_config = load_init_config()?;
+    let mut runtime_config = load_runtime_config()?;
+
+    init_tracing(&runtime_config)?;
+
     helper::panic_pill::red_or_blue_pill();
 
     debug!(
@@ -47,7 +55,7 @@ fn main() -> FallibleFn {
     debug!(target: MAIN_DEBUG_GENERAL, "core init done");
 
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
-    match program::run() {
+    match program::run(&mut init_config, &mut runtime_config) {
         Ok(program_return_value) => {
             info!(
                 target: PROGRAM_INFO_LIFECYCLE,
@@ -75,13 +83,24 @@ fn init_eyre() -> FallibleFn {
 }
 
 /// Initialises the [tracing] system. Called as part of the core init
-fn init_tracing() -> FallibleFn {
+fn init_tracing(config: &RuntimeAppConfig) -> FallibleFn {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
+
+    let standard_format = format()
+        .compact()
+        .with_ansi(true)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_target(false)
+        .with_level(true)
+        .with_timer(uptime())
+        .with_source_location(false)
+        .with_level(true);
 
     let standard_layer = fmt::layer()
         .with_span_events(FmtSpan::ACTIVE)
         .log_internal_errors(true)
-        .event_format(STANDARD_FORMAT.clone())
+        .event_format(standard_format)
         .with_writer(io::stdout)
         .with_filter(
             EnvFilter::builder()
@@ -90,8 +109,8 @@ fn init_tracing() -> FallibleFn {
         )
         .with_filter(FilterFn::new(|meta| {
             let target = meta.target();
-            for filter in config::tracing_config::LOG_FILTERS.iter() {
-                if filter.regex.is_match(target) {
+            for filter in config.tracing.target_filters.iter() {
+                if filter.target == target {
                     return filter.enabled;
                 }
             }

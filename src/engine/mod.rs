@@ -2,10 +2,12 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::config::init_time::InitTimeAppConfig;
+use crate::config::run_time::RuntimeAppConfig;
+use crate::FallibleFn;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, info_span, trace, trace_span};
-use crate::FallibleFn;
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
@@ -16,6 +18,8 @@ use crate::program::thread_messages::*;
 pub struct EngineData {}
 
 pub(crate) fn engine_thread(
+    init_config: &'static mut InitTimeAppConfig,
+    runtime_config: &'static mut RuntimeAppConfig,
     thread_start_barrier: Arc<Barrier>,
     _program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,

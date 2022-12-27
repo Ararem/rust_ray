@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::mpsc::TrySendError::{Disconnected, Full};
 use std::sync::{Arc, Barrier, Mutex, TryLockError};
 use std::thread::sleep;
@@ -22,10 +21,7 @@ use nameof::name_of;
 use tracing::field::{debug, Empty};
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn};
 
-use crate::config::program_config::{APP_TITLE, IMGUI_LOG_FILE_PATH, IMGUI_SETTINGS_FILE_PATH};
-use crate::config::ui_config::{
-    DEFAULT_WINDOW_SIZE, HARDWARE_ACCELERATION, MULTISAMPLING, START_MAXIMIZED, VSYNC,
-};
+use crate::build::*;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_error;
 use crate::program::program_data::ProgramData;
@@ -39,6 +35,8 @@ use crate::ui::ui_system::{FrameInfo, UiBackend, UiManagers, UiSystem};
 use crate::FallibleFn;
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
+use crate::config::init_time::InitTimeAppConfig;
+use crate::config::run_time::RuntimeAppConfig;
 
 mod build_ui_impl;
 mod clipboard_integration;
@@ -48,6 +46,8 @@ pub mod ui_data;
 mod ui_system;
 
 pub(crate) fn ui_thread(
+    init_config: &'static mut InitTimeAppConfig,
+    runtime_config: &'static mut RuntimeAppConfig,
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
@@ -76,7 +76,7 @@ pub(crate) fn ui_thread(
     Init ui
     If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
     */
-    let system = init_ui_system(APP_TITLE).wrap_err("failed while initialising ui system")?;
+    let system = init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str(), init_config).wrap_err("failed while initialising ui system")?;
 
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
     // Probably because I was borrowing the whole struct when I only needed one field of it
@@ -556,7 +556,7 @@ fn process_messages_with_return(
 ///Initialises the UI system and returns it
 ///
 /// * `title` - Title of the created window
-fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
+fn init_ui_system(title: &str, config: &mut InitTimeAppConfig) -> eyre::Result<UiSystem> {
     let span_init_ui = debug_span!(target: UI_DEBUG_GENERAL, "init_ui").entered();
 
     let mut imgui_context;
@@ -585,10 +585,10 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
         "creating [glutin] context builder"
     );
     let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
-        .with_vsync(VSYNC)
-        .with_hardware_acceleration(HARDWARE_ACCELERATION)
+        .with_vsync(config.ui_config.vsync)
+        .with_hardware_acceleration(config.ui_config.hardware_acceleration)
         .with_srgb(true)
-        .with_multisampling(MULTISAMPLING);
+        .with_multisampling(config.ui_config.multisampling);
     debug!(
         target: UI_DEBUG_GENERAL,
         ?glutin_context_builder,
@@ -598,8 +598,8 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] window builder");
     let window_builder = WindowBuilder::new()
         .with_title(title)
-        .with_inner_size(DEFAULT_WINDOW_SIZE)
-        .with_maximized(START_MAXIMIZED);
+        .with_inner_size(config.ui_config.default_window_size)
+        .with_maximized(config.ui_config.start_maximised);
     debug!(
         target: UI_DEBUG_GENERAL,
         ?window_builder,
@@ -620,22 +620,6 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
         "created [imgui] context"
     );
 
-    let imgui_settings_path = PathBuf::from(IMGUI_SETTINGS_FILE_PATH);
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?imgui_settings_path,
-        "setting [imgui] settings path"
-    );
-    imgui_context.set_ini_filename(imgui_settings_path);
-    debug!(target: UI_DEBUG_GENERAL, imgui_settings_path=?imgui_context.ini_filename(), "set [imgui] settings path");
-    let imgui_log_path = PathBuf::from(IMGUI_LOG_FILE_PATH);
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?imgui_log_path,
-        "setting [imgui] log path"
-    );
-    imgui_context.set_log_filename(imgui_log_path);
-    debug!(target: UI_DEBUG_GENERAL, imgui_log_path=?imgui_context.log_filename(), "set [imgui] log path");
     debug!(
         target: UI_DEBUG_GENERAL,
         "setting DOCKING_ENABLE flag for [imgui]"

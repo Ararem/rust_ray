@@ -14,6 +14,8 @@ use tracing::{debug, debug_span, error, info, info_span, trace, trace_span};
 use program_data::ProgramData;
 use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
+use crate::config::init_time::InitTimeAppConfig;
+use crate::config::run_time::RuntimeAppConfig;
 
 use crate::engine::*;
 use crate::FallibleFn;
@@ -31,7 +33,7 @@ pub mod program_data;
 pub type ThreadReturn = FallibleFn;
 pub type ThreadHandle = JoinHandle<ThreadReturn>;
 
-pub fn run() -> ThreadReturn {
+pub fn run(init_config: &'static mut InitTimeAppConfig, runtime_config: &'static mut RuntimeAppConfig) -> ThreadReturn {
     let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
     let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init").entered();
@@ -77,7 +79,8 @@ pub fn run() -> ThreadReturn {
     span_init.exit();
 
     let mut threads: Threads = debug_span!(target: THREAD_DEBUG_GENERAL, "create_threads")
-        .in_scope(|| -> eyre::Result<Threads> {
+        .in_scope(
+            || -> eyre::Result<Threads> {
             debug!(target: THREAD_DEBUG_GENERAL, "creating engine thread");
             let engine_thread_handle: ThreadHandle = {
                 let data = Arc::clone(&program_data_wrapped);
@@ -86,7 +89,7 @@ pub fn run() -> ThreadReturn {
                 let barrier = Arc::clone(&thread_start_barrier);
                 thread::Builder::new()
                     .name("engine_thread".to_string())
-                    .spawn(move || engine_thread(barrier, data, sender, receiver))
+                    .spawn(move || engine_thread(init_config, runtime_config, barrier, data, sender, receiver))
                     .wrap_err("failed to create engine thread")
                     .note("this error was most likely due to a failure at the OS level")?
             };
@@ -104,7 +107,7 @@ pub fn run() -> ThreadReturn {
                 let barrier = Arc::clone(&thread_start_barrier);
                 thread::Builder::new()
                     .name("ui_thread".to_string())
-                    .spawn(move || ui_thread(barrier, data, sender, receiver))
+                    .spawn(|| ui_thread(init_config, runtime_config, barrier, data, sender, receiver))
                     .wrap_err("failed to create ui thread")
                     .note("this error was most likely due to a failure at the OS level")?
             };
