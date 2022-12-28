@@ -33,6 +33,7 @@ impl Default for TracingConfig {
                 LogTargetFilter::new(ENGINE_TRACE_GLOBAL_LOOP, false),
                 LogTargetFilter::new(THREAD_TRACE_MESSAGE_IGNORED, false),
                 LogTargetFilter::new(PROGRAM_TRACE_THREAD_STATUS_POLL, false),
+                LogTargetFilter::new(FONT_MANAGER_TRACE_FONT_LOAD, false),
             ],
         }
     }
@@ -48,7 +49,7 @@ pub struct LogTargetFilter {
 impl LogTargetFilter {
     /// Creates a filter that matches if the target starts with a specified string. The input can be regex
     /// Creates a new filter from a regex string
-    pub fn new(val: & str, enabled: bool) -> LogTargetFilter {
+    pub fn new(val: &str, enabled: bool) -> LogTargetFilter {
         LogTargetFilter {
             target: val.to_string(),
             enabled,

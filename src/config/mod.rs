@@ -1,3 +1,4 @@
+use std::fs;
 use crate::config::compile_time::config_config::*;
 use std::ops::{Deref, DerefMut};
 use std::sync::Mutex;
@@ -20,6 +21,8 @@ use crate::helper::logging::event_targets::*;
 use color_eyre::eyre::{Result as Res, WrapErr};
 use color_eyre::{Help, SectionExt};
 use lazy_static::lazy_static;
+use ron::extensions::Extensions;
+use ron::ser::{to_string_pretty, PrettyConfig};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -29,13 +32,28 @@ pub struct AppConfig {
     pub runtime: RuntimeAppConfig,
 }
 
+pub fn save_config_to_disk() -> Res<()> {
+    let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
+    let config = read_config_value(|config| config.clone());
+
+    let serialised = to_string_pretty(
+        &config,
+        PrettyConfig::default()
+            .separate_tuple_members(true)
+            .enumerate_arrays(true),
+    ).wrap_err("couldn't serialise config")?;
+
+    fs::write(config_path, serialised).wrap_err("couldn't save serialised config to file")?;
+
+    Ok(())
+}
 
 fn fallible_load_config() -> Res<AppConfig> {
     // can't use tracing here since it don't exist yet :(
 
     //load up the file
     let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
-    let data = std::fs::read_to_string(&config_path)
+    let data = fs::read_to_string(&config_path)
         .wrap_err_with(|| format!("could not read init config file at {config_path:?}"))?;
     let config = ron::from_str::<AppConfig>(&data)
         .wrap_err("failed to deserialise config")
@@ -43,14 +61,15 @@ fn fallible_load_config() -> Res<AppConfig> {
 
     Ok(config)
 }
-fn lazy_static_load_config() -> AppConfig{
+fn lazy_static_load_config() -> AppConfig {
     // Again, we can't using [tracing] so we gotta use println (ew)
     let maybe_config = fallible_load_config();
-    match maybe_config{
+    match maybe_config {
         Ok(config) => config,
-        Err(report)=>{
-            let report = report.wrap_err("using default font config (could not load config from file)");
-            eprintln!("{:?}", report);
+        Err(report) => {
+            let report =
+                report.wrap_err("using default font config (could not load config from file)");
+            eprintln!("problem loading config: {:?}", report);
             AppConfig::default()
         }
     }
@@ -86,7 +105,6 @@ pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
 
     func(&config)
 }
-
 
 pub fn update_config<T>(func: fn(&mut AppConfig) -> T) -> T {
     let mut guard = match CONFIG_INSTANCE.lock() {

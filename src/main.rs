@@ -4,7 +4,7 @@
 //! # A little test raytracer project
 use std::io;
 
-use crate::config::read_config_value;
+use crate::config::{read_config_value, save_config_to_disk};
 use color_eyre::eyre;
 use tracing::level_filters::LevelFilter;
 use tracing::*;
@@ -24,6 +24,7 @@ mod program;
 mod resources;
 mod ui;
 
+/// General type alias for a function that may fail: `eyre::Result<()>`
 pub type FallibleFn = eyre::Result<()>;
 
 /// Main entrypoint for the program
@@ -50,7 +51,14 @@ fn main() -> FallibleFn {
     debug!(target: MAIN_DEBUG_GENERAL, "core init done");
 
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
-    match program::run() {
+    let ret = program::run();
+
+    debug!(target: MAIN_DEBUG_GENERAL, "saving config to disk");
+    if let Err(error) = save_config_to_disk() {
+        warn!(target: GENERAL_WARNING_NON_FATAL, report = %format_error(&error), "couldn't save config to disk")
+    }
+
+    match ret {
         Ok(program_return_value) => {
             info!(
                 target: PROGRAM_INFO_LIFECYCLE,
@@ -114,7 +122,8 @@ fn init_tracing() -> FallibleFn {
                 | DOMINO_EFFECT_FAILURE => true,
                 // Otherwise (default), scan the config
                 _ => {
-                    let configured_targets = read_config_value(|config| config.runtime.tracing.target_filters.clone());
+                    let configured_targets =
+                        read_config_value(|config| config.runtime.tracing.target_filters.clone());
                     for filter in configured_targets {
                         if filter.target == target {
                             return filter.enabled;

@@ -4,9 +4,10 @@ macro_rules! target {
     ($name:ident, $docs:expr) => {
         #[doc=indoc::indoc!{$docs}]
         // #[allow(dead_code)]
-        pub const $name: &str = stringify!(rust_ray::target::$name);
+        pub const $name: &str = concat!("rust_ray::target::", stringify!($name));
     };
 }
+
 // ===== Ui =====
 target!(
     UI_TRACE_EVENT_LOOP,
