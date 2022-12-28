@@ -3,7 +3,6 @@ use std::error::Error;
 
 use crate::config::read_config_value;
 use crate::config::run_time::tracing_config::ErrorLogStyle;
-use crate::config::run_time::tracing_config::ErrorLogStyle::WithBacktrace;
 use color_eyre::{Help, Report};
 use indoc::formatdoc;
 use tracing::field::{display, DisplayValue};

@@ -47,7 +47,7 @@ fn load_config() -> Res<AppConfig> {
 
     //load up the file
     let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
-    let data = std::fs::read_to_string(config_path)
+    let data = std::fs::read_to_string(&config_path)
         .wrap_err_with(|| format!("could not read init config file at {config_path:?}"))?;
     let config = ron::from_str::<AppConfig>(&data)
         .wrap_err("failed to deserialise config")

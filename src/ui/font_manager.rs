@@ -52,7 +52,7 @@ impl FontManager {
         */
         self.dirty = true;
 
-        let fonts_directory_path = get_main_resource_folder_path()?.join(read_config_value(|config| config.runtime.resources.fonts_path));
+        let fonts_directory_path = get_main_resource_folder_path()?.join(read_config_value(|config| config.runtime.resources.fonts_path.clone()));
 
         debug!(
             target: RESOURCES_DEBUG_LOAD,
