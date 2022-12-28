@@ -18,30 +18,19 @@ use crate::config::run_time::RuntimeAppConfig;
 use crate::helper::file_helper::app_current_directory;
 use crate::helper::logging::event_targets::*;
 use color_eyre::eyre::{Result as Res, WrapErr};
-use color_eyre::{Help, Report, SectionExt};
+use color_eyre::{Help, SectionExt};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-/// Type alias for easily passing around an [AppConfig] struct
-pub type Config = &'static mut AppConfig;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub init: InitTimeAppConfig,
     pub runtime: RuntimeAppConfig,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            init: InitTimeAppConfig::default(),
-            runtime: RuntimeAppConfig::default(),
-        }
-    }
-}
 
-fn load_config() -> Res<AppConfig> {
+fn fallible_load_config() -> Res<AppConfig> {
     // can't use tracing here since it don't exist yet :(
 
     //load up the file
@@ -54,8 +43,20 @@ fn load_config() -> Res<AppConfig> {
 
     Ok(config)
 }
+fn lazy_static_load_config() -> AppConfig{
+    // Again, we can't using [tracing] so we gotta use println (ew)
+    let maybe_config = fallible_load_config();
+    match maybe_config{
+        Ok(config) => config,
+        Err(report)=>{
+            let report = report.wrap_err("using default font config (could not load config from file)");
+            eprintln!("{:?}", report);
+            AppConfig::default()
+        }
+    }
+}
 lazy_static! {
-    static ref CONFIG_INSTANCE: Mutex<Option<AppConfig>> = Mutex::new(None);
+    static ref CONFIG_INSTANCE: Mutex<AppConfig> = Mutex::new(lazy_static_load_config());
 }
 
 /// Reads a config value from the global [AppConfig], and returns it
@@ -65,7 +66,7 @@ lazy_static! {
 ///
 /// This should be slightly faster than [update_config_value] since it runs the function on a copy of the data, unlocking the mutex before the function is called
 pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
-    let mut guard = match CONFIG_INSTANCE.lock() {
+    let guard = match CONFIG_INSTANCE.lock() {
         Ok(guard) => guard,
         Err(poison) => {
             // Might recurse if we log warning and then logger tries to access config
@@ -79,33 +80,13 @@ pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
         }
     };
 
-    // If config isn't loaded, load it
-    let config: AppConfig = match guard.deref() {
-        Some(cfg) => cfg.clone(),
-        None => {
-            // In the case that we didn't already have an instance loaded, we have to load it
-            // We also need to update the singleton now
-            let owned_config = match load_config() {
-                Ok(conf) => conf,
-                Err(err) => {
-                    let report = Report::wrap_err(
-                        err,
-                        "could not load config from file, using default config instead",
-                    );
-                    println!("{:?}", report);
-                    AppConfig::default()
-                }
-            };
-            *guard = Some(owned_config.clone());
-            owned_config
-        }
-    };
+    // Clone so that we can drop the guard and unlock the mutex as soon as possible
+    let config: AppConfig = guard.deref().clone();
     drop(guard);
 
-    let result = func(&config);
-
-    result
+    func(&config)
 }
+
 
 pub fn update_config<T>(func: fn(&mut AppConfig) -> T) -> T {
     let mut guard = match CONFIG_INSTANCE.lock() {
@@ -122,32 +103,8 @@ pub fn update_config<T>(func: fn(&mut AppConfig) -> T) -> T {
         }
     };
 
-    let result = match guard.deref_mut() {
-        // Already have config loaded
-        Some(cfg) => {
-            func(cfg)
-        },
-        // Don't have config loaded
-        None => {
-            // In the case that we didn't already have an instance loaded, we have to load it
-            let mut owned_config = match load_config() {
-                Ok(conf) => conf,
-                Err(err) => {
-                    let report = Report::wrap_err(
-                        err,
-                        "could not load config from file, using default config instead",
-                    );
-                    println!("{:?}", report);
-                    AppConfig::default()
-                }
-            };
-            let temp = func(&mut owned_config);
-            *guard = Some(owned_config); //Update the singleton with the instance we just loaded
-            temp
-        }
-    };
-
+    let config = guard.deref_mut();
+    let result = func(config);
     drop(guard);
-
     result
 }

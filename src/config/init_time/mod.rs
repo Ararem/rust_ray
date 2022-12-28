@@ -7,15 +7,7 @@ use crate::config::init_time::ui_config::UiConfig;
 pub mod ui_config;
 
 /// Base configuration struct that contains options that configure the entire app
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct InitTimeAppConfig {
     pub ui_config: ui_config::UiConfig
-}
-
-impl Default for InitTimeAppConfig{
-    fn default() -> Self {
-        Self{
-            ui_config: UiConfig::default()
-        }
-    }
 }
