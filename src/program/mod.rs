@@ -11,7 +11,6 @@ use multiqueue2::{broadcast_queue, BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span};
 
-use crate::config::Config;
 use program_data::ProgramData;
 use ProgramThreadMessage::{QuitAppError, QuitAppNoError};
 use QuitAppNoErrorReason::QuitInteractionByUser;
@@ -32,7 +31,7 @@ pub mod program_data;
 pub type ThreadReturn = FallibleFn;
 pub type ThreadHandle = JoinHandle<ThreadReturn>;
 
-pub fn run(config: Config) -> ThreadReturn {
+pub fn run() -> ThreadReturn {
     let span_run = info_span!(target: PROGRAM_INFO_LIFECYCLE, name_of!(run)).entered();
 
     let span_init = debug_span!(target: PROGRAM_DEBUG_GENERAL, "program_init").entered();
@@ -87,7 +86,7 @@ pub fn run(config: Config) -> ThreadReturn {
                 let barrier = Arc::clone(&thread_start_barrier);
                 thread::Builder::new()
                     .name("engine_thread".to_string())
-                    .spawn(move || engine_thread(barrier, data, sender, receiver, config))
+                    .spawn(move || engine_thread(barrier, data, sender, receiver))
                     .wrap_err("failed to create engine thread")
                     .note("this error was most likely due to a failure at the OS level")?
             };
@@ -105,7 +104,7 @@ pub fn run(config: Config) -> ThreadReturn {
                 let barrier = Arc::clone(&thread_start_barrier);
                 thread::Builder::new()
                     .name("ui_thread".to_string())
-                    .spawn(|| ui_thread(barrier, data, sender, receiver, config))
+                    .spawn(|| ui_thread(barrier, data, sender, receiver))
                     .wrap_err("failed to create ui thread")
                     .note("this error was most likely due to a failure at the OS level")?
             };
@@ -158,11 +157,11 @@ pub fn run(config: Config) -> ThreadReturn {
                         );
                         match program_message {
                             QuitAppNoError(QuitInteractionByUser) => {
-                                handle_user_quit(msg_sender, msg_receiver, threads, config)?;
+                                handle_user_quit(msg_sender, msg_receiver, threads)?;
                                 break 'global;
                             }
                             QuitAppError(wrapped_error_report) => {
-                                return Err(handle_error_quit(wrapped_error_report, config))
+                                return Err(handle_error_quit(wrapped_error_report))
                             }
                         }
                     }
@@ -181,7 +180,7 @@ pub fn run(config: Config) -> ThreadReturn {
         So if they have finished here, that's BAAADDDD
         */
         threads =
-            check_threads_are_running(threads, config).wrap_err("failed thread status check")?;
+            check_threads_are_running(threads).wrap_err("failed thread status check")?;
 
         trace!(
             target: PROGRAM_TRACE_GLOBAL_LOOP,
@@ -207,7 +206,7 @@ struct Threads {
     ui: ThreadHandle,
 }
 
-fn check_threads_are_running(threads: Threads, config: Config) -> eyre::Result<Threads> {
+fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
     let span_check_threads =
         trace_span!(target: PROGRAM_TRACE_THREAD_STATUS_POLL, "check_threads").entered();
     trace!(
@@ -224,13 +223,13 @@ fn check_threads_are_running(threads: Threads, config: Config) -> eyre::Result<T
             Ok(ret) => {
                 let error = Report::msg("ui thread finished early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
                 Err(error)
             }
             Err(boxed_error) => {
-                let error = dyn_panic_to_report(&boxed_error, config)
+                let error = dyn_panic_to_report(&boxed_error)
                     .wrap_err("ui thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
                 Err(error)
             }
         };
@@ -255,13 +254,13 @@ fn check_threads_are_running(threads: Threads, config: Config) -> eyre::Result<T
             Ok(ret) => {
                 let error = Report::msg("engine thread exited early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
                 Err(error)
             }
             Err(boxed_error) => {
-                let error = dyn_panic_to_report(&boxed_error, config)
+                let error = dyn_panic_to_report(&boxed_error)
                     .wrap_err("engine thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error, config));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
                 Err(error)
             }
         };
@@ -276,7 +275,7 @@ fn check_threads_are_running(threads: Threads, config: Config) -> eyre::Result<T
     Ok(threads)
 }
 
-fn handle_error_quit(wrapped_error_report: Arc<Report>, config: Config) -> Report {
+fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
     info!(target: PROGRAM_INFO_LIFECYCLE, "quitting app due to error");
     // try and return the error directly, but just in case we can't (which should never happen), print the error and return a generic one
     match Arc::try_unwrap(wrapped_error_report) {
@@ -291,7 +290,7 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>, config: Config) -> Repor
             };
             error!(target: REALLY_FUCKING_BAD_UNREACHABLE, "{}", warn);
             Report::msg("quitting app due to an internal error")
-                .with_section(move || format_error(&_arc, config).header("Error:"))
+                .with_section(move || format_error(&_arc).header("Error:"))
                 .note("the displayed error may not be correct and/or complete")
                 .warning(warn)
         }
@@ -301,8 +300,7 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>, config: Config) -> Repor
 fn handle_user_quit(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
-    threads: Threads,
-    config: Config,
+    threads: Threads
 ) -> FallibleFn {
     info!(target: PROGRAM_INFO_LIFECYCLE, "user wants to quit");
 
@@ -347,7 +345,7 @@ fn handle_user_quit(
                         Err(boxed_panic) => {
                             // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                             // So we have to format it as a string
-                            let report = dyn_panic_to_report(&boxed_panic, config )
+                            let report = dyn_panic_to_report(&boxed_panic )
                                 .wrap_err("ui thread panicked while shutting down")
                                 .note("it is unlikely that the thread failed during normal execution, as that should have been caught earlier");
                             debug!(target: THREAD_DEBUG_GENERAL, ?boxed_panic, ?report);
@@ -398,7 +396,7 @@ fn handle_user_quit(
                         Err(boxed_panic) => {
                             // Unfortunately we can't use the error for a report since it doesn't implement Sync, and it's dyn
                             // So we have to format it as a string
-                            let report = dyn_panic_to_report(&boxed_panic,config )
+                            let report = dyn_panic_to_report(&boxed_panic )
                                 .wrap_err("engine thread panicked while shutting down");
                             debug!(target: THREAD_DEBUG_GENERAL, ?boxed_panic, ?report);
                             return Err(report);

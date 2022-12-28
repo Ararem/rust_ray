@@ -19,3 +19,14 @@ pub struct RuntimeAppConfig {
     pub tracing: TracingConfig,
     pub ui: UiConfig,
 }
+
+impl Default for RuntimeAppConfig {
+    fn default() -> Self {
+        Self {
+            ui: UiConfig::default(),
+            tracing: TracingConfig::default(),
+            resources: ResourcesConfig::default(),
+            keybindings: KeybindingsConfig::default(),
+        }
+    }
+}

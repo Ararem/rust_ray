@@ -40,6 +40,7 @@ rand = "0.8.5"
 humantime = "2.1.0"
 serde = "1.0.151"
 ron = "0.8.0"
+mint = { version = "0.5.9", features=["serde"] }
 
 # ImGUI dependencies
 clipboard = "0.5"

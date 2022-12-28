@@ -3,6 +3,9 @@
 //! Contains UI configuration fields
 use serde::{Deserialize, Serialize};
 
+/// Type alias for the type used by [imgui-rs] for colours
+pub type Colour = mint::Vector4<f32>;
+
 // Base configuration struct that contains options that configure the entire app
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiConfig {
@@ -26,21 +29,21 @@ impl Default for UiConfig {
 }
 
 /// Colour arrays for use with [`imgui`]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct UiColours {
-    pub good: [f32; 4],
-    pub warning: [f32; 4],
-    pub error: [f32; 4],
-    pub severe_error: [f32; 4],
+    pub good: Colour,
+    pub warning: Colour,
+    pub error: Colour,
+    pub severe_error: Colour,
 }
 
 impl Default for UiColours {
     fn default() -> Self {
         Self {
-            good: [1.0, 0.82, 0.0, 1.0],
-            warning: [1.0, 0.82, 0.0, 1.0],
-            error: [1.0, 0.47, 0.0, 1.0],
-            severe_error: [1.0, 0.0, 0.0, 1.0],
+            good: [1.0, 0.82, 0.0, 1.0].into(),
+            warning: [1.0, 0.82, 0.0, 1.0].into(),
+            error: [1.0, 0.47, 0.0, 1.0].into(),
+            severe_error: [1.0, 0.0, 0.0, 1.0].into(),
         }
     }
 }

@@ -6,7 +6,6 @@ use crate::FallibleFn;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::{debug, debug_span, info_span, trace, trace_span};
-use crate::config::Config;
 
 use crate::helper::logging::event_targets::*;
 use crate::program::program_data::ProgramData;
@@ -20,8 +19,7 @@ pub(crate) fn engine_thread(
     thread_start_barrier: Arc<Barrier>,
     _program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
-    message_receiver: BroadcastReceiver<ThreadMessage>,
-    config: Config
+    message_receiver: BroadcastReceiver<ThreadMessage>
 ) -> FallibleFn {
     let span_engine_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "engine_thread").entered();

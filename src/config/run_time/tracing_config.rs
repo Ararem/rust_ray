@@ -39,7 +39,7 @@ impl Default for TracingConfig {
 }
 
 /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct LogTargetFilter {
     pub target: &'static str,
     pub enabled: bool,

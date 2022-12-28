@@ -1,17 +1,17 @@
 use crate::config::compile_time::ui_config::MAX_FRAMES_TO_TRACK;
-use crate::config::Config;
+use crate::config::read_config_value;
 use crate::helper::logging::event_targets::*;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::ui_system::FrameInfo;
 use crate::FallibleFn;
 use imgui::{SliderFlags, TreeNodeFlags, Ui};
 use itertools::*;
-use std::cmp::{min};
+use std::cmp::min;
 use tracing::field::Empty;
 use tracing::{trace, trace_span, warn};
 
 impl UiItem for FrameInfo {
-    fn render(&mut self, ui: &Ui, config: Config) -> FallibleFn {
+    fn render(&mut self, ui: &Ui) -> FallibleFn {
         let span_render_framerate_graph =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_framerate_graph").entered();
 
@@ -92,6 +92,9 @@ impl UiItem for FrameInfo {
 
         //// ===== Plots =====
 
+        let smooth_speed =
+            read_config_value(|config| config.runtime.ui.frame_info_range_smooth_speed);
+
         fn chunked_smooth_minmax(vec: &[f32], chunk_size: usize) -> (f32, f32) {
             vec.iter()
                 .chunks(chunk_size) // Group by 8 frames at a time
@@ -132,17 +135,11 @@ impl UiItem for FrameInfo {
             //     .into_option()
             //     .unwrap_or((&0.0, &0.0));
 
-            smooth_delta_min = vek::Lerp::lerp(
-                self.smooth_delta_min,
-                sharp_delta_min,
-                config.runtime.ui.frame_info_range_smooth_speed,
-            );
+            smooth_delta_min =
+                vek::Lerp::lerp(self.smooth_delta_min, sharp_delta_min, smooth_speed);
             self.smooth_delta_min = smooth_delta_min;
-            smooth_delta_max = vek::Lerp::lerp(
-                self.smooth_delta_max,
-                sharp_delta_max,
-                config.runtime.ui.frame_info_range_smooth_speed,
-            );
+            smooth_delta_max =
+                vek::Lerp::lerp(self.smooth_delta_max, sharp_delta_max, smooth_speed);
             self.smooth_delta_max = smooth_delta_max;
 
             span_calculate_approx_range.record("sharp_delta_min", sharp_delta_min);
@@ -181,17 +178,9 @@ impl UiItem for FrameInfo {
             let (sharp_fps_min, sharp_fps_max) =
                 chunked_smooth_minmax(&fps[0..info_range_end], self.scale_smoothing);
             // Update the local value, and then copy it across to the self value
-            smooth_fps_min = vek::Lerp::lerp(
-                self.smooth_fps_min,
-                sharp_fps_min,
-                config.runtime.ui.frame_info_range_smooth_speed,
-            );
+            smooth_fps_min = vek::Lerp::lerp(self.smooth_fps_min, sharp_fps_min, smooth_speed);
             self.smooth_fps_min = smooth_fps_min;
-            smooth_fps_max = vek::Lerp::lerp(
-                self.smooth_fps_max,
-                sharp_fps_max,
-                config.runtime.ui.frame_info_range_smooth_speed,
-            );
+            smooth_fps_max = vek::Lerp::lerp(self.smooth_fps_max, sharp_fps_max, smooth_speed);
             self.smooth_fps_max = smooth_fps_max;
 
             span_calculate_approx_range.record("sharp_fps_min", sharp_fps_min);

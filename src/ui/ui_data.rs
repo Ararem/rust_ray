@@ -28,7 +28,7 @@ impl Default for UiData {
 //     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 //         writedoc! {f, r#"
 //             Shown Windows:
-//                 Demo Window: {demo}, Metrics Window: {metrics}, UI Managers Window: {managers}, Config Window: {config}
-//         "#, demo=self.windows.show_demo_window, metrics=self.windows.show_metrics_window, managers=self.windows.show_ui_management_window, config=self.windows.show_config_window}
+//                 Demo Window: {demo}, Metrics Window: {metrics}, UI Managers Window: {managers} Window: {config}
+//         "#, demo=self.windows.show_demo_window, metrics=self.windows.show_metrics_window, managers=self.windows.show_ui_management_window=self.windows.show_config_window}
 //     }
 // }

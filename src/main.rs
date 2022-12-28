@@ -4,7 +4,7 @@
 //! # A little test raytracer project
 use std::io;
 
-use crate::config::{load_config, Config};
+use crate::config::read_config_value;
 use color_eyre::eyre;
 use tracing::level_filters::LevelFilter;
 use tracing::*;
@@ -35,11 +35,7 @@ pub type FallibleFn = eyre::Result<()>;
 /// * Runs the [program] for real
 fn main() -> FallibleFn {
     init_eyre()?;
-
-    let mut owned_app_config = load_config()?;
-    let config: Config = &mut owned_app_config;
-
-    init_tracing(config)?;
+    init_tracing()?;
 
     helper::panic_pill::red_or_blue_pill();
 
@@ -54,7 +50,7 @@ fn main() -> FallibleFn {
     debug!(target: MAIN_DEBUG_GENERAL, "core init done");
 
     info!(target: PROGRAM_INFO_LIFECYCLE, "starting program");
-    match program::run(config) {
+    match program::run() {
         Ok(program_return_value) => {
             info!(
                 target: PROGRAM_INFO_LIFECYCLE,
@@ -65,7 +61,7 @@ fn main() -> FallibleFn {
             Ok(program_return_value)
         }
         Err(report) => {
-            let formatted_error = format_error(&report, config);
+            let formatted_error = format_error(&report);
             error!(
                 target: PROGRAM_INFO_LIFECYCLE,
                 formatted_error, "program exited unsuccessfully"
@@ -82,7 +78,7 @@ fn init_eyre() -> FallibleFn {
 }
 
 /// Initialises the [tracing] system. Called as part of the core init
-fn init_tracing(config: Config) -> FallibleFn {
+fn init_tracing() -> FallibleFn {
     use tracing_subscriber::{fmt, layer::SubscriberExt, prelude::*, EnvFilter};
 
     let standard_format = format()
@@ -108,12 +104,25 @@ fn init_tracing(config: Config) -> FallibleFn {
         )
         .with_filter(FilterFn::new(|meta| {
             let target = meta.target();
-            for filter in config.runtime.tracing.target_filters.iter() {
-                if filter.target == target {
-                    return filter.enabled;
+
+            match target {
+                // If we encounter an error with the config, then we may try logging a warning while filtering a previous message
+                // This would recurse, so bypass and exit early if the target matches the warning/error targets
+                GENERAL_WARNING_NON_FATAL
+                | GENERAL_ERROR_FATAL
+                | REALLY_FUCKING_BAD_UNREACHABLE
+                | DOMINO_EFFECT_FAILURE => true,
+                // Otherwise (default), scan the config
+                _ => {
+                    let configured_targets = read_config_value(|config| &config.runtime.tracing.target_filters);
+                    for filter in configured_targets {
+                        if filter.target == target {
+                            return filter.enabled;
+                        }
+                    }
+                    true
                 }
             }
-            true
         }));
 
     tracing_subscriber::registry()

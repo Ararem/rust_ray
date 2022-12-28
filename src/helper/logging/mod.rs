@@ -1,11 +1,13 @@
 use std::any::Any;
 use std::error::Error;
 
+use crate::config::read_config_value;
 use crate::config::run_time::tracing_config::ErrorLogStyle;
-use crate::config::Config;
+use crate::config::run_time::tracing_config::ErrorLogStyle::WithBacktrace;
 use color_eyre::{Help, Report};
 use indoc::formatdoc;
 use tracing::field::{display, DisplayValue};
+use ErrorLogStyle::ShortWithCause;
 
 use crate::FallibleFn;
 
@@ -13,13 +15,13 @@ pub mod event_targets;
 pub mod span_time_elapsed_field;
 
 /// Function that logs an error in whichever way the app is configured to log errors
-pub fn format_error(report: &Report, config: Config) -> DisplayValue<String> {
-    display(format_error_string(report, config))
+pub fn format_error(report: &Report) -> DisplayValue<String> {
+    display(format_error_string(report))
 }
-pub fn format_error_string(report: &Report, config: Config) -> String {
-    match config.runtime.tracing.error_style {
+pub fn format_error_string(report: &Report) -> String {
+    match read_config_value(|config| config.runtime.tracing.error_style) {
         ErrorLogStyle::Short => format!("{}", report),
-        ErrorLogStyle::ShortWithCause => format!("{:#}", report),
+        ShortWithCause => format!("{:#}", report),
         ErrorLogStyle::WithBacktrace => format!("{:?}", report),
         ErrorLogStyle::Debug => format!("{:#?}", report),
     }
@@ -27,12 +29,12 @@ pub fn format_error_string(report: &Report, config: Config) -> String {
 
 /// Function to convert a boxed error (`&Box<dyn Error>`) to an owned [Report]
 #[allow(clippy::borrowed_box)] // Can't do it because it's a dyn Trait, also needs this signature for compat reasons
-pub fn dyn_error_to_report(error: &Box<dyn Error>, config: Config) -> Report {
-    let formatted_error = match config.runtime.tracing.error_style {
+pub fn dyn_error_to_report(error: &Box<dyn Error>) -> Report {
+    let formatted_error = match read_config_value(|config| config.runtime.tracing.error_style) {
         ErrorLogStyle::Short => {
             format!("{error:}")
         }
-        ErrorLogStyle::ShortWithCause => {
+        ShortWithCause => {
             format!("{error:#}")
         }
         ErrorLogStyle::WithBacktrace => {
@@ -47,7 +49,7 @@ pub fn dyn_error_to_report(error: &Box<dyn Error>, config: Config) -> Report {
 }
 
 /// Function to convert a boxed panic error (`&Box<dyn Any + Send>`) to an owned [Report]
-pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>, config: Config) -> Report {
+pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     // Default case
     let mut formatted_error = formatdoc! {r"
         <unable to convert panic, does not implement any known types>
@@ -86,11 +88,11 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>, config: Config) ->
     }}
     case! {
        &Report, type_name, val, {
-           format!("[{type_name}]: {}", format_error(val, config))
+           format!("[{type_name}]: {}", format_error(val))
     }}
     case! {
        &FallibleFn, type_name, val, {
-           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(report, config)) }
+           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(report)) }
     }}
     // Special case since [str] is dynamically sized
     if let Some(val) = (**boxed_error).downcast_ref::<&str>() {

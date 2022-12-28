@@ -4,7 +4,7 @@ mod frame_info_ui_impl;
 mod ui_manager_ui_impl;
 
 use crate::config::run_time::keybindings_config::KeyBinding;
-use crate::config::Config;
+use crate::config::{read_config_value};
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::span_time_elapsed_field::SpanTimeElapsedField;
 use crate::program::thread_messages::ProgramThreadMessage::*;
@@ -21,7 +21,7 @@ use tracing::field::*;
 use tracing::*;
 
 pub trait UiItem {
-    fn render(&mut self, ui: &imgui::Ui, config: Config) -> FallibleFn;
+    fn render(&mut self, ui: &imgui::Ui) -> FallibleFn;
 }
 
 fn build_window<T: UiItem>(
@@ -29,7 +29,6 @@ fn build_window<T: UiItem>(
     item: &mut T,
     opened: &mut bool,
     ui: &imgui::Ui,
-    config: Config,
 ) -> FallibleFn {
     let span_window = trace_span!(
         target: UI_TRACE_BUILD_INTERFACE,
@@ -43,7 +42,7 @@ fn build_window<T: UiItem>(
             .opened(opened)
             .size([300.0, 110.0], Condition::FirstUseEver)
             .build(|| {
-                result = item.render(ui, config);
+                result = item.render(ui);
             });
     }
     span_window.exit();
@@ -51,10 +50,9 @@ fn build_window<T: UiItem>(
 }
 fn build_window_fn(
     label: &str,
-    func: fn(&imgui::Ui, Config) -> FallibleFn,
+    func: fn(&imgui::Ui) -> FallibleFn,
     opened: &mut bool,
     ui: &imgui::Ui,
-    config: Config,
 ) -> FallibleFn {
     let span_window = trace_span!(
         target: UI_TRACE_BUILD_INTERFACE,
@@ -68,7 +66,7 @@ fn build_window_fn(
             .opened(opened)
             .size([300.0, 110.0], Condition::FirstUseEver)
             .build(|| {
-                result = func(ui, config);
+                result = func(ui);
             });
     }
     span_window.exit();
@@ -81,7 +79,6 @@ pub(super) fn build_ui(
     data: &mut UiData,
     message_sender: &BroadcastSender<ThreadMessage>,
     message_receiver: &BroadcastReceiver<ThreadMessage>,
-    config: Config,
 ) -> FallibleFn {
     //Makes it easier to separate out frames
     trace!(
@@ -105,7 +102,7 @@ pub(super) fn build_ui(
     let show_metrics_window = &mut data.windows.show_metrics_window;
     let show_ui_management_window = &mut data.windows.show_ui_management_window;
     let show_config_window = &mut data.windows.show_config_window;
-    let keys = &mut config.runtime.keybindings;
+    let keys = read_config_value(|config| config.runtime.keybindings);
 
     trace_span!(target: UI_TRACE_BUILD_INTERFACE, "main_menu_bar").in_scope(|| {
         let toggle_menu_item =
@@ -284,20 +281,8 @@ pub(super) fn build_ui(
     } else {
         trace!(target: UI_TRACE_BUILD_INTERFACE, "metrics window hidden");
     }
-    build_window(
-        "UI Management",
-        managers,
-        show_ui_management_window,
-        ui,
-        config,
-    )?;
-    build_window_fn(
-        "Config",
-        build_config_window,
-        show_config_window,
-        ui,
-        config,
-    )?;
+    build_window("UI Management", managers, show_ui_management_window, ui)?;
+    build_window_fn("Config", build_config_window, show_config_window, ui)?;
 
     span_build_ui.record("elapsed", display(timer));
     span_build_ui.exit();
@@ -310,11 +295,12 @@ pub(super) fn build_ui(
     Ok(())
 }
 
-fn build_config_window(ui: &imgui::Ui, config: Config) -> FallibleFn {
-    ui.text_colored(config.runtime.ui.colours.error, "error");
-    ui.text_colored(config.runtime.ui.colours.warning, "warning");
-    ui.text_colored(config.runtime.ui.colours.good, "good");
-    ui.text_colored(config.runtime.ui.colours.severe_error, "severe_error");
+fn build_config_window(ui: &imgui::Ui) -> FallibleFn {
+    let colours = read_config_value(|config| config.runtime.ui.colours);
+    ui.text_colored(colours.error, "error");
+    ui.text_colored(colours.warning, "warning");
+    ui.text_colored(colours.good, "good");
+    ui.text_colored(colours.severe_error, "severe_error");
 
     Ok(())
 }

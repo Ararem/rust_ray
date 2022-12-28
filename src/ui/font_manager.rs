@@ -17,7 +17,7 @@ use tracing::{debug, debug_span, trace, trace_span};
 use crate::config::compile_time::resources_config::{
     FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER
 };
-use crate::config::Config;
+use crate::config::read_config_value;
 use crate::FallibleFn;
 use crate::config::compile_time::ui_config::{MAX_FONT_SIZE, MIN_FONT_SIZE};
 use crate::helper::logging::event_targets::*;
@@ -41,7 +41,7 @@ pub struct FontManager {
 
 impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
-    pub fn reload_list_from_resources(&mut self, config: Config) -> FallibleFn {
+    pub fn reload_list_from_resources(&mut self) -> FallibleFn {
         let span_reload_fonts_list =
             debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
 
@@ -52,7 +52,7 @@ impl FontManager {
         */
         self.dirty = true;
 
-        let fonts_directory_path = get_main_resource_folder_path(config)?.join(config.runtime.resources.fonts_path.clone());
+        let fonts_directory_path = get_main_resource_folder_path()?.join(read_config_value(|config| config.runtime.resources.fonts_path));
 
         debug!(
             target: RESOURCES_DEBUG_LOAD,
@@ -257,7 +257,7 @@ impl FontManager {
     ///
     /// Note:
     /// If this returns `Ok(true)`, you ***MUST*** call `renderer.reload_font_texture(imgui_context)` or the app will crash
-    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlas, config: Config) -> eyre::Result<bool> {
+    pub fn rebuild_font_if_needed(&mut self, font_atlas: &mut FontAtlas) -> eyre::Result<bool> {
         // Don't need to update if we already have a font and we're not dirty
         if !self.dirty && self.current_font.is_some() {
             return Ok(false);
@@ -306,12 +306,13 @@ impl FontManager {
         )
         .into();
         //TODO: What happens if a font file has invalid font data (or isn't a font file)
+        let oversampling = read_config_value(|config| config.runtime.ui.font_oversampling);
         let font_id = font_atlas.add_font(&[FontSource::TtfData {
             data: &weight.data,
             config: Some(FontConfig {
                 name: full_name,
-                oversample_v: config.runtime.ui.font_oversampling,
-                oversample_h: config.runtime.ui.font_oversampling,
+                oversample_v: oversampling,
+                oversample_h: oversampling,
                 ..FontConfig::default()
             }),
             size_pixels: *size,
