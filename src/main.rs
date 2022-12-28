@@ -114,7 +114,7 @@ fn init_tracing() -> FallibleFn {
                 | DOMINO_EFFECT_FAILURE => true,
                 // Otherwise (default), scan the config
                 _ => {
-                    let configured_targets = read_config_value(|config| &config.runtime.tracing.target_filters);
+                    let configured_targets = read_config_value(|config| config.runtime.tracing.target_filters.clone());
                     for filter in configured_targets {
                         if filter.target == target {
                             return filter.enabled;
