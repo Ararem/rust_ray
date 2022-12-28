@@ -1,22 +1,20 @@
-use crate::config::compile_time::ui_config::MAX_FRAMES_TO_TRACK;
 use crate::config::read_config_value;
 use crate::helper::logging::event_targets::*;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::ui_system::FrameInfo;
 use crate::FallibleFn;
-use imgui::{SliderFlags, TreeNodeFlags, Ui};
+use imgui::{TreeNodeFlags, Ui};
 use itertools::*;
 use std::cmp::min;
 use tracing::field::Empty;
 use tracing::{trace, trace_span, warn};
 
 impl UiItem for FrameInfo {
-    fn render(&mut self, ui: &Ui) -> FallibleFn {
+    fn render(&mut self, ui: &Ui, visible: bool) -> FallibleFn {
         let span_render_framerate_graph =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_framerate_graph").entered();
         let config = &read_config_value(|config| config.runtime.ui.frame_info.clone());
 
-        let displayed_frames = &config.num_frames_to_display;
         let track_frames = &config.num_frames_to_track;
         let deltas = &mut self.deltas;
         let fps = &mut self.fps;
@@ -49,49 +47,6 @@ impl UiItem for FrameInfo {
                 .unwrap_or((0.0, 0.0))
         }
 
-        //Try and find a rough range that the frame info values fall into. The values are smoothed so that they don't change instantaneously, or include outliers
-        let (smooth_delta_min, smooth_delta_max);
-        {
-            let span_calculate_approx_range = trace_span!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "calculate_delta_range",
-                sharp_delta_min = Empty,
-                sharp_delta_max = Empty,
-                smooth_delta_min = Empty,
-                smooth_delta_max = Empty,
-            )
-            .entered();
-            let (sharp_delta_min, sharp_delta_max) =
-                chunked_smooth_minmax(&deltas[0..info_range_end], self.scale_smoothing);
-
-            // Update the local value, and then copy it across to the self value
-            // let (&sharp_delta_min, &sharp_delta_max) = deltas[0..info_range_end] // Slice the area that we're going to be displaying, or else we calculate on the area that isn't visible
-            //     .iter()
-            //     .minmax()
-            //     .into_option()
-            //     .unwrap_or((&0.0, &0.0));
-
-            smooth_delta_min =
-                vek::Lerp::lerp(self.smooth_delta_min, sharp_delta_min, smooth_speed);
-            self.smooth_delta_min = smooth_delta_min;
-            smooth_delta_max =
-                vek::Lerp::lerp(self.smooth_delta_max, sharp_delta_max, smooth_speed);
-            self.smooth_delta_max = smooth_delta_max;
-
-            span_calculate_approx_range.record("sharp_delta_min", sharp_delta_min);
-            span_calculate_approx_range.record("sharp_delta_max", sharp_delta_max);
-            span_calculate_approx_range.record("smooth_delta_min", smooth_delta_min);
-            span_calculate_approx_range.record("smooth_delta_max", smooth_delta_max);
-            span_calculate_approx_range.exit();
-        }
-
-        // ===== DISPLAY CODE =====
-
-        if !(ui.collapsing_header("Frame Timings", TreeNodeFlags::empty())) {
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "frame timings collapsed");
-            return Ok(());
-        }
-
         // ensures that we don't try to take a slice that's bigger than the amount we have in the Vec
         // Don't have to worry about the `-1` if `len() == 0`, since len() should never `== 0`: we always have at least 1 frame since we insert above, and NUM_FRAMES_TO_DISPLAY should always be >=1
         let num_frame_infos = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "calc_num_frames").in_scope(||{
@@ -107,7 +62,52 @@ impl UiItem for FrameInfo {
             }
             len
         });
-        let info_range_end = min(*displayed_frames, num_frame_infos) - 1;
+        let info_range_end = min(config.num_frames_to_display, num_frame_infos) - 1;
+
+        //Try and find a rough range that the frame info values fall into. The values are smoothed so that they don't change instantaneously, or include outliers
+        let (smooth_delta_min, smooth_delta_max);
+        {
+            let span_calculate_approx_range = trace_span!(
+                target: UI_TRACE_BUILD_INTERFACE,
+                "calculate_delta_range",
+                sharp_delta_min = Empty,
+                sharp_delta_max = Empty,
+                smooth_delta_min = Empty,
+                smooth_delta_max = Empty,
+            )
+            .entered();
+            let (sharp_delta_min, sharp_delta_max) = chunked_smooth_minmax(
+                &deltas[0..info_range_end],
+                config.chunked_average_smoothing_size,
+            );
+
+            // Update the local value, and then copy it across to the self value
+            // let (&sharp_delta_min, &sharp_delta_max) = deltas[0..info_range_end] // Slice the area that we're going to be displaying, or else we calculate on the area that isn't visible
+            //     .iter()
+            //     .minmax()
+            //     .into_option()
+            //     .unwrap_or((&0.0, &0.0));
+
+            smooth_delta_min =
+                vek::Lerp::lerp(self.smooth_delta_min, sharp_delta_min, config.smooth_speed);
+            self.smooth_delta_min = smooth_delta_min;
+            smooth_delta_max =
+                vek::Lerp::lerp(self.smooth_delta_max, sharp_delta_max, config.smooth_speed);
+            self.smooth_delta_max = smooth_delta_max;
+
+            span_calculate_approx_range.record("sharp_delta_min", sharp_delta_min);
+            span_calculate_approx_range.record("sharp_delta_max", sharp_delta_max);
+            span_calculate_approx_range.record("smooth_delta_min", smooth_delta_min);
+            span_calculate_approx_range.record("smooth_delta_max", smooth_delta_max);
+            span_calculate_approx_range.exit();
+        }
+
+        // ===== DISPLAY CODE =====
+
+        if !(ui.collapsing_header("Frame Timings", TreeNodeFlags::empty()) && visible) {
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "frame timings collapsed");
+            return Ok(());
+        }
 
         ui.plot_histogram(
             format!(
@@ -135,12 +135,16 @@ impl UiItem for FrameInfo {
             )
             .entered();
 
-            let (sharp_fps_min, sharp_fps_max) =
-                chunked_smooth_minmax(&fps[0..info_range_end], self.scale_smoothing);
+            let (sharp_fps_min, sharp_fps_max) = chunked_smooth_minmax(
+                &fps[0..info_range_end],
+                config.chunked_average_smoothing_size,
+            );
             // Update the local value, and then copy it across to the self value
-            smooth_fps_min = vek::Lerp::lerp(self.smooth_fps_min, sharp_fps_min, smooth_speed);
+            smooth_fps_min =
+                vek::Lerp::lerp(self.smooth_fps_min, sharp_fps_min, config.smooth_speed);
             self.smooth_fps_min = smooth_fps_min;
-            smooth_fps_max = vek::Lerp::lerp(self.smooth_fps_max, sharp_fps_max, smooth_speed);
+            smooth_fps_max =
+                vek::Lerp::lerp(self.smooth_fps_max, sharp_fps_max, config.smooth_speed);
             self.smooth_fps_max = smooth_fps_max;
 
             span_calculate_approx_range.record("sharp_fps_min", sharp_fps_min);

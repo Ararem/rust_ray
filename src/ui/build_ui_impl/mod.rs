@@ -3,8 +3,8 @@ mod font_manager_ui_impl;
 mod frame_info_ui_impl;
 mod ui_manager_ui_impl;
 
+use crate::config::read_config_value;
 use crate::config::run_time::keybindings_config::KeyBinding;
-use crate::config::{read_config_value};
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::span_time_elapsed_field::SpanTimeElapsedField;
 use crate::program::thread_messages::ProgramThreadMessage::*;
@@ -21,7 +21,7 @@ use tracing::field::*;
 use tracing::*;
 
 pub trait UiItem {
-    fn render(&mut self, ui: &imgui::Ui) -> FallibleFn;
+    fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;
 }
 
 fn build_window<T: UiItem>(
@@ -38,12 +38,17 @@ fn build_window<T: UiItem>(
     .entered();
     let mut result = Ok(());
     if *opened {
-        ui.window(label)
+        let token = ui
+            .window(label)
             .opened(opened)
             .size([300.0, 110.0], Condition::FirstUseEver)
-            .build(|| {
-                result = item.render(ui);
-            });
+            .begin();
+        if let Some(token) = token {
+            result = item.render(ui, true);
+            token.end();
+        } else {
+            result = item.render(ui, false)
+        }
     }
     span_window.exit();
     result

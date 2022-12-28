@@ -4,9 +4,9 @@ use crate::FallibleFn;
 use imgui::*;
 
 impl UiItem for UiManagers {
-    fn render(&mut self, ui: &Ui) -> FallibleFn {
-        self.font_manager.render(ui)?;
-        self.frame_info.render(ui)?;
+    fn render(&mut self, ui: &Ui, visible: bool) -> FallibleFn {
+        self.font_manager.render(ui, visible)?;
+        self.frame_info.render(ui, visible)?;
 
         Ok(())
     }
