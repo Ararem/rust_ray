@@ -13,7 +13,7 @@ impl UiItem for FrameInfo {
     fn render(&mut self, ui: &Ui, visible: bool) -> FallibleFn {
         let span_render_framerate_graph =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_framerate_graph").entered();
-        let config = &read_config_value(|config| config.runtime.ui.frame_info.clone());
+        let config = &read_config_value(|config| config.runtime.ui.frame_info);
 
         let track_frames = &config.num_frames_to_track;
         let deltas = &mut self.deltas;

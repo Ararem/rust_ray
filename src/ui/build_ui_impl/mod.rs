@@ -1,7 +1,5 @@
 mod config_ui_impl;
-mod font_manager_ui_impl;
-mod frame_info_ui_impl;
-mod ui_manager_ui_impl;
+mod ui_management;
 
 use crate::config::read_config_value;
 use crate::config::run_time::keybindings_config::KeyBinding;
@@ -19,6 +17,7 @@ use indoc::*;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use tracing::field::*;
 use tracing::*;
+use config_ui_impl::render_config_ui;
 
 pub trait UiItem {
     fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;
@@ -55,7 +54,7 @@ fn build_window<T: UiItem>(
 }
 fn build_window_fn(
     label: &str,
-    func: fn(&imgui::Ui) -> FallibleFn,
+    func: fn(&imgui::Ui, bool) -> FallibleFn,
     opened: &mut bool,
     ui: &imgui::Ui,
 ) -> FallibleFn {
@@ -67,12 +66,17 @@ fn build_window_fn(
     .entered();
     let mut result = Ok(());
     if *opened {
-        ui.window(label)
+        let token = ui
+            .window(label)
             .opened(opened)
             .size([300.0, 110.0], Condition::FirstUseEver)
-            .build(|| {
-                result = func(ui);
-            });
+            .begin();
+        if let Some(token) = token {
+            result = func(ui, true);
+            token.end();
+        } else {
+            result = func(ui, false)
+        }
     }
     span_window.exit();
     result
@@ -244,6 +248,14 @@ pub(super) fn build_ui(
                     The UI management window allows you to modify the UI, such as changing the font.
                 "},
             );
+            toggle_menu_item(
+                "Config",
+                show_config_window,
+                &Some(&keys.toggle_config_window),
+                indoc! {r"
+                    Toggles the Configuration Options window.
+                "},
+            );
 
             // Semi-hacky quit handling
             // Makes a toggle and if it's set to true, sends quit message to program
@@ -287,7 +299,7 @@ pub(super) fn build_ui(
         trace!(target: UI_TRACE_BUILD_INTERFACE, "metrics window hidden");
     }
     build_window("UI Management", managers, show_ui_management_window, ui)?;
-    build_window_fn("Config", build_config_window, show_config_window, ui)?;
+    build_window_fn("Config", render_config_ui, show_config_window, ui)?;
 
     span_build_ui.record("elapsed", display(timer));
     span_build_ui.exit();
@@ -297,15 +309,5 @@ pub(super) fn build_ui(
         str::repeat("=", 50),
         frame = ui.frame_count()
     );
-    Ok(())
-}
-
-fn build_config_window(ui: &imgui::Ui) -> FallibleFn {
-    let colours = read_config_value(|config| config.runtime.ui.colours);
-    ui.text_colored(colours.error, "error");
-    ui.text_colored(colours.warning, "warning");
-    ui.text_colored(colours.good, "good");
-    ui.text_colored(colours.severe_error, "severe_error");
-
     Ok(())
 }

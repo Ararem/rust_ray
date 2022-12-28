@@ -15,6 +15,8 @@ pub struct KeybindingsConfig {
     /// Toggles the visibility of the [UiManagers] window
     pub toggle_ui_managers_window: KeyBinding,
 
+    pub toggle_config_window: KeyBinding,
+
     /// (kinda) Dummy keybinding for exiting the app
     ///
     /// Not really necessary as the OS should send the quit signal anyway, but we might as well have it just in case
@@ -99,6 +101,12 @@ impl Default for KeybindingsConfig {
                 modifier_alt: true,
                 modifier_shift: false,
             },
+            toggle_config_window: KeyBinding{
+                shortcut: KeyCode::Comma,
+                modifier_ctrl: true,
+                modifier_alt: false,
+                modifier_shift: false,
+            }
         }
     }
 }

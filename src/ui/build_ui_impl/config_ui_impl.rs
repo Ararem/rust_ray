@@ -1,8 +1,23 @@
 use crate::config::init_time::InitTimeAppConfig;
+use crate::config::read_config_value;
 use crate::config::run_time::RuntimeAppConfig;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
-use imgui::Ui;
+use imgui::{Ui};
+
+pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
+    if !visible {
+        return Ok(());
+    }
+
+    let colours = read_config_value(|config| config.runtime.ui.colours);
+    ui.text_colored(colours.error, "error");
+    ui.text_colored(colours.warning, "warning");
+    ui.text_colored(colours.good, "good");
+    ui.text_colored(colours.severe_error, "severe_error");
+
+    Ok(())
+}
 
 impl UiItem for InitTimeAppConfig {
     fn render(&mut self, _ui: &Ui, _visible: bool) -> FallibleFn {
