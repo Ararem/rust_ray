@@ -4,19 +4,9 @@ use glium::glutin::event_loop::EventLoop;
 use glium::Display;
 use imgui::Context;
 use imgui_glium_renderer::Renderer;
-use imgui_winit_support::winit::dpi::Size;
 use imgui_winit_support::WinitPlatform;
 
 //TODO: Debug impls for these UI structs
-
-/// Struct used to configure the UI system
-#[derive(Debug, Copy, Clone)]
-pub(in crate::ui) struct UiConfig {
-    pub vsync: bool,
-    pub hardware_acceleration: Option<bool>,
-    pub default_window_size: Size,
-}
-
 /// Struct that encapsulates the UI system components
 pub(in crate::ui) struct UiSystem {
     pub backend: UiBackend,
@@ -38,36 +28,6 @@ pub(in crate::ui) struct UiManagers {
     pub frame_info: FrameInfo,
 }
 
-#[derive(Debug, Clone)]
-pub(in crate::ui) struct FrameInfo {
-    pub frame_times: FrameTimes,
-    pub num_frames_to_display: usize,
-    pub num_frames_to_track: usize,
-    // Moving average
-    //TODO: Create some kind of settings/config thingy
-    //  Move these to the new config files (once they start working)
-    pub smooth_delta_min: f32,
-    pub smooth_delta_max: f32,
-    pub smooth_fps_min: f32,
-    pub smooth_fps_max: f32,
-    pub scale_smoothing: usize
-}
-
-impl FrameInfo {
-    pub fn new() -> Self {
-        Self {
-            num_frames_to_track: 32_000,
-            num_frames_to_display: 3600,
-            frame_times: FrameTimes::new(),
-            smooth_delta_min: 0.0,
-            smooth_delta_max:0.0,
-            smooth_fps_min: 0.0,
-            smooth_fps_max: 0.0,
-            scale_smoothing: 8
-        }
-    }
-}
-
 /// Struct that stores arrays of floats for frame times (ΔT) and frame-rates
 ///
 ///
@@ -77,8 +37,8 @@ impl FrameInfo {
 /// * [VecDeque] - Wouldn't work because in order to plot, a slice `[f32]` needs to be passed, and this is very tricky to get from a [VecDeque]
 /// * [SliceDeque] - Worked almost identically to [Vec], but was orders of magnitudes slower (`~1 us` for [SliceDeque] vs `~22ns` for [Vec], at 120 frames stored).
 ///     At extreme frame counts (`~12000` frames), it did gain a slight advantage (`1us` vs `1.4us`), indicating that [SliceDeque] has `O(1)` performance, but has a massive overhead comparatively to [Vec]
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub(in crate::ui) struct FrameTimes {
+#[derive(Debug, Clone)]
+pub(in crate::ui) struct FrameInfo {
     /// ΔT values, in milliseconds
     ///
     /// # See Also
@@ -88,13 +48,23 @@ pub(in crate::ui) struct FrameTimes {
     ///
     /// Inverse of [deltas](FrameTimes::deltas)
     pub fps: Vec<f32>,
+
+    // Moving averages for displaying the above vecs
+    pub smooth_delta_min: f32,
+    pub smooth_delta_max: f32,
+    pub smooth_fps_min: f32,
+    pub smooth_fps_max: f32,
 }
 
-impl FrameTimes {
+impl FrameInfo {
     pub fn new() -> Self {
         Self {
-            fps: vec![],
             deltas: vec![],
+            smooth_delta_min: 0.0,
+            smooth_delta_max: 0.0,
+            smooth_fps_min: 0.0,
+            smooth_fps_max: 0.0,
+            fps: vec![],
         }
     }
 }

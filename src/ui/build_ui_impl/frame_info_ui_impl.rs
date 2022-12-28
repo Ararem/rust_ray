@@ -14,11 +14,12 @@ impl UiItem for FrameInfo {
     fn render(&mut self, ui: &Ui) -> FallibleFn {
         let span_render_framerate_graph =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_framerate_graph").entered();
+        let config = &read_config_value(|config| config.runtime.ui.frame_info.clone());
 
-        let displayed_frames = &mut self.num_frames_to_display;
-        let track_frames = &mut self.num_frames_to_track;
-        let deltas = &mut self.frame_times.deltas;
-        let fps = &mut self.frame_times.fps;
+        let displayed_frames = &config.num_frames_to_display;
+        let track_frames = &config.num_frames_to_track;
+        let deltas = &mut self.deltas;
+        let fps = &mut self.fps;
 
         // by placing this span before the header, we ensure that this always runs even when the header is collapsed
         trace_span!(target: UI_TRACE_BUILD_INTERFACE, "update_frames").in_scope(|| {
@@ -29,71 +30,6 @@ impl UiItem for FrameInfo {
             deltas.truncate(*track_frames);
             fps.truncate(*track_frames);
         });
-
-        if !(ui.collapsing_header("Frame Timings", TreeNodeFlags::empty())) {
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "frame timings collapsed");
-            return Ok(());
-        }
-
-        // ===== Sliders for control =====
-
-        // ensures that we don't try to take a slice that's bigger than the amount we have in the Vec
-        // Don't have to worry about the `-1` if `len() == 0`, since len() should never `== 0`: we always have at least 1 frame since we insert above, and NUM_FRAMES_TO_DISPLAY should always be >=1
-        let num_frame_infos = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "calc_num_frames").in_scope(||{
-            let (len_d, len_f) = (deltas.len(), fps.len());
-            let len;
-            // We should always have the same number in both, but just to be safe, use the smaller one if they aren't the same
-            if len_d != len_f{
-                len = min(len_d, len_f);
-                warn!(target: GENERAL_WARNING_NON_FATAL, "did not have same number of delta and fps frame infos: (delta: {len_d}, fps: {len_f}). should be same. using {len}");
-            }
-            else{
-                len = len_d;
-            }
-            len
-        });
-        let info_range_end = min(*displayed_frames, num_frame_infos) - 1;
-
-        // usize can't be used in a slider, so we have to cast to u64, use that, then case back
-        type SliderType = u64; // Might fail on 128-bit systems where usize > u64, but eh
-        let mut num_track_frames_compat: SliderType = *track_frames as SliderType;
-        ui.slider_config("Num Tracked Frames", 1, MAX_FRAMES_TO_TRACK as SliderType)
-            .display_format(format!("%u ({capped})", capped = num_frame_infos).as_str()) // Also display how many frames we are actually tracking currently.
-            .flags(SliderFlags::LOGARITHMIC)
-            .build(&mut num_track_frames_compat);
-        *track_frames = num_track_frames_compat as usize;
-        if ui.is_item_hovered() {
-            ui.tooltip_text("The maximum amount of frames that can be stored at one time. You probably want to leave this alone and modify [Num Displayed Frames] instead");
-        }
-
-        *displayed_frames = min(*displayed_frames, *track_frames); // Don't allow it to go over num_track_frames
-        let mut num_displayed_frames_compat: SliderType = *displayed_frames as SliderType; // Might fail on 128-bit systems, but eh
-        ui.slider_config(
-            "Num Displayed Frames",
-            1,
-            min(MAX_FRAMES_TO_TRACK, *track_frames) as SliderType,
-        )
-        .display_format(format!("%u ({capped})", capped = info_range_end + 1).as_str()) // Also display how many frames we are actually displaying (in case there aren't enough to show)
-        .flags(SliderFlags::LOGARITHMIC)
-        .build(&mut num_displayed_frames_compat);
-        *displayed_frames = num_displayed_frames_compat as usize;
-        if ui.is_item_hovered() {
-            ui.tooltip_text("The number of frames that will be displayed in the plot. Must be <= [Num Tracked Frames]. Will also be automatically limited if there are not enough frames stored to be displayed (until there are enough)");
-        }
-
-        let mut smoothing_compat: SliderType = self.scale_smoothing as SliderType; // Might fail on 128-bit systems, but eh
-        ui.slider_config("Plot Range Smoothing", 1, 256 as SliderType)
-            .flags(SliderFlags::LOGARITHMIC)
-            .build(&mut smoothing_compat);
-        self.scale_smoothing = smoothing_compat as usize;
-        if ui.is_item_hovered() {
-            ui.tooltip_text("Amount of smoothing to apply when calculating the range values for plotting. Higher values increase smoothing, de-focusing peaks and spikes");
-        }
-
-        //// ===== Plots =====
-
-        let smooth_speed =
-            read_config_value(|config| config.runtime.ui.frame_info_range_smooth_speed);
 
         fn chunked_smooth_minmax(vec: &[f32], chunk_size: usize) -> (f32, f32) {
             vec.iter()
@@ -148,6 +84,30 @@ impl UiItem for FrameInfo {
             span_calculate_approx_range.record("smooth_delta_max", smooth_delta_max);
             span_calculate_approx_range.exit();
         }
+
+        // ===== DISPLAY CODE =====
+
+        if !(ui.collapsing_header("Frame Timings", TreeNodeFlags::empty())) {
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "frame timings collapsed");
+            return Ok(());
+        }
+
+        // ensures that we don't try to take a slice that's bigger than the amount we have in the Vec
+        // Don't have to worry about the `-1` if `len() == 0`, since len() should never `== 0`: we always have at least 1 frame since we insert above, and NUM_FRAMES_TO_DISPLAY should always be >=1
+        let num_frame_infos = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "calc_num_frames").in_scope(||{
+            let (len_d, len_f) = (deltas.len(), fps.len());
+            let len;
+            // We should always have the same number in both, but just to be safe, use the smaller one if they aren't the same
+            if len_d != len_f{
+                len = min(len_d, len_f);
+                warn!(target: GENERAL_WARNING_NON_FATAL, "did not have same number of delta and fps frame infos: (delta: {len_d}, fps: {len_f}). should be same. using {len}");
+            }
+            else{
+                len = len_d;
+            }
+            len
+        });
+        let info_range_end = min(*displayed_frames, num_frame_infos) - 1;
 
         ui.plot_histogram(
             format!(
