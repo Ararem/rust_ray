@@ -2,7 +2,6 @@ use crate::helper::logging::event_targets::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(deserialize = "'de: 'static"))]
 pub struct TracingConfig {
     /// Controls how errors are logged in the app
     ///
@@ -40,18 +39,18 @@ impl Default for TracingConfig {
 }
 
 /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogTargetFilter {
-    pub target: &'static str,
+    pub target: String,
     pub enabled: bool,
 }
 
 impl LogTargetFilter {
     /// Creates a filter that matches if the target starts with a specified string. The input can be regex
     /// Creates a new filter from a regex string
-    pub fn new(val: &'static str, enabled: bool) -> LogTargetFilter {
+    pub fn new(val: & str, enabled: bool) -> LogTargetFilter {
         LogTargetFilter {
-            target: val,
+            target: val.to_string(),
             enabled,
         }
     }

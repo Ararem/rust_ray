@@ -27,7 +27,6 @@ use tracing::warn;
 pub type Config = &'static mut AppConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(deserialize = "'de: 'static"))]
 pub struct AppConfig {
     pub init: InitTimeAppConfig,
     pub runtime: RuntimeAppConfig,
@@ -56,7 +55,7 @@ fn load_config() -> Res<AppConfig> {
     Ok(config)
 }
 lazy_static! {
-    static ref CONFIG_INSTANCE: Mutex<Option<&'static mut AppConfig>> = Mutex::new(None);
+    static ref CONFIG_INSTANCE: Mutex<Option<AppConfig>> = Mutex::new(None);
 }
 
 /// Reads a config value from the global [AppConfig], and returns it
@@ -82,7 +81,7 @@ pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
 
     // If config isn't loaded, load it
     let config: AppConfig = match guard.deref() {
-        Some(cfg) => (*cfg).clone(),
+        Some(cfg) => cfg.clone(),
         None => {
             // In the case that we didn't already have an instance loaded, we have to load it
             // We also need to update the singleton now
@@ -97,7 +96,7 @@ pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
                     AppConfig::default()
                 }
             };
-            *guard = Some(Box::leak(Box::new(owned_config.clone())));
+            *guard = Some(owned_config.clone());
             owned_config
         }
     };
@@ -126,7 +125,7 @@ pub fn update_config<T>(func: fn(&mut AppConfig) -> T) -> T {
     let result = match guard.deref_mut() {
         // Already have config loaded
         Some(cfg) => {
-            func(*cfg)
+            func(cfg)
         },
         // Don't have config loaded
         None => {
@@ -143,7 +142,7 @@ pub fn update_config<T>(func: fn(&mut AppConfig) -> T) -> T {
                 }
             };
             let temp = func(&mut owned_config);
-            *guard = Some(Box::leak(Box::new(owned_config))); //Update the singleton with the instance we just loaded
+            *guard = Some(owned_config); //Update the singleton with the instance we just loaded
             temp
         }
     };

@@ -13,7 +13,6 @@ use ui_config::UiConfig;
 
 /// Base configuration struct that contains options that configure the entire app
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(deserialize = "'de: 'static"))]
 pub struct RuntimeAppConfig {
     pub keybindings: KeybindingsConfig,
     pub resources: ResourcesConfig,
