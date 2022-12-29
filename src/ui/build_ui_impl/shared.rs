@@ -5,8 +5,13 @@ use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
 use imgui::Condition;
 use tracing::{debug, trace, trace_span};
+use crate::config::run_time::keybindings_config::KeyBinding;
 
-// ===== WINDOWS =====
+/*
+===================
+===== WINDOWS =====
+===================
+*/
 pub fn build_window<T: UiItem>(
     label: &str,
     item: &mut T,
@@ -66,7 +71,11 @@ pub fn build_window_fn(
     result
 }
 
-// ===== MENU BARS =====
+/*
+=====================
+===== MENU BARS =====
+=====================
+ */
 
 pub fn menu<T: FnOnce() -> FallibleFn>(
     ui: &imgui::Ui,
@@ -132,4 +141,24 @@ pub fn toggle_menu_item(
 
     span_toggle_menu_item.exit();
     Ok(())
+}
+
+
+/*
+=================
+===== INPUT =====
+=================
+*/
+
+pub fn handle_shortcut(ui: &imgui::Ui,name: &str, keybind: &KeyBinding, toggle: &mut bool)
+{
+    trace_span!(target: UI_TRACE_USER_INPUT, "handle_shortcut", name, %keybind).in_scope(||{
+        let key_pressed = ui.is_key_index_pressed_no_repeat(keybind.shortcut as i32);
+        let modifiers_pressed = keybind.required_modifiers_held(ui);
+        trace!(target: UI_TRACE_USER_INPUT, key_pressed, modifiers_pressed);
+        if key_pressed && modifiers_pressed{
+            *toggle ^= true;
+            debug!(target: UI_DEBUG_USER_INTERACTION, %keybind, "keybind for {} pressed, value: {}", name, toggle)
+        }
+    });
 }

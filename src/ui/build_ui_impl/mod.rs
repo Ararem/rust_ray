@@ -3,6 +3,7 @@ mod shared;
 mod ui_management;
 
 use crate::config::read_config_value;
+use crate::config::run_time::keybindings_config::KeyBinding;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::span_time_elapsed_field::SpanTimeElapsedField;
 use crate::program::thread_messages::ProgramThreadMessage::QuitAppNoError;
@@ -162,6 +163,33 @@ pub(super) fn build_ui(
     }
     build_window("UI Management", managers, show_ui_management_window, ui)?;
     build_window_fn("Config", render_config_ui, show_config_window, ui)?;
+
+    trace_span!(target: UI_TRACE_USER_INPUT, "handle_input").in_scope(|| {
+        handle_shortcut(
+            ui,
+            "show demo window",
+            &keys.toggle_demo_window,
+            show_demo_window,
+        );
+        handle_shortcut(
+            ui,
+            "show config window",
+            &keys.toggle_config_window,
+            show_config_window,
+        );
+        handle_shortcut(
+            ui,
+            "show ui management window",
+            &keys.toggle_ui_managers_window,
+            show_ui_management_window,
+        );
+        handle_shortcut(
+            ui,
+            "show metrics window",
+            &keys.toggle_metrics_window,
+            show_metrics_window,
+        );
+    });
 
     span_build_ui.record("elapsed", display(timer));
     span_build_ui.exit();

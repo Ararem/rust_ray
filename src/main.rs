@@ -94,7 +94,7 @@ fn init_tracing() -> FallibleFn {
         .with_ansi(true)
         .with_thread_ids(false)
         .with_thread_names(false)
-        .with_target(false)
+        .with_target(true)
         .with_level(true)
         .with_timer(uptime())
         .with_source_location(false)

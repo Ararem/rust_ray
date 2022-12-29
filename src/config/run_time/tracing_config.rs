@@ -35,6 +35,7 @@ impl Default for TracingConfig {
                 LogTargetFilter::new(PROGRAM_TRACE_THREAD_STATUS_POLL, false),
                 LogTargetFilter::new(FONT_MANAGER_TRACE_FONT_LOAD, false),
                 LogTargetFilter::new(UI_TRACE_USER_INPUT, true),
+                LogTargetFilter::new(UI_TRACE_MISC_PERFRAME_CALCULATIONS, false),
             ],
         }
     }

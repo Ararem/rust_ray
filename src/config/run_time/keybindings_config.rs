@@ -49,7 +49,7 @@ impl Display for KeyBinding {
 
 impl KeyBinding {
     /// Checks whether all the *required* modifiers are being held for the keybinding. Ignores modifiers that aren't required (e.g. if [Self::modifier_shift] == false)
-    pub fn all_modifiers_held(&self, ui: &imgui::Ui) -> bool {
+    pub fn required_modifiers_held(&self, ui: &imgui::Ui) -> bool {
         /*
         # Mini little truth table of what we want
         |Want|Down| Output|
