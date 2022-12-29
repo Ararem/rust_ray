@@ -29,6 +29,10 @@ target!(
     UI_DEBUG_USER_INTERACTION,
     r"Event for when the user does something to the ui (but why would they want to do that?)"
 );
+target!(UI_TRACE_USER_INPUT, r"
+    Events for when checking input to see if the user has pressed anything
+");
+
 target!(UI_DEBUG_GENERAL, r"General debug events relating to the UI");
 
 // ===== Engine =====
@@ -121,12 +125,6 @@ target!(
 target!(
     DATA_DEBUG_DUMP_OBJECT,
     r"a log event that dumps the value of some object or buffer"
-);
-
-// ===== PANIC-PILL =====
-target!(
-    PANIC_PILL,
-    r"Special internal event from the [crate::helper::panic_pill::PanicPill]"
 );
 
 // ===== BAD THINGS =====

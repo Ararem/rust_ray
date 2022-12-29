@@ -12,12 +12,12 @@ use crate::program::thread_messages::*;
 use crate::ui::ui_data::UiData;
 use crate::ui::ui_system::UiManagers;
 use crate::FallibleFn;
+use config_ui_impl::render_config_ui;
 use imgui::Condition;
 use indoc::*;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use tracing::field::*;
 use tracing::*;
-use config_ui_impl::render_config_ui;
 
 pub trait UiItem {
     fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;
@@ -137,28 +137,25 @@ pub(super) fn build_ui(
                         // Don't need to toggle manually since it's handled by ImGui (we passed in a mut ref to the variable)
                         debug!(
                             target: UI_DEBUG_USER_INTERACTION,
-                            mode = "ui",
-                            "toggle menu item '{}': {}",
+                            "clicked menu item '{}', value: {}",
                             name,
                             *toggle
                         );
                     } else {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled via ui");
+                        trace!(target: UI_TRACE_USER_INPUT, "menu item not toggled via ui");
                     }
 
-                    if ui.is_key_index_pressed_no_repeat(keybinding.shortcut as i32)
-                        && keybinding.all_modifiers_held(ui)
-                    {
+                    let key_pressed = ui.is_key_index_pressed_no_repeat(keybinding.shortcut as i32);
+                    let modifiers_pressed = keybinding.all_modifiers_held(ui);
+                    trace!(target: UI_TRACE_USER_INPUT, ?key_pressed, ?modifiers_pressed);
+                    if key_pressed && modifiers_pressed {
                         *toggle ^= true;
                         debug!(
                             target: UI_DEBUG_USER_INTERACTION,
-                            mode = "shortcut",
-                            "toggle menu item '{}': {}",
+                            "keypress for menu item '{}', value: {}",
                             name,
                             *toggle
                         );
-                    } else {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled via keys");
                     }
 
                     span_with_shortcut.exit();
@@ -172,13 +169,12 @@ pub(super) fn build_ui(
                     {
                         debug!(
                             target: UI_DEBUG_USER_INTERACTION,
-                            mode = "ui",
-                            "toggle menu item {} => {}",
+                            "clicked menu item '{}', toggled => {}",
                             name,
                             *toggle
                         );
                     } else {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "not toggled");
+                        trace!(target: UI_TRACE_USER_INPUT, "not toggled via ui");
                     }
 
                     span_no_shortcut.exit();
@@ -188,7 +184,7 @@ pub(super) fn build_ui(
 
         let main_menu_bar_token = match ui.begin_main_menu_bar() {
             None => {
-                //Menu bar isn't visible
+                //Menu bar isn't visibliie
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
                     "main menu bar not visible (should always be visible)"

@@ -15,7 +15,7 @@ pub struct UiConfig {
     /// Colour arrays used for the UI
     pub colours: UiColours,
 
-    pub frame_info: FrameInfoConfig
+    pub frame_info: FrameInfoConfig,
 }
 
 impl Default for UiConfig {
@@ -23,7 +23,7 @@ impl Default for UiConfig {
         Self {
             font_oversampling: 1,
             colours: UiColours::default(),
-            frame_info: FrameInfoConfig::default()
+            frame_info: FrameInfoConfig::default(),
         }
     }
 }
@@ -31,6 +31,7 @@ impl Default for UiConfig {
 /// Colour arrays for use with [`imgui`]
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct UiColours {
+    pub normal: Colour,
     pub good: Colour,
     pub warning: Colour,
     pub error: Colour,
@@ -40,7 +41,8 @@ pub struct UiColours {
 impl Default for UiColours {
     fn default() -> Self {
         Self {
-            good: [1.0, 0.82, 0.0, 1.0].into(),
+            normal: [1.0, 1.0, 1.0, 1.0].into(),
+            good: [1.0, 0.0, 0.0, 1.0].into(),
             warning: [1.0, 0.82, 0.0, 1.0].into(),
             error: [1.0, 0.47, 0.0, 1.0].into(),
             severe_error: [1.0, 0.0, 0.0, 1.0].into(),
@@ -49,7 +51,7 @@ impl Default for UiColours {
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct FrameInfoConfig{
+pub struct FrameInfoConfig {
     /// Size of the 'chunks' used when averaging frame values
     pub chunked_average_smoothing_size: usize,
     /// Toggle for if the minimum value shown should always be zero
@@ -60,17 +62,16 @@ pub struct FrameInfoConfig{
     pub num_frames_to_track: usize,
     /// Value that controls how fast the range for the frame info values is lerped. lower values make a smoother (slower) lerp
     pub smooth_speed: f32,
-
 }
 
-impl Default for FrameInfoConfig{
+impl Default for FrameInfoConfig {
     fn default() -> Self {
-        Self{
+        Self {
             chunked_average_smoothing_size: 8,
             min_always_at_zero: true,
             num_frames_to_track: 32_000,
             num_frames_to_display: 1920,
-             smooth_speed: 0.03
+            smooth_speed: 0.03,
         }
     }
 }

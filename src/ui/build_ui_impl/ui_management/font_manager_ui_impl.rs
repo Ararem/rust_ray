@@ -12,12 +12,13 @@ use tracing::{debug, error, info, trace, trace_span, warn};
 
 impl UiItem for FontManager {
     /// Renders the font selector, and returns the selected font
-    fn render(&mut self, ui: &Ui, visible: bool) -> FallibleFn {
+    fn render(&mut self, ui: &Ui, mut visible: bool) -> FallibleFn {
         //TODO: Move the validation code out from the UI code, and put it before the visible check
         let span_render_font_manager =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager").entered();
         // NOTE: We could get away with a lot of this code, but it's safer to have it, and more informative when something happens
-        if !(ui.collapsing_header("Font Manager", TreeNodeFlags::empty()) && visible) {
+        visible &= ui.collapsing_header("Font Manager", TreeNodeFlags::empty());
+        if !visible {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "font manager collapsed");
             return Ok(());
         }
@@ -51,7 +52,10 @@ impl UiItem for FontManager {
 
         if fonts_len == 0 {
             //Check we have at least one font, or else code further down fails (index out of bounds)
-            ui.text_colored(read_config_value(|config| config.runtime.ui.colours.error), "No fonts loaded");
+            ui.text_colored(
+                read_config_value(|config| config.runtime.ui.colours.error),
+                "No fonts loaded",
+            );
             trace!(
                 target: UI_TRACE_BUILD_INTERFACE,
                 "exiting early: no fonts (`fonts_len==0`)"

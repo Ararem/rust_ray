@@ -17,6 +17,7 @@ pub(crate) fn red_or_blue_pill() {
     panic::set_hook(Box::new(move |panic_info| {
         old_hook(panic_info);
         error!(
+            target: REALLY_FUCKING_BAD_UNREACHABLE,
             "you chose the red pill, please stand by while process is ejected from OS matrix"
         );
         error!(

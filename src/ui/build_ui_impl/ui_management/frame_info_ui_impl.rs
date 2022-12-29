@@ -10,7 +10,7 @@ use tracing::field::Empty;
 use tracing::{trace, trace_span, warn};
 
 impl UiItem for FrameInfo {
-    fn render(&mut self, ui: &Ui, visible: bool) -> FallibleFn {
+    fn render(&mut self, ui: &Ui, mut visible: bool) -> FallibleFn {
         let span_render_framerate_graph =
             trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_framerate_graph").entered();
         let config = &read_config_value(|config| config.runtime.ui.frame_info);
@@ -104,7 +104,8 @@ impl UiItem for FrameInfo {
 
         // ===== DISPLAY CODE =====
 
-        if !(ui.collapsing_header("Frame Timings", TreeNodeFlags::empty()) && visible) {
+        visible &= ui.collapsing_header("Frame Timings", TreeNodeFlags::empty());
+        if !visible {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "frame timings collapsed");
             return Ok(());
         }

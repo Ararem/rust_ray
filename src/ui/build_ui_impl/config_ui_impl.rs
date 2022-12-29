@@ -4,10 +4,19 @@ use crate::config::run_time::RuntimeAppConfig;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
 use imgui::{Ui};
+use tracing::{trace, trace_span};
+use crate::helper::logging::event_targets::*;
 
 pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
+    let span_render_config = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_config").entered();
     if !visible {
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "not visible");
         return Ok(());
+    }
+
+    trace!(target: UI_TRACE_BUILD_INTERFACE, "[Button] Reload From Disk");
+    if ui.button("Reload From Disk"){
+        trace!(target: UI_DEBUG_USER_INTERACTION, "[Button] Reload From Disk pressed");
     }
 
     let colours = read_config_value(|config| config.runtime.ui.colours);
@@ -16,6 +25,7 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
     ui.text_colored(colours.good, "good");
     ui.text_colored(colours.severe_error, "severe_error");
 
+    span_render_config.exit();
     Ok(())
 }
 
