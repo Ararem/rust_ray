@@ -20,7 +20,7 @@ impl UiItem for FrameInfo {
         let fps = &mut self.fps;
 
         // by placing this span before the header, we ensure that this always runs even when the header is collapsed
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "update_frames").in_scope(|| {
+        trace_span!(target: UI_TRACE_MISC_PERFRAME_CALCULATIONS, "update_frame_infos").in_scope(|| {
             let delta = ui.io().delta_time;
             // We insert into the front (start) of the Vec, then truncate the end, ensuring that the values get pushed along and we don't go over our limit
             deltas.insert(0, delta * 1000.0);
@@ -49,7 +49,7 @@ impl UiItem for FrameInfo {
 
         // ensures that we don't try to take a slice that's bigger than the amount we have in the Vec
         // Don't have to worry about the `-1` if `len() == 0`, since len() should never `== 0`: we always have at least 1 frame since we insert above, and NUM_FRAMES_TO_DISPLAY should always be >=1
-        let num_frame_infos = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "calc_num_frames").in_scope(||{
+        let num_frame_infos = trace_span!(target: UI_TRACE_MISC_PERFRAME_CALCULATIONS, "calc_num_frames").in_scope(||{
             let (len_d, len_f) = (deltas.len(), fps.len());
             let len;
             // We should always have the same number in both, but just to be safe, use the smaller one if they aren't the same
@@ -68,7 +68,7 @@ impl UiItem for FrameInfo {
         let (smooth_delta_min, smooth_delta_max);
         {
             let span_calculate_approx_range = trace_span!(
-                target: UI_TRACE_BUILD_INTERFACE,
+                target: UI_TRACE_MISC_PERFRAME_CALCULATIONS,
                 "calculate_delta_range",
                 sharp_delta_min = Empty,
                 sharp_delta_max = Empty,
@@ -127,7 +127,7 @@ impl UiItem for FrameInfo {
         let (smooth_fps_min, smooth_fps_max);
         {
             let span_calculate_approx_range = trace_span!(
-                target: UI_TRACE_BUILD_INTERFACE,
+                target: UI_TRACE_MISC_PERFRAME_CALCULATIONS,
                 "calculate_delta_range",
                 sharp_fps_min = Empty,
                 sharp_fps_max = Empty,

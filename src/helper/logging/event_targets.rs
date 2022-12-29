@@ -29,16 +29,25 @@ target!(
     UI_DEBUG_USER_INTERACTION,
     r"Event for when the user does something to the ui (but why would they want to do that?)"
 );
-target!(UI_TRACE_USER_INPUT, r"
+target!(
+    UI_TRACE_USER_INPUT,
+    r"
     Events for when checking input to see if the user has pressed anything
-");
+"
+);
+target!(
+    UI_TRACE_MISC_PERFRAME_CALCULATIONS,
+    r"
+    General UI calculations that take place every frame. For example, may be calculating the window size to
+"
+);
 
 target!(UI_DEBUG_GENERAL, r"General debug events relating to the UI");
 
 // ===== Engine =====
 target!(
     ENGINE_TRACE_GLOBAL_LOOP,
-    r#"poll events when the engine does it's global loop"#
+    r"poll events when the engine does it's global loop"
 );
 
 // ===== Program/Main =====
@@ -48,19 +57,19 @@ target!(
 );
 target!(
     PROGRAM_INFO_LIFECYCLE,
-    r###"program lifecycle events like "the app is starting" and "the app completed""###
+    r#"program lifecycle events like "the app is starting" and "the app completed""#
 );
 target!(
     PROGRAM_DEBUG_GENERAL,
-    r###"general program events, initialising something"###
+    r"general program events, initialising something"
 );
 target!(
     PROGRAM_TRACE_THREAD_STATUS_POLL,
-    r#"poll events when the program thread checks the status of all the other threads"#
+    r"poll events when the program thread checks the status of all the other threads"
 );
 target!(
     PROGRAM_TRACE_GLOBAL_LOOP,
-    r#"poll events when the program does it's global loop"#
+    r"poll events when the program does it's global loop"
 );
 
 // ===== Threads/Inter-thread communication =====
@@ -121,7 +130,7 @@ target!(
 "
 );
 
-// ===== Data/Memory =====
+// ===== DATA/MEMORY =====
 target!(
     DATA_DEBUG_DUMP_OBJECT,
     r"a log event that dumps the value of some object or buffer"
