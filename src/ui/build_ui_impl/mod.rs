@@ -1,85 +1,26 @@
 mod config_ui_impl;
+mod shared;
 mod ui_management;
 
 use crate::config::read_config_value;
-use crate::config::run_time::keybindings_config::KeyBinding;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::span_time_elapsed_field::SpanTimeElapsedField;
-use crate::program::thread_messages::ProgramThreadMessage::*;
+use crate::program::thread_messages::ProgramThreadMessage::QuitAppNoError;
 use crate::program::thread_messages::QuitAppNoErrorReason::QuitInteractionByUser;
-use crate::program::thread_messages::ThreadMessage::*;
+use crate::program::thread_messages::ThreadMessage::Program;
 use crate::program::thread_messages::*;
 use crate::ui::ui_data::UiData;
 use crate::ui::ui_system::UiManagers;
 use crate::FallibleFn;
 use config_ui_impl::render_config_ui;
-use imgui::Condition;
-use indoc::*;
+use indoc::indoc;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
+use shared::*;
 use tracing::field::*;
 use tracing::*;
 
 pub trait UiItem {
     fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;
-}
-
-fn build_window<T: UiItem>(
-    label: &str,
-    item: &mut T,
-    opened: &mut bool,
-    ui: &imgui::Ui,
-) -> FallibleFn {
-    let span_window = trace_span!(
-        target: UI_TRACE_BUILD_INTERFACE,
-        "build_window",
-        window = label
-    )
-    .entered();
-    let mut result = Ok(());
-    if *opened {
-        let token = ui
-            .window(label)
-            .opened(opened)
-            .size([300.0, 110.0], Condition::FirstUseEver)
-            .begin();
-        if let Some(token) = token {
-            result = item.render(ui, true);
-            token.end();
-        } else {
-            result = item.render(ui, false)
-        }
-    }
-    span_window.exit();
-    result
-}
-fn build_window_fn(
-    label: &str,
-    func: fn(&imgui::Ui, bool) -> FallibleFn,
-    opened: &mut bool,
-    ui: &imgui::Ui,
-) -> FallibleFn {
-    let span_window = trace_span!(
-        target: UI_TRACE_BUILD_INTERFACE,
-        "build_window",
-        window = label
-    )
-    .entered();
-    let mut result = Ok(());
-    if *opened {
-        let token = ui
-            .window(label)
-            .opened(opened)
-            .size([300.0, 110.0], Condition::FirstUseEver)
-            .begin();
-        if let Some(token) = token {
-            result = func(ui, true);
-            token.end();
-        } else {
-            result = func(ui, false)
-        }
-    }
-    span_window.exit();
-    result
 }
 
 pub(super) fn build_ui(
@@ -105,6 +46,7 @@ pub(super) fn build_ui(
     .entered();
 
     const NO_SHORTCUT: &str = "N/A"; // String that we use as the shortcut text when there isn't one
+    const NO_TOOLTIP: &str = "This item doesn't have a tooltip, sorry!";
 
     // refs to reduce clutter
     let show_demo_window = &mut data.windows.show_demo_window;
@@ -114,77 +56,9 @@ pub(super) fn build_ui(
     let keys = read_config_value(|config| config.runtime.keybindings);
 
     trace_span!(target: UI_TRACE_BUILD_INTERFACE, "main_menu_bar").in_scope(|| {
-        let toggle_menu_item =
-            |name: &str, toggle: &mut bool, maybe_shortcut: &Option<&KeyBinding>, tooltip: &str| {
-                let span_create_toggle_menu_item = trace_span!(
-                    target: UI_TRACE_BUILD_INTERFACE,
-                    "create_toggle_menu_item",
-                    name,
-                    toggle,
-                )
-                .entered();
-
-                // Using build_with_ref makes a nice little checkmark appear when the toggle is [true]
-                if let Some(keybinding) = maybe_shortcut {
-                    let span_with_shortcut =
-                        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "with_shortcut", %keybinding)
-                            .entered();
-                    if ui
-                        .menu_item_config(name)
-                        .shortcut(keybinding.to_string())
-                        .build_with_ref(toggle)
-                    {
-                        // Don't need to toggle manually since it's handled by ImGui (we passed in a mut ref to the variable)
-                        debug!(
-                            target: UI_DEBUG_USER_INTERACTION,
-                            "clicked menu item '{}', value: {}",
-                            name,
-                            *toggle
-                        );
-                    } else {
-                        trace!(target: UI_TRACE_USER_INPUT, "menu item not toggled via ui");
-                    }
-
-                    let key_pressed = ui.is_key_index_pressed_no_repeat(keybinding.shortcut as i32);
-                    let modifiers_pressed = keybinding.all_modifiers_held(ui);
-                    trace!(target: UI_TRACE_USER_INPUT, ?key_pressed, ?modifiers_pressed);
-                    if key_pressed && modifiers_pressed {
-                        *toggle ^= true;
-                        debug!(
-                            target: UI_DEBUG_USER_INTERACTION,
-                            "keypress for menu item '{}', value: {}",
-                            name,
-                            *toggle
-                        );
-                    }
-
-                    span_with_shortcut.exit();
-                } else {
-                    let span_no_shortcut =
-                        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "no_shortcut").entered();
-                    if ui
-                        .menu_item_config(name)
-                        .shortcut(NO_SHORTCUT)
-                        .build_with_ref(toggle)
-                    {
-                        debug!(
-                            target: UI_DEBUG_USER_INTERACTION,
-                            "clicked menu item '{}', toggled => {}",
-                            name,
-                            *toggle
-                        );
-                    } else {
-                        trace!(target: UI_TRACE_USER_INPUT, "not toggled via ui");
-                    }
-
-                    span_no_shortcut.exit();
-                }
-                span_create_toggle_menu_item.exit();
-            }; //end toggle_menu_item
-
         let main_menu_bar_token = match ui.begin_main_menu_bar() {
             None => {
-                //Menu bar isn't visibliie
+                //Menu bar isn't visible
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
                     "main menu bar not visible (should always be visible)"
@@ -193,77 +67,68 @@ pub(super) fn build_ui(
             }
             Some(token) => token,
         };
-
-        fn menu<F>(ui: &imgui::Ui, label: &str, func: F) -> FallibleFn
-        where
-            F: FnOnce() -> FallibleFn,
-        {
-            trace_span!(target: UI_TRACE_BUILD_INTERFACE, "menu", menu_label = label).in_scope(
-                || {
-                    let mut result = Ok(());
-                    match ui.begin_menu(label) {
-                        None => {
-                            trace!(target: UI_TRACE_BUILD_INTERFACE, "menu not visible");
-                        }
-                        Some(token) => {
-                            result = func();
-                            token.end();
-                        }
-                    }
-                    result
-                },
-            )
-        }
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "building main menu bar");
 
         menu(ui, "Tools", || {
             toggle_menu_item(
-                "Metrics",
-                show_metrics_window,
-                &Some(&keys.toggle_metrics_window),
-                indoc! {r"
-                    Toggles the metrics window.
-
-                    The Metrics window shows statistics (metrics) about the UI
-                "},
-            );
-            toggle_menu_item(
+                ui,
                 "Demo Window",
                 show_demo_window,
-                &Some(&keys.toggle_demo_window),
+                &keys.toggle_demo_window.to_string(),
                 indoc! {r"
-                    Toggles the ImGUI demo window
-                "},
-            );
+                Toggles the ImGUI demo window.
+
+                The demo window demonstrates the features of Dear ImGUI, and provides some debugging tools for debugging ImGUI
+            "},
+            )?;
             toggle_menu_item(
+                ui,
+                "Metrics",
+                show_metrics_window,
+                &keys.toggle_metrics_window.to_string(),
+                indoc! {r"
+                Toggles the ImGUI metrics window.
+
+                The metrics window shows statistics and metrics about Dear ImGUI
+            "},
+            )?;
+            toggle_menu_item(
+                ui,
+                "Config",
+                show_config_window,
+                &keys.toggle_config_window.to_string(),
+                indoc! {r"
+                Shows/hides the config window.
+
+                The config window allows modifying the app configuration. Very much WIP
+            "},
+            )?;
+            toggle_menu_item(
+                ui,
                 "UI Management",
                 show_ui_management_window,
-                &Some(&keys.toggle_ui_managers_window),
+                &keys.toggle_ui_managers_window.to_string(),
                 indoc! {r"
                     Toggles the UI management window.
 
-                    The UI management window allows you to modify the UI, such as changing the font.
-                "},
-            );
-            toggle_menu_item(
-                "Config",
-                show_config_window,
-                &Some(&keys.toggle_config_window),
-                indoc! {r"
-                    Toggles the Configuration Options window.
-                "},
-            );
+                    The UI management window allows you to control the UI, such as changing the font.
+            "},
+            )?;
 
             // Semi-hacky quit handling
             // Makes a toggle and if it's set to true, sends quit message to program
             let mut exit = false;
             toggle_menu_item(
+                ui,
                 "Exit",
                 &mut exit, // Doesn't show any checkboxes or anything
-                &Some(&keys.exit_app),
+                &keys.exit_app.to_string(),
                 indoc! {r"
-                    Exits the application. Exactly the same as clicking the close button
+                    Exits the application.
+
+                    Exactly the same as clicking the close button
                 "},
-            );
+            )?;
             if exit {
                 debug!(
                     target: UI_DEBUG_USER_INTERACTION,
@@ -275,12 +140,13 @@ pub(super) fn build_ui(
                 )?;
                 debug!(target: UI_DEBUG_GENERAL, "ui should quit soon");
             }
-            FallibleFn::Ok(())
-        })?; // end tools
+
+            Ok(())
+        })?; //end Tools menu
 
         main_menu_bar_token.end();
         FallibleFn::Ok(())
-    })?; // end main_menu_bar
+    })?; // end main menu
 
     if *show_demo_window {
         trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_demo_window")
