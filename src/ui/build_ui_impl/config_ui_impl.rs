@@ -1,29 +1,93 @@
 use crate::config::init_time::InitTimeAppConfig;
-use crate::config::read_config_value;
 use crate::config::run_time::RuntimeAppConfig;
+use crate::config::{load_config_from_disk, read_config_value};
+use crate::helper::logging::event_targets::*;
+use crate::helper::logging::{format_error, format_error_string_no_ansi};
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
-use imgui::{Ui};
-use tracing::{trace, trace_span};
-use crate::helper::logging::event_targets::*;
+use color_eyre::Report;
+use imgui::Ui;
+use tracing::{debug, trace, trace_span, warn};
 
 pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
-    let span_render_config = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_config").entered();
+    let span_render_config =
+        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_config").entered();
     if !visible {
         trace!(target: UI_TRACE_BUILD_INTERFACE, "not visible");
         return Ok(());
     }
 
-    trace!(target: UI_TRACE_BUILD_INTERFACE, "[Button] Reload From Disk");
-    if ui.button("Reload From Disk"){
-        trace!(target: UI_DEBUG_USER_INTERACTION, "[Button] Reload From Disk pressed");
-    }
+    unsafe {
+        trace!(
+            target: UI_TRACE_BUILD_INTERFACE,
+            "[Button] Reload From Disk"
+        );
 
-    let colours = read_config_value(|config| config.runtime.ui.colours);
-    ui.text_colored(colours.error, "error");
-    ui.text_colored(colours.warning, "warning");
-    ui.text_colored(colours.good, "good");
-    ui.text_colored(colours.severe_error, "severe_error");
+        // I need this to be shared across frames somehow, so i have to make it static mut :(
+        // The way this is written is weird and I don't like it, but I'm constrained by ImGUI and how it wants it's functions called
+        static mut LOAD_CONFIG_ERROR: Option<Report> = None;
+        const MODAL_NAME: &str = "Could not reload from disk";
+
+        if ui.button("Reload From Disk") {
+            debug!(
+                target: UI_DEBUG_USER_INTERACTION,
+                "[Button] Reload From Disk pressed"
+            );
+            // Try loading, and if there was an error, log it and open a popup modal for the user
+            if let Err(report) = load_config_from_disk() {
+                warn!(
+                    target: GENERAL_WARNING_NON_FATAL,
+                    report = format_error(&report),
+                    "could not load config from disk"
+                );
+                ui.open_popup(MODAL_NAME);
+                LOAD_CONFIG_ERROR = Some(report);
+
+                
+            }
+        }
+
+
+
+        // If we have an error, its modal time....
+        // Also demonstrate passing a bool, this will create a regular close button which
+        // will close the popup. Note that the visibility state of popups is owned by imgui, so the input value
+        // of the bool actually doesn't matter here.
+        let mut opened_sesame = true;
+        let maybe_token = ui.modal_popup_config(MODAL_NAME).opened(&mut opened_sesame).begin_popup();
+        match maybe_token {
+            None => {
+                // Modal closed, clear the current error
+                LOAD_CONFIG_ERROR = None;
+                trace!(
+                    target: UI_TRACE_BUILD_INTERFACE,
+                    "config error modal not visible"
+                );
+            }
+            Some(token) => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "config error modal");
+
+                if let Some(ref report) = LOAD_CONFIG_ERROR {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "have an error to display");
+                    ui.text_colored(
+                        read_config_value(|config| config.runtime.ui.colours.warning),
+                        format_error_string_no_ansi(report),
+                    );
+                } else {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "don't have a config error, that's weird!");
+                    warn!(target: GENERAL_WARNING_NON_FATAL, "config error modal was opened but we don't have an error to display. this probably shouldn't have happened");
+                    ui.text_colored(
+                            read_config_value(|config| config.runtime.ui.colours.warning),
+                            "This popup shouldn't be visible, sorry about that. Normally it would show you an error that happened with reloading the config, but we don't have any error to display",
+                        );
+                    ui.close_current_popup();
+                }
+
+                if ui.button()
+                token.end();
+            }
+        };
+    }
 
     span_render_config.exit();
     Ok(())

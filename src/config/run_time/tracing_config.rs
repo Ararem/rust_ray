@@ -19,7 +19,7 @@ pub struct TracingConfig {
 impl Default for TracingConfig {
     fn default() -> Self {
         Self {
-            error_style: ErrorLogStyle::ShortWithCause,
+            error_style: ErrorLogStyle::WithBacktrace,
             target_filters: vec![
                 //Standard, these are almost always unnecessary
                 // Most of these are here just-in-case, or for profiling (like inferno/[tracing-flame])
@@ -34,7 +34,7 @@ impl Default for TracingConfig {
                 LogTargetFilter::new(THREAD_TRACE_MESSAGE_IGNORED, false),
                 LogTargetFilter::new(PROGRAM_TRACE_THREAD_STATUS_POLL, false),
                 LogTargetFilter::new(FONT_MANAGER_TRACE_FONT_LOAD, false),
-                LogTargetFilter::new(UI_TRACE_USER_INPUT, true),
+                LogTargetFilter::new(UI_TRACE_USER_INPUT, false),
                 LogTargetFilter::new(UI_TRACE_MISC_PERFRAME_CALCULATIONS, false),
             ],
         }

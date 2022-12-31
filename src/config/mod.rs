@@ -1,5 +1,5 @@
-use std::fs;
 use crate::config::compile_time::config_config::*;
+use std::fs;
 use std::ops::{Deref, DerefMut};
 use std::sync::Mutex;
 
@@ -18,6 +18,7 @@ use crate::config::init_time::InitTimeAppConfig;
 use crate::config::run_time::RuntimeAppConfig;
 use crate::helper::file_helper::app_current_directory;
 use crate::helper::logging::event_targets::*;
+use crate::FallibleFn;
 use color_eyre::eyre::{Result as Res, WrapErr};
 use color_eyre::{Help, SectionExt};
 use lazy_static::lazy_static;
@@ -31,7 +32,8 @@ pub struct AppConfig {
     pub runtime: RuntimeAppConfig,
 }
 
-pub fn save_config_to_disk() -> Res<()> {
+/// Attempts to save the currently loaded config to disk
+pub fn save_config_to_disk() -> FallibleFn {
     let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
     let config = read_config_value(|config| config.clone());
 
@@ -40,16 +42,23 @@ pub fn save_config_to_disk() -> Res<()> {
         PrettyConfig::default()
             .separate_tuple_members(true)
             .enumerate_arrays(true),
-    ).wrap_err("couldn't serialise config")?;
+    )
+    .wrap_err("couldn't serialise config")?;
 
     fs::write(config_path, serialised).wrap_err("couldn't save serialised config to file")?;
 
     Ok(())
 }
 
-fn fallible_load_config() -> Res<AppConfig> {
-    // can't use tracing here since it don't exist yet :(
+/// Loads the config from disk, if possible
+pub fn load_config_from_disk() -> FallibleFn {
+    let new_config = fallible_get_disk_config().wrap_err("could not load config from disk")?;
+    update_config(|config_ref| *config_ref = new_config);
+    Ok(())
+}
 
+/// Internal function that tries to get the config from disk. Can fail (and if so returns the error instead)
+fn fallible_get_disk_config() -> Res<AppConfig> {
     //load up the file
     let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
     let data = fs::read_to_string(&config_path)
@@ -60,21 +69,22 @@ fn fallible_load_config() -> Res<AppConfig> {
 
     Ok(config)
 }
-fn lazy_static_load_config() -> AppConfig {
-    // Again, we can't using [tracing] so we gotta use println (ew)
-    let maybe_config = fallible_load_config();
-    match maybe_config {
-        Ok(config) => config,
-        Err(report) => {
+lazy_static! {
+    static ref CONFIG_INSTANCE: Mutex<AppConfig> = Mutex::new(
+    {
+        // Again, we can't using [tracing] so we gotta use println (ew)
+        let maybe_config = fallible_get_disk_config();
+        match maybe_config {
+            Ok(config) => config,
+            Err(report) => {
             let report =
                 report.wrap_err("using default font config (could not load config from file)");
             eprintln!("problem loading config: {:?}", report);
             AppConfig::default()
+            }
         }
     }
-}
-lazy_static! {
-    static ref CONFIG_INSTANCE: Mutex<AppConfig> = Mutex::new(lazy_static_load_config());
+    );
 }
 
 /// Reads a config value from the global [AppConfig], and returns it
@@ -105,7 +115,7 @@ pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
     func(&config)
 }
 
-pub fn update_config<T>(func: fn(&mut AppConfig) -> T) -> T {
+pub fn update_config<T, F: FnOnce(&mut AppConfig) -> T>(func: F) -> T {
     let mut guard = match CONFIG_INSTANCE.lock() {
         Ok(guard) => guard,
         Err(poison) => {

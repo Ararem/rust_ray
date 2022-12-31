@@ -43,6 +43,7 @@ mod docking;
 mod font_manager;
 pub mod ui_data;
 mod ui_system;
+mod popup_manager;
 
 pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,

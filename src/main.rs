@@ -8,6 +8,7 @@ use crate::config::{read_config_value, save_config_to_disk};
 use color_eyre::eyre;
 use tracing::level_filters::LevelFilter;
 use tracing::*;
+use tracing_error::ErrorLayer;
 use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::format;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -136,6 +137,7 @@ fn init_tracing() -> FallibleFn {
 
     tracing_subscriber::registry()
         .with(standard_layer)
+        .with(ErrorLayer::default()) //The ErrorLayer allows [eyre] to capture SpanTraces
         // .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
         .try_init()?;
 

@@ -5,6 +5,8 @@ use crate::config::read_config_value;
 use crate::config::run_time::tracing_config::ErrorLogStyle;
 use color_eyre::{Help, Report};
 use indoc::formatdoc;
+use lazy_static::lazy_static;
+use regex::Regex;
 use tracing::field::{display, DisplayValue};
 use ErrorLogStyle::ShortWithCause;
 
@@ -24,6 +26,18 @@ pub fn format_error_string(report: &Report) -> String {
         ErrorLogStyle::WithBacktrace => format!("{:?}", report),
         ErrorLogStyle::Debug => format!("{:#?}", report),
     }
+}
+
+/// Formats a [Report] as a string, without any ANSI colour codes
+pub fn format_error_string_no_ansi(report: &Report) -> String{
+    // Since we're using [color_eyre], it adds ANSI colours to formatted errors
+    // We don't like that in this case, so remove them with a regex
+
+    lazy_static!{
+        static ref REGEX: Regex = Regex::new("\\u{001b}\\[?[^m]*m").unwrap();
+    }
+    let string = format_error_string(report);
+    REGEX.replace_all(&string, "").to_string()
 }
 
 /// Function to convert a boxed error (`&Box<dyn Error>`) to an owned [Report]
