@@ -13,6 +13,7 @@ pub(crate) fn red_or_blue_pill() {
     // Got panics? We've got a pill for that!
     //
     // Custom panic hook that prints a log message and quits the whole process
+    //TODO: Check out eyre::HookBuilder (as per https://github.com/yaahc/color-eyre/pull/51)
     let old_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
         old_hook(panic_info);

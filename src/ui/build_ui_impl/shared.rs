@@ -1,11 +1,16 @@
 //! Module of shared functions used for the UI building
-
+use crate::config::read_config_value;
+use crate::config::run_time::keybindings_config::KeyBinding;
 use crate::helper::logging::event_targets::*;
+use crate::helper::logging::format_error_string_no_ansi;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
-use imgui::Condition;
+use color_eyre::{Handler, Report};
+use imgui::{Condition, StyleColor, Ui};
+use itertools::Itertools;
 use tracing::{debug, trace, trace_span};
-use crate::config::run_time::keybindings_config::KeyBinding;
+use tracing_error::ExtractSpanTrace;
+use tracing_subscriber::fmt::format;
 
 /*
 ===================
@@ -16,7 +21,7 @@ pub fn build_window<T: UiItem>(
     label: &str,
     item: &mut T,
     opened: &mut bool,
-    ui: &imgui::Ui,
+    ui: &Ui,
 ) -> FallibleFn {
     let span_window = trace_span!(
         target: UI_TRACE_BUILD_INTERFACE,
@@ -43,9 +48,9 @@ pub fn build_window<T: UiItem>(
 }
 pub fn build_window_fn(
     label: &str,
-    func: fn(&imgui::Ui, bool) -> FallibleFn,
+    func: fn(&Ui, bool) -> FallibleFn,
     opened: &mut bool,
-    ui: &imgui::Ui,
+    ui: &Ui,
 ) -> FallibleFn {
     let span_window = trace_span!(
         target: UI_TRACE_BUILD_INTERFACE,
@@ -77,15 +82,11 @@ pub fn build_window_fn(
 =====================
  */
 
-pub fn menu<T: FnOnce() -> FallibleFn>(
-    ui: &imgui::Ui,
-    name: &str,
-    generate_menu_items: T,
-) -> FallibleFn {
+pub fn menu<T: FnOnce() -> FallibleFn>(ui: &Ui, name: &str, generate_menu_items: T) -> FallibleFn {
     trace_span!(target: UI_TRACE_BUILD_INTERFACE, "tools_menu").in_scope(|| {
         let menu_token = match ui.begin_menu(name) {
             None => {
-                trace!(target: UI_TRACE_USER_INPUT, name, selected=false);
+                trace!(target: UI_TRACE_USER_INPUT, name, selected = false);
                 trace!(
                     target: UI_TRACE_BUILD_INTERFACE,
                     "{} menu not visible",
@@ -94,7 +95,7 @@ pub fn menu<T: FnOnce() -> FallibleFn>(
                 return Ok(());
             }
             Some(token) => {
-                trace!(target: UI_TRACE_USER_INPUT, name, selected=true);
+                trace!(target: UI_TRACE_USER_INPUT, name, selected = true);
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "{} menu visible", name);
                 token
             }
@@ -107,7 +108,7 @@ pub fn menu<T: FnOnce() -> FallibleFn>(
 
 /// Creates a toggle menu item for a mutable bool reference
 pub fn toggle_menu_item(
-    ui: &imgui::Ui,
+    ui: &Ui,
     name: &str,
     toggle: &mut bool,
     shortcut_text: &str,
@@ -143,15 +144,13 @@ pub fn toggle_menu_item(
     Ok(())
 }
 
-
 /*
 =================
 ===== INPUT =====
 =================
 */
 
-pub fn handle_shortcut(ui: &imgui::Ui,name: &str, keybind: &KeyBinding, toggle: &mut bool)
-{
+pub fn handle_shortcut(ui: &Ui, name: &str, keybind: &KeyBinding, toggle: &mut bool) {
     trace_span!(target: UI_TRACE_USER_INPUT, "handle_shortcut", name, %keybind).in_scope(||{
         let key_pressed = ui.is_key_index_pressed_no_repeat(keybind.shortcut as i32);
         let modifiers_pressed = keybind.required_modifiers_held(ui);
@@ -161,4 +160,35 @@ pub fn handle_shortcut(ui: &imgui::Ui,name: &str, keybind: &KeyBinding, toggle: 
             debug!(target: UI_DEBUG_USER_INTERACTION, %keybind, "keybind for {} pressed, value: {}", name, toggle)
         }
     });
+}
+
+/*
+===================
+===== WIDGETS =====
+===================
+*/
+
+pub fn display_eyre_report(ui: &Ui, report: &Report) {
+    let colours = read_config_value(|config| config.runtime.ui.colours);
+    ui.text("Chain");
+    let col = ui.push_style_color(StyleColor::Text, [0.3, 0.5, 1.0, 1.0]);
+    for err in report.chain() {
+        ui.bullet_text(format!("{}", err))
+    }
+    col.end();
+    ui.text(format!("Source:\n{:#?}", report.source()));
+    ui.text(format!(
+        "Backtrace:\n{:#?}",
+        report
+            .handler()
+            .downcast_ref::<color_eyre::Handler>()
+            .map(|h| h.backtrace())
+    ));
+    ui.text(format!(
+        "Span Trace:\n{:#?}",
+        report
+            .handler()
+            .downcast_ref::<color_eyre::Handler>()
+            .map(|h| h.span_trace())
+    ));
 }

@@ -30,22 +30,27 @@ impl Default for UiConfig {
 
 /// Colour arrays for use with [`imgui`]
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct UiColours {
-    pub normal: Colour,
-    pub good: Colour,
-    pub warning: Colour,
-    pub error: Colour,
-    pub severe_error: Colour,
-}
+pub struct UiColours {}
 
 impl Default for UiColours {
     fn default() -> Self {
         Self {
+            // Normal text colours
             normal: [1.0, 1.0, 1.0, 1.0].into(),
+            subtle: [0.8, 0.8, 0.8, 1.0].into(),
+            accent: [0.8, 0.8, 0.8, 1.0].into(),
+
+            // Tracing/logging colours
+            trace: [1.0, 0.0, 0.0, 1.0].into(),
+            debug: [1.0, 0.0, 0.0, 1.0].into(),
+            info: [1.0, 0.0, 0.0, 1.0].into(),
+            warn: [1.0, 0.0, 0.0, 1.0].into(),
+            error: [1.0, 0.0, 0.0, 1.0].into(),
+
+            // Severity
             good: [1.0, 0.0, 0.0, 1.0].into(),
-            warning: [1.0, 0.82, 0.0, 1.0].into(),
-            error: [1.0, 0.47, 0.0, 1.0].into(),
-            severe_error: [1.0, 0.0, 0.0, 1.0].into(),
+            neutral: [1.0, 0.82, 0.0, 1.0].into(),
+            bad: [1.0, 0.3, 0.0, 1.0].into(),
         }
     }
 }
