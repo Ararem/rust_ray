@@ -7,7 +7,6 @@ use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
 use color_eyre::Report;
 use imgui::{Condition, StyleColor, Ui};
-use itertools::Itertools;
 use tracing::{debug, trace, trace_span, Metadata};
 use tracing_error::SpanTraceStatus;
 
@@ -203,37 +202,40 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "have backtrace");
                 ui.text("TODO: Backtrace display");
             } else {
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "missing backtrace");
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "no backtrace: missing");
                 ui.text_colored(colours.severity.warning, "This error doesn't have a backtrace. Try checking `RUST_BACKTRACE` and/or `RUST_BACKTRACE` environment variables are set")
             }
         } else {
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "couldn't cast handler");
+            trace!(
+                target: UI_TRACE_BUILD_INTERFACE,
+                "no backtrace: couldn't cast handler"
+            );
             ui.text_colored(
                 colours.severity.warning,
                 "Couldn't downcast error report's handler to get the backtrace",
             );
         }
     });
-    section!("Span trace", {
-        if let Some(handler) = report.handler().downcast_ref::<color_eyre::Handler>() {
-            if let Some(span_trace) = handler.span_trace() {
-                match span_trace.status() {
-                    SpanTraceStatus::UNSUPPORTED => {
-                        trace!(
-                            target: UI_TRACE_BUILD_INTERFACE,
-                            "span trace: not supported"
-                        );
-                        ui.text_colored(colours.severity.warning, "SpanTraces are not supported, likely because there is no [ErrorLayer] or the [ErrorLayer] is from a different version of [tracing_error]")
-                    }
-                    SpanTraceStatus::EMPTY => {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: empty");
-                        ui.text_colored(colours.severity.warning, "The SpanTrace is empty, likely because it was captured outside of any spans")
-                    }
-                    SpanTraceStatus::CAPTURED => {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: captured");
-                        // [with_spans] calls the closure on every span in the trace, as long as the closure returns `true`
-                        let mut depth = 0;
-                        span_trace.with_spans(
+    // section!("Span trace", {
+    if let Some(handler) = report.handler().downcast_ref::<color_eyre::Handler>() {
+        if let Some(span_trace) = handler.span_trace() {
+            match span_trace.status() {
+                SpanTraceStatus::UNSUPPORTED => {
+                    trace!(
+                        target: UI_TRACE_BUILD_INTERFACE,
+                        "span trace: not supported"
+                    );
+                    ui.text_colored(colours.severity.warning, "SpanTraces are not supported, likely because there is no [ErrorLayer] or the [ErrorLayer] is from a different version of [tracing_error]")
+                }
+                SpanTraceStatus::EMPTY => {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: empty");
+                    ui.text_colored(colours.severity.warning, "The SpanTrace is empty, likely because it was captured outside of any spans")
+                }
+                SpanTraceStatus::CAPTURED => {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: captured");
+                    // [with_spans] calls the closure on every span in the trace, as long as the closure returns `true`
+                    let mut depth = 0;
+                    span_trace.with_spans(
                             |metadata: &'static Metadata<'static>, formatted_span_fields: &str| -> bool {
                                 let span_process_span = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "process_span", ?metadata, formatted_span_fields=formatted_span_fields.to_owned()).entered();
                                 // Construct a tree node with the span name as the title
@@ -271,6 +273,7 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                                         ui.text_disabled("<None>");
                                     }
                                     else{
+                                        /*
                                         // List of names of each field
                                         let names = metadata.fields().iter().map(|f| f.name()).collect_vec();
                                         // Substring of the formatted span fields
@@ -347,7 +350,10 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                                              ui.same_line();
                                              ui.text_colored(colours.value.tracing_event_field_value, last_value);
                                         }
-                                        ui.text(formatted_span_fields);
+                                        */
+                                        // Unfortunately [tracing] does a really stupid thing of concatenating all the fields, and it's too tricky to parse correctly
+                                        // So just use ugly formatting for them :(
+                                        ui.text_colored(colours.value.tracing_event_field_value, formatted_span_fields);
                                     }
                                     // Omitting metadata.kind() because it's always a span, because we're getting a SpanTrace (duh)
                                     // Same for callsite - doesn't give any useful information (just a pointer to a private struct)
@@ -360,23 +366,23 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                                 true
                             },
                         );
-                    }
                 }
-            } else {
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "missing span trace");
-                ui.text_colored(
+            }
+        } else {
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "missing span trace");
+            ui.text_colored(
                     colours.severity.neutral,
                     "This error doesn't have a span trace; it was probably captured outside of any spans",
                 )
-            }
-        } else {
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "couldn't cast handler");
-            ui.text_colored(
-                colours.severity.warning,
-                "Couldn't downcast error report's handler to get the span trace",
-            );
         }
-    });
+    } else {
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "couldn't cast handler");
+        ui.text_colored(
+            colours.severity.warning,
+            "Couldn't downcast error report's handler to get the span trace",
+        );
+    }
+    // });
     //TODO: Do we even need this debug section
     section!("Debug", {
         ui.text_colored(colours.value.misc_value, format!("{:#?}", report));

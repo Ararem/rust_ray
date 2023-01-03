@@ -137,7 +137,7 @@ fn init_tracing() -> FallibleFn {
 
     tracing_subscriber::registry()
         .with(standard_layer)
-        .with(ErrorLayer::new()) //The ErrorLayer allows [eyre] to capture SpanTraces
+        .with(ErrorLayer::default()) //The ErrorLayer allows [eyre] to capture SpanTraces
         // .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
         .try_init()?;
 
