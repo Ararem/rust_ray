@@ -1,42 +1,42 @@
 //! Manages fonts for the UI system
 
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
-use std::fs;
-use std::io::Read;
-use std::ops::Deref;
 use color_eyre::eyre::Context;
 use color_eyre::{eyre, Help, Report};
 use fs_extra::*;
 use imgui::{FontAtlas, FontConfig, FontId, FontSource};
 use indoc::formatdoc;
 use nameof::name_of;
+use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
+use std::fs;
+use std::io::Read;
+use std::ops::Deref;
 use tracing::warn;
 use tracing::{debug, debug_span, trace, trace_span};
 
 use crate::config::compile_time::resources_config::{
-    FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER
+    FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER,
 };
-use crate::config::read_config_value;
-use crate::FallibleFn;
 use crate::config::compile_time::ui_config::{MAX_FONT_SIZE, MIN_FONT_SIZE};
+use crate::config::read_config_value;
 use crate::helper::logging::event_targets::*;
 use crate::resources::resource_manager::get_main_resource_folder_path;
+use crate::FallibleFn;
 
 #[derive(Debug, Clone)]
 pub struct FontManager {
     /// Fonts available for the UI
-    pub (in crate::ui) fonts: Vec<Font>,
+    pub(in crate::ui) fonts: Vec<Font>,
     /// Index for which font we want to use (see [fonts])
-    pub (in crate::ui) selected_font_index: usize,
+    pub(in crate::ui) selected_font_index: usize,
     /// Index for which [FontWeight] from the selected font (see [font_index]) we want
-    pub (in crate::ui) selected_weight_index: usize,
+    pub(in crate::ui) selected_weight_index: usize,
     /// Index for the selected font size (see [FONT_SIZES])
-    pub (in crate::ui) selected_size: f32,
+    pub(in crate::ui) selected_size: f32,
     /// The currently selected font's [FontId]
-    pub (in crate::ui) current_font: Option<FontId>,
+    pub(in crate::ui) current_font: Option<FontId>,
     /// Whether the font needs to be rebuilt because of a change
-    pub (in crate::ui) dirty: bool,
+    pub(in crate::ui) dirty: bool,
 }
 
 impl FontManager {
@@ -52,7 +52,10 @@ impl FontManager {
         */
         self.dirty = true;
 
-        let fonts_directory_path = get_main_resource_folder_path()?.join(read_config_value(|config| config.runtime.resources.fonts_path.clone()));
+        let fonts_directory_path =
+            get_main_resource_folder_path()?.join(read_config_value(|config| {
+                config.runtime.resources.fonts_path.clone()
+            }));
 
         debug!(
             target: RESOURCES_DEBUG_LOAD,

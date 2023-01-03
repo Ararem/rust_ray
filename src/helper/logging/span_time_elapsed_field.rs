@@ -1,6 +1,6 @@
+use nameof::{name_of, name_of_type};
 use std::fmt::{Debug, Display, Formatter};
 use std::time::{Duration, Instant};
-use nameof::{name_of, name_of_type};
 
 /// A struct that can be used to time operations, and can be logged by [tracing] (just use % operator)
 ///

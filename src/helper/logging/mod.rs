@@ -29,11 +29,11 @@ pub fn format_report_string(report: &Report) -> String {
 }
 
 /// Formats a [Report] as a string, without any ANSI colour codes
-pub fn format_report_string_no_ansi(report: &Report) -> String{
+pub fn format_report_string_no_ansi(report: &Report) -> String {
     // Since we're using [color_eyre], it adds ANSI colours to formatted errors
     // We don't like that in this case, so remove them with a regex
 
-    lazy_static!{
+    lazy_static! {
         static ref REGEX: Regex = Regex::new("\\u{001b}\\[?[^m]*m").unwrap();
     }
     let string = format_report_string(report);

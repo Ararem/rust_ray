@@ -22,6 +22,7 @@ use tracing::field::{debug, Empty};
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn};
 
 use crate::build::*;
+use crate::config::read_config_value;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_report_display;
 use crate::program::program_data::ProgramData;
@@ -35,7 +36,6 @@ use crate::ui::ui_system::{FrameInfo, UiBackend, UiManagers, UiSystem};
 use crate::FallibleFn;
 use ProgramThreadMessage::QuitAppNoError;
 use QuitAppNoErrorReason::QuitInteractionByUser;
-use crate::config::read_config_value;
 
 mod build_ui_impl;
 mod clipboard_integration;
@@ -48,7 +48,7 @@ pub(crate) fn ui_thread(
     thread_start_barrier: Arc<Barrier>,
     program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
-    message_receiver: BroadcastReceiver<ThreadMessage>
+    message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> FallibleFn {
     let span_ui_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
@@ -73,7 +73,9 @@ pub(crate) fn ui_thread(
     Init ui
     If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
     */
-    let system = init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str()).wrap_err("failed while initialising ui system")?;
+    let system =
+        init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str())
+            .wrap_err("failed while initialising ui system")?;
 
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
     // Probably because I was borrowing the whole struct when I only needed one field of it
@@ -294,7 +296,7 @@ fn outer_render_a_frame(
     managers: &mut UiManagers,
     ui_data: &mut UiData,
     message_sender: &BroadcastSender<ThreadMessage>,
-    message_receiver: &BroadcastReceiver<ThreadMessage>
+    message_receiver: &BroadcastReceiver<ThreadMessage>,
 ) -> FallibleFn {
     let span_outer_render = trace_span!(
         target: UI_TRACE_RENDER,

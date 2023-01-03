@@ -179,8 +179,7 @@ pub fn run() -> ThreadReturn {
         They should only ever safely exit while inside the 'process_messages loop (since that's where they're told to quit)
         So if they have finished here, that's BAAADDDD
         */
-        threads =
-            check_threads_are_running(threads).wrap_err("failed thread status check")?;
+        threads = check_threads_are_running(threads).wrap_err("failed thread status check")?;
 
         trace!(
             target: PROGRAM_TRACE_GLOBAL_LOOP,
@@ -227,8 +226,8 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
                 Err(error)
             }
             Err(boxed_error) => {
-                let error = dyn_panic_to_report(&boxed_error)
-                    .wrap_err("ui thread panicked while running");
+                let error =
+                    dyn_panic_to_report(&boxed_error).wrap_err("ui thread panicked while running");
                 debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
@@ -300,7 +299,7 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
 fn handle_user_quit(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
-    threads: Threads
+    threads: Threads,
 ) -> FallibleFn {
     info!(target: PROGRAM_INFO_LIFECYCLE, "user wants to quit");
 

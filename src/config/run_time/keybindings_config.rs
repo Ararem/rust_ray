@@ -101,12 +101,12 @@ impl Default for KeybindingsConfig {
                 modifier_alt: true,
                 modifier_shift: false,
             },
-            toggle_config_window: KeyBinding{
+            toggle_config_window: KeyBinding {
                 shortcut: KeyCode::Comma,
                 modifier_ctrl: true,
                 modifier_alt: false,
                 modifier_shift: false,
-            }
+            },
         }
     }
 }

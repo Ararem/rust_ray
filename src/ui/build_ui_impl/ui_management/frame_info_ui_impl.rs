@@ -20,7 +20,11 @@ impl UiItem for FrameInfo {
         let fps = &mut self.fps;
 
         // by placing this span before the header, we ensure that this always runs even when the header is collapsed
-        trace_span!(target: UI_TRACE_MISC_PERFRAME_CALCULATIONS, "update_frame_infos").in_scope(|| {
+        trace_span!(
+            target: UI_TRACE_MISC_PERFRAME_CALCULATIONS,
+            "update_frame_infos"
+        )
+        .in_scope(|| {
             let delta = ui.io().delta_time;
             // We insert into the front (start) of the Vec, then truncate the end, ensuring that the values get pushed along and we don't go over our limit
             deltas.insert(0, delta * 1000.0);

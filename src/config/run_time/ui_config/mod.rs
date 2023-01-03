@@ -1,12 +1,12 @@
 //! # [ui_config]
 //!
 //! Contains UI configuration fields
-use serde::{Deserialize, Serialize};
 use frame_info_config::FrameInfoConfig;
+use serde::{Deserialize, Serialize};
 use theme::Theme;
 
-mod theme;
 mod frame_info_config;
+mod theme;
 pub mod theme_ext;
 
 // Base configuration struct that contains options that configure the entire app

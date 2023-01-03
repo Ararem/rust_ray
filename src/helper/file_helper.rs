@@ -1,9 +1,9 @@
+use color_eyre::{eyre, Report};
 use std::env;
 use std::path::PathBuf;
-use color_eyre::{eyre, Report};
 
 /// Gets the directory of the current app executable
-pub fn app_current_directory() -> eyre::Result<PathBuf>{
+pub fn app_current_directory() -> eyre::Result<PathBuf> {
     // Directory of the .exe
     match env::current_exe() {
         Err(error) => Err(Report::new(error).wrap_err("was not able to find current process file location")),

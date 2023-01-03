@@ -19,7 +19,7 @@ pub(crate) fn engine_thread(
     thread_start_barrier: Arc<Barrier>,
     _program_data_wrapped: Arc<Mutex<ProgramData>>,
     message_sender: BroadcastSender<ThreadMessage>,
-    message_receiver: BroadcastReceiver<ThreadMessage>
+    message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> FallibleFn {
     let span_engine_thread =
         info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "engine_thread").entered();
