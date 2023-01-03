@@ -28,7 +28,7 @@ pub(super) fn build_ui(
     managers: &mut UiManagers,
     data: &mut UiData,
     message_sender: &BroadcastSender<ThreadMessage>,
-    message_receiver: &BroadcastReceiver<ThreadMessage>,
+    _message_receiver: &BroadcastReceiver<ThreadMessage>,
 ) -> FallibleFn {
     //Makes it easier to separate out frames
     trace!(

@@ -1,7 +1,6 @@
 //! Module of shared functions used for the UI building
 use crate::config::read_config_value;
 use crate::config::run_time::keybindings_config::KeyBinding;
-use crate::config::run_time::ui_config::theme_ext::colour_for_tracing_level;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_report_string_no_ansi;
 use crate::ui::build_ui_impl::UiItem;
@@ -9,9 +8,7 @@ use crate::FallibleFn;
 use color_eyre::Report;
 use imgui::{Condition, StyleColor, Ui};
 use itertools::Itertools;
-use tracing::field::{Field, FieldSet};
-use tracing::instrument::WithSubscriber;
-use tracing::{debug, trace, trace_span, warn, Metadata, Value};
+use tracing::{debug, trace, trace_span, Metadata};
 use tracing_error::SpanTraceStatus;
 
 /*
@@ -267,7 +264,7 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                                     metadata_label!("target");
                                     ui.text_colored(colours.value.tracing_event_name, metadata.target());
                                     metadata_label!("level");
-                                    ui.text_colored(colour_for_tracing_level(&colours, metadata.level()), metadata.level().to_string());
+                                    ui.text_colored(colours.colour_for_tracing_level(metadata.level()), metadata.level().to_string());
                                     metadata_label!("fields");
                                     let fields = metadata.fields();
                                     if fields.is_empty(){
@@ -349,9 +346,8 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                                              ui.text_colored(colours.text.normal, "=");
                                              ui.same_line();
                                              ui.text_colored(colours.value.tracing_event_field_value, last_value);
-
-                                            ui.text(formatted_span_fields);
                                         }
+                                        ui.text(formatted_span_fields);
                                     }
                                     // Omitting metadata.kind() because it's always a span, because we're getting a SpanTrace (duh)
                                     // Same for callsite - doesn't give any useful information (just a pointer to a private struct)
