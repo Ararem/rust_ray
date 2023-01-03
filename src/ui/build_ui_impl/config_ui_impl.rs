@@ -2,7 +2,7 @@ use crate::config::init_time::InitTimeAppConfig;
 use crate::config::run_time::RuntimeAppConfig;
 use crate::config::{load_config_from_disk, read_config_value};
 use crate::helper::logging::event_targets::*;
-use crate::helper::logging::format_error;
+use crate::helper::logging::format_report_display;
 use crate::ui::build_ui_impl::shared::display_eyre_report;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
@@ -38,7 +38,7 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
             if let Err(report) = load_config_from_disk() {
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    report = format_error(&report),
+                    report = format_report_display(&report),
                     "could not load config from disk"
                 );
                 ui.open_popup(MODAL_NAME);
@@ -70,13 +70,14 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
                     trace!(target: UI_TRACE_BUILD_INTERFACE, "don't have a config error!?!?");
                     warn!(target: GENERAL_WARNING_NON_FATAL, "config error modal was opened but we don't have an error to display. this probably shouldn't have happened");
                     ui.text_colored(
-                            read_config_value(|config| config.runtime.ui.colours.warning),
-                            "This popup shouldn't be visible, sorry about that. Normally it would show you an error that happened with reloading the config, but we don't have any error to display (yay)",
+                        read_config_value(|config| config.runtime.ui.colours.severity.warning),
+                        "This popup shouldn't be visible, sorry about that. Normally it would show you an error that happened with reloading the config, but we don't have any error to display (yay)",
                         );
                     ui.close_current_popup();
                 }
 
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "Close button");
+                ui.spacing();
                 if ui.button("Close") {
                     debug!(target: UI_DEBUG_USER_INTERACTION, "[Button] Pressed Close config error modal");
                     ui.close_current_popup();

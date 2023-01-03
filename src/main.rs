@@ -15,7 +15,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::fmt::time::uptime;
 
 use crate::helper::logging::event_targets::*;
-use crate::helper::logging::format_error;
+use crate::helper::logging::format_report_display;
 
 mod build;
 mod config;
@@ -56,7 +56,7 @@ fn main() -> FallibleFn {
 
     debug!(target: MAIN_DEBUG_GENERAL, "saving config to disk");
     if let Err(error) = save_config_to_disk() {
-        warn!(target: GENERAL_WARNING_NON_FATAL, report = %format_error(&error), "couldn't save config to disk")
+        warn!(target: GENERAL_WARNING_NON_FATAL, report = %format_report_display(&error), "couldn't save config to disk")
     }
 
     match ret {
@@ -70,7 +70,7 @@ fn main() -> FallibleFn {
             Ok(program_return_value)
         }
         Err(report) => {
-            let formatted_error = format_error(&report);
+            let formatted_error = format_report_display(&report);
             error!(
                 target: PROGRAM_INFO_LIFECYCLE,
                 formatted_error, "program exited unsuccessfully"

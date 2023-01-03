@@ -16,10 +16,10 @@ pub mod event_targets;
 pub mod span_time_elapsed_field;
 
 /// Function that logs an error in whichever way the app is configured to log errors
-pub fn format_error(report: &Report) -> DisplayValue<String> {
-    display(format_error_string(report))
+pub fn format_report_display(report: &Report) -> DisplayValue<String> {
+    display(format_report_string(report))
 }
-pub fn format_error_string(report: &Report) -> String {
+pub fn format_report_string(report: &Report) -> String {
     match read_config_value(|config| config.runtime.tracing.error_style) {
         ErrorLogStyle::Short => format!("{}", report),
         ShortWithCause => format!("{:#}", report),
@@ -29,14 +29,14 @@ pub fn format_error_string(report: &Report) -> String {
 }
 
 /// Formats a [Report] as a string, without any ANSI colour codes
-pub fn format_error_string_no_ansi(report: &Report) -> String{
+pub fn format_report_string_no_ansi(report: &Report) -> String{
     // Since we're using [color_eyre], it adds ANSI colours to formatted errors
     // We don't like that in this case, so remove them with a regex
 
     lazy_static!{
         static ref REGEX: Regex = Regex::new("\\u{001b}\\[?[^m]*m").unwrap();
     }
-    let string = format_error_string(report);
+    let string = format_report_string(report);
     REGEX.replace_all(&string, "").to_string()
 }
 
@@ -101,11 +101,11 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     }}
     case! {
        &Report, type_name, val, {
-           format!("[{type_name}]: {}", format_error(val))
+           format!("[{type_name}]: {}", format_report_display(val))
     }}
     case! {
        &FallibleFn, type_name, val, {
-           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_error(report)) }
+           match val { Ok(()) => format!("[{type_name}]: ()"), Err(report) => format!("[{type_name}]: {}", format_report_display(report)) }
     }}
     // Special case since [str] is dynamically sized
     if let Some(val) = (**boxed_error).downcast_ref::<&str>() {

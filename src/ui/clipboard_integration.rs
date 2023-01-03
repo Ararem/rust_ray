@@ -8,7 +8,7 @@ use imgui::ClipboardBackend;
 use tracing::*;
 
 use crate::helper::logging::event_targets::{GENERAL_WARNING_NON_FATAL, UI_DEBUG_USER_INTERACTION};
-use crate::helper::logging::{dyn_error_to_report, format_error};
+use crate::helper::logging::{dyn_error_to_report, format_report_display};
 
 /// Wrapper struct for [ClipboardContext] that allows integration with [imgui]
 /// Used to implement [ClipboardBackend]
@@ -52,7 +52,7 @@ impl ClipboardBackend for ImguiClipboardSupport {
                     dyn_error_to_report(&boxed_error).wrap_err("could not get clipboard text");
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    error = format_error(&report),
+                    error = format_report_display(&report),
                     "couldn't get clipboard"
                 );
                 None
@@ -85,7 +85,7 @@ impl ClipboardBackend for ImguiClipboardSupport {
                 .section(clipboard_text.to_owned().header("Clipboard:"));
             warn!(
                 target: GENERAL_WARNING_NON_FATAL,
-                error = format_error(&report),
+                error = format_report_display(&report),
                 "couldn't set clipboard"
             )
         } else {

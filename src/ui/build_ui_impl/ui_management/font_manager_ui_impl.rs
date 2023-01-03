@@ -1,7 +1,7 @@
 use crate::config::compile_time::ui_config::{MAX_FONT_SIZE, MIN_FONT_SIZE};
 use crate::config::read_config_value;
 use crate::helper::logging::event_targets::*;
-use crate::helper::logging::format_error;
+use crate::helper::logging::format_report_display;
 use crate::ui::build_ui_impl::UiItem;
 use crate::ui::font_manager::FontManager;
 use crate::FallibleFn;
@@ -36,7 +36,7 @@ impl UiItem for FontManager {
                         .note("called manually by user in font manager UI");
                     warn!(
                         target: GENERAL_WARNING_NON_FATAL,
-                        report = format_error(&report)
+                        report = format_report_display(&report)
                     );
                 }
             }
@@ -53,7 +53,7 @@ impl UiItem for FontManager {
         if fonts_len == 0 {
             //Check we have at least one font, or else code further down fails (index out of bounds)
             ui.text_colored(
-                read_config_value(|config| config.runtime.ui.colours.error),
+                read_config_value(|config| config.runtime.ui.colours.severity.warning),
                 "No fonts loaded",
             );
             trace!(
@@ -97,7 +97,7 @@ impl UiItem for FontManager {
 
         if weights_len == 0 {
             ui.text_colored(
-                read_config_value(|config| config.runtime.ui.colours.error),
+                read_config_value(|config| config.runtime.ui.colours.severity.warning),
                 "(Bad) No weights loaded for the selected font.",
             );
             /*
@@ -108,7 +108,7 @@ impl UiItem for FontManager {
             let report = Report::msg("had no weights loaded for the selected font").note("this *REALLY* shouldn't happen (due to the internals of font loading and creation)\nperhaps some errors happened when loading the fonts?");
             error!(
                 target: GENERAL_WARNING_NON_FATAL,
-                report = format_error(&report)
+                report = format_report_display(&report)
             );
             trace!(
                 target: UI_TRACE_BUILD_INTERFACE,

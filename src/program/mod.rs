@@ -17,7 +17,7 @@ use QuitAppNoErrorReason::QuitInteractionByUser;
 
 use crate::engine::*;
 use crate::helper::logging::event_targets::*;
-use crate::helper::logging::{dyn_panic_to_report, format_error};
+use crate::helper::logging::{dyn_panic_to_report, format_report_display};
 use crate::program::thread_messages::ThreadMessage::*;
 use crate::program::thread_messages::*;
 use crate::ui::ui_data::UiData;
@@ -223,13 +223,13 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
             Ok(ret) => {
                 let error = Report::msg("ui thread finished early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
             Err(boxed_error) => {
                 let error = dyn_panic_to_report(&boxed_error)
                     .wrap_err("ui thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
         };
@@ -254,13 +254,13 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
             Ok(ret) => {
                 let error = Report::msg("engine thread exited early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
             Err(boxed_error) => {
                 let error = dyn_panic_to_report(&boxed_error)
                     .wrap_err("engine thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_error(&error));
+                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
         };
@@ -290,7 +290,7 @@ fn handle_error_quit(wrapped_error_report: Arc<Report>) -> Report {
             };
             error!(target: REALLY_FUCKING_BAD_UNREACHABLE, "{}", warn);
             Report::msg("quitting app due to an internal error")
-                .with_section(move || format_error(&_arc).header("Error:"))
+                .with_section(move || format_report_display(&_arc).header("Error:"))
                 .note("the displayed error may not be correct and/or complete")
                 .warning(warn)
         }

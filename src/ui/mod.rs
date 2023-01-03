@@ -23,7 +23,7 @@ use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn
 
 use crate::build::*;
 use crate::helper::logging::event_targets::*;
-use crate::helper::logging::format_error;
+use crate::helper::logging::format_report_display;
 use crate::program::program_data::ProgramData;
 use crate::program::thread_messages::ThreadMessage::{Engine, Program, Ui};
 use crate::program::thread_messages::*;
@@ -312,7 +312,7 @@ fn outer_render_a_frame(
                 let report = report.wrap_err("font manager was not able to rebuild font");
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    report = format_error(&report)
+                    report = format_report_display(&report)
                 );
             }
             // Font atlas was rebuilt
@@ -332,7 +332,7 @@ fn outer_render_a_frame(
                             Report::new(err).wrap_err("renderer could not reload font texture");
                         warn!(
                             target: GENERAL_WARNING_NON_FATAL,
-                            report = format_error(&report)
+                            report = format_report_display(&report)
                         );
                     }
                 }
@@ -361,7 +361,7 @@ fn outer_render_a_frame(
                     let report = report.wrap_err("font manager failed to return font");
                     warn!(
                         target: GENERAL_WARNING_NON_FATAL,
-                        report = format_error(&report)
+                        report = format_report_display(&report)
                     );
                     trace!(
                         target: UI_TRACE_BUILD_INTERFACE,
@@ -676,7 +676,7 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
                 let report = report.wrap_err("could not initialise clipboard");
                 warn!(
                     target: GENERAL_WARNING_NON_FATAL,
-                    report = format_error(&report),
+                    report = format_report_display(&report),
                     "could not init clipboard"
                 );
             }
