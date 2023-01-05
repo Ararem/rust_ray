@@ -1,12 +1,13 @@
 //! Module of shared functions used for the UI building
 use crate::config::read_config_value;
 use crate::config::run_time::keybindings_config::KeyBinding;
+use crate::config::run_time::ui_config::theme::*;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_report_string_no_ansi;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
 use color_eyre::Report;
-use fancy_regex::{Captures, Regex};
+use fancy_regex::Regex;
 use imgui::{Condition, StyleColor, StyleVar, Ui};
 use lazy_static::lazy_static;
 use tracing::{debug, trace, trace_span, Metadata};
@@ -169,23 +170,51 @@ pub fn handle_shortcut(ui: &Ui, name: &str, keybind: &KeyBinding, toggle: &mut b
 */
 
 pub fn display_eyre_report(ui: &Ui, report: &Report) {
+    /*
+    A note on how I've structured this:
+    A lot of the UI code requires lots of `unwrap()`s or lots of `if/else`s, which means it gets quite heavily nested
+    Most of the time one of the paths is the 'exit' path - it is the exit case where we have a reason not to display anything
+    So by putting the code into functions, we can use `return` and massively reduce nesting, since we don't need to nest the proper UI code inside an `if` (sometimes multiple times)
+    Before refactoring I went up to 13 indents (13 tabs = 52 spaces)!
+    Afterwards, max was 5 tabs
+    */
+
     let span_display_error_report =
         trace_span!(target: UI_TRACE_BUILD_INTERFACE, "display_error_report").entered();
     let colours = read_config_value(|config| config.runtime.ui.colours);
     macro_rules! section {
         ($title:literal, $body:expr) => {{
-        let span_section = trace_span!(target: UI_TRACE_BUILD_INTERFACE, $title).entered();
-        let maybe_node = ui.tree_node_config($title).opened(true, Condition::FirstUseEver).push(); // Should be open by default
-        if let Some(opened_node) = maybe_node{
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "node expanded");
-            $body
-            opened_node.end();
-        }
-        else{
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "node closed");
-        }
+            let span_section = trace_span!(target: UI_TRACE_BUILD_INTERFACE, $title).entered();
+            let maybe_node = ui
+                .tree_node_config($title)
+                .opened(true, Condition::FirstUseEver)
+                .push(); // Should be open by default
+            if let Some(opened_node) = maybe_node {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "node expanded");
+                if let Some(handler) = report.handler().downcast_ref::<color_eyre::Handler>() {
+            if let Some(backtrace) = handler.backtrace() {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "have backtrace");
+                ui.text("TODO: Backtrace display");
+            } else {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "no backtrace: missing");
+                ui.text_colored(colours.severity.warning, "This error doesn't have a backtrace. Try checking `RUST_BACKTRACE` and/or `RUST_BACKTRACE` environment variables are set")
+            }
+        } else {
+            trace!(
+                target: UI_TRACE_BUILD_INTERFACE,
+                "no backtrace: couldn't cast handler"
+            );
+            ui.text_colored(
+                colours.severity.warning,
+                "Couldn't downcast error report's handler to get the backtrace",
+            );
+        };
+                opened_node.end();
+            } else {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "node closed");
+            }
 
-        span_section.exit();
+            span_section.exit();
         }};
     }
     section!("Chain", {
@@ -218,161 +247,238 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
             );
         }
     });
-    section!("Span trace", {
-        if let Some(handler) = report.handler().downcast_ref::<color_eyre::Handler>() {
-            if let Some(span_trace) = handler.span_trace() {
-                match span_trace.status() {
-                    SpanTraceStatus::UNSUPPORTED => {
-                        trace!(
-                            target: UI_TRACE_BUILD_INTERFACE,
-                            "span trace: not supported"
-                        );
-                        ui.text_colored(colours.severity.warning, "SpanTraces are not supported, likely because there is no [ErrorLayer] or the [ErrorLayer] is from a different version of [tracing_error]")
-                    }
-                    SpanTraceStatus::EMPTY => {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: empty");
-                        ui.text_colored(colours.severity.warning, "The SpanTrace is empty, likely because it was captured outside of any spans")
-                    }
-                    SpanTraceStatus::CAPTURED => {
-                        trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: captured");
-                        // [with_spans] calls the closure on every span in the trace, as long as the closure returns `true`
-                        let mut depth = 0;
-                        span_trace.with_spans(
-                            |metadata: &'static Metadata<'static>, formatted_span_fields: &str| -> bool {
-                                let span_process_span = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "process_span", depth, ?metadata, formatted_span_fields=formatted_span_fields.to_owned()).entered();
+    fn display_span_trace(ui: &Ui, colours: &Theme, report: &Report) {
+        let handler = match report.handler().downcast_ref::<color_eyre::Handler>() {
+            // Couldn't downcast to get the handler
+            None => {
+                trace!(
+                    target: UI_TRACE_BUILD_INTERFACE,
+                    "span trace: couldn't cast handler"
+                );
+                ui.text_colored(
+                    colours.severity.warning,
+                    "Couldn't downcast error report's handler to get the span trace",
+                );
+                return;
+            }
+            Some(handler) => handler,
+        };
 
-                                // Construct a tree node with the span name as the title
-                                // If the node is expanded, then we get to see all the juicy information
-                                let tree_node_colour_style = ui.push_style_color(StyleColor::Text, colours.value.tracing_event_name); //Colour the title
-                                let maybe_tree_node = ui.tree_node(format!("{depth}: {name}", name=metadata.name()));
-                                tree_node_colour_style.pop();
-
-                                 //ImGUI adds spacing between elements normally, but since I'm trying to pack them together we need to remove that spacing
-                                 let no_spacing_style_var = ui.push_style_var(StyleVar::ItemSpacing([0.0, 0.0]));
-
-                                if let Some(tree_node) = maybe_tree_node {
-                                    /*
-                                    Here, I want the metadata labels and the values to all be aligned nicely
-                                    This is a little tricky to do purely with spaces/tabs, since the fonts might not be monospace
-                                    So what we actually do is create a table, which is much nicer
-                                    */
-                                    if let Some(table_token) = ui.begin_table("span fields table", 2){
-
-                                        ui.table_next_row();
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.value_label, "source file");
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.file_location, metadata.file().unwrap_or("<unknown source file>"));
-                                        ui.same_line();
-                                        ui.text_colored(colours.text.normal, ":");
-                                        ui.same_line();
-                                        ui.text_colored(colours.value.file_location, metadata.line().map_or("<unknown line>".to_string(), |line| line.to_string()));
-
-                                            ui.table_next_row();
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.value_label, "module path");
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.file_location, metadata.module_path().unwrap_or("<unknown module path>"));
-
-                                            ui.table_next_column();
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.value_label, "target");
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.tracing_event_name, metadata.target());
-
-                                            ui.table_next_column();
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.value_label, "level");
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.colour_for_tracing_level(metadata.level()), metadata.level().to_string());
-
-                                            ui.table_next_column();
-                                        ui.table_next_column();
-                                        ui.text_colored(colours.value.value_label, "fields");
-                                        ui.table_next_column();
-                                        let fields = metadata.fields();
-                                        if fields.is_empty(){
-                                            ui.text_disabled("<None>");
-                                            }
-                                        else{
-                                            lazy_static!{
-                                                // Mostly working but will have to manually split string?: https://regex101.com/r/KCn0Q1/1
-                                                static ref VALUE_EXTRACTOR_REGEX: Regex = Regex::new(indoc::indoc! {r#"
-                                                    (?P<field>(?#
-                                                    Each field is made up of a key, an equals sign, and a value
-                                                    The key is always a single word, underscores allowed - has to be valid rust identifier
-                                                    The value can be pretty much any value, including spaces and symbols. Assume that it won't include equals sign, or it gets too tricky to compute
-                                                    )(?P<key>(r#)?\w+)=(?P<value>[^=]*?))(?#
-                                                    Now we do a positive lookahead to separate the next fields from this field
-                                                    Each match *MUST* be followed by either another field, or the end of the string.
-                                                    This makes it much easier to match
-                                                    Here we repeat <field>, since can't use subroutines/expression references in this dialect of regex
-                                                    )(?:$|(?: (?=(?:r#)?\w+=[^=]*?)))"#}).expect("Compile-time regex should be correct");
-                                            }
-                                            for (index, maybe_capture) in VALUE_EXTRACTOR_REGEX.captures_iter(formatted_span_fields).enumerate(){
-                                                // Comma separators between each pair, but not before the first
-                                                if index != 0{
-                                                    ui.same_line();
-                                                    ui.text_colored(colours.text.normal, ", ");
-                                                    ui.same_line();
-                                                }
-                                                // Should give us 3 capture groups: (0) overall match, (1) key, (2) value
-                                                match maybe_capture {
-                                                    Err(err) =>{
-                                                        ui.text_colored(colours.severity.warning, format!("regex captures error: {err}"));
-                                                    }
-                                                    Ok(capture /*should be called `match`*/) =>{
-                                                        let key = capture.name("key");
-                                                        match key {
-                                                            None => ui.text_disabled("<name?>"),
-                                                            Some(key) => ui.text_colored(colours.value.tracing_event_field_name, key.as_str()),
-                                                        }
-                                                        ui.same_line();
-                                                        ui.text_colored(colours.text.normal, "=");
-                                                        ui.same_line();
-                                                        let val = capture.name("value");
-                                                        match val{
-                                                            None => ui.text_disabled("<value?>"),
-                                                            Some(value) => ui.text_colored(colours.value.tracing_event_field_value, value.as_str()),
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } //end `else` (so if we have fields)
-                                        // Omitting metadata.kind() because it's always a span, because we're getting a SpanTrace (duh)
-                                        // Same for callsite - doesn't give any useful information (just a pointer to a private struct)
-                                        // metadata_label!("callsite");
-                                        // ui.text_colored(colours.value.misc_value, format!("{:#?}", metadata.callsite()));
-                                        table_token.end();
-                                        }
-                                        tree_node.end();
-                                }
-                                no_spacing_style_var.pop();
-                                depth += 1;
-                                span_process_span.exit();
-                                true
-                            },
-                        );
-                    }
-                }
-            } else {
+        let span_trace = match handler.span_trace() {
+            None => {
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: non-existent");
                 ui.text_colored(
                     colours.severity.neutral,
                     "This error doesn't have a span trace; it was probably captured outside of any spans",
-                )
+                );
+                return;
             }
-        } else {
-            trace!(
+            Some(span_trace) => span_trace,
+        };
+
+        match span_trace.status() {
+            SpanTraceStatus::UNSUPPORTED => {
+                trace!(
+                    target: UI_TRACE_BUILD_INTERFACE,
+                    "span trace: not supported"
+                );
+                ui.text_colored(colours.severity.warning, "SpanTraces are not supported, likely because there is no [ErrorLayer] or the [ErrorLayer] is from a different version of [tracing_error]");
+                return;
+            }
+            SpanTraceStatus::EMPTY => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: empty");
+                ui.text_colored(
+                    colours.severity.warning,
+                    "The SpanTrace is empty, likely because it was captured outside of any spans",
+                );
+                return;
+            }
+            _ => (),
+        };
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: captured");
+        // [with_spans] calls the closure on every span in the trace, as long as the closure returns `true`
+        let mut depth = 0;
+        span_trace.with_spans(
+            |metadata: &'static Metadata<'static>, formatted_span_fields: &str| -> bool {
+                visit_each_span(ui, colours, metadata, formatted_span_fields, depth);
+                depth += 1;
+                true
+            },
+        );
+
+        /// 'Visits' each span in the span-trace, and displays it in the ui
+        fn visit_each_span(
+            ui: &Ui,
+            colours: &Theme,
+            metadata: &'static Metadata<'static>,
+            formatted_span_fields: &str,
+            depth: i32,
+        ) {
+            let span_visit_span = trace_span!(
                 target: UI_TRACE_BUILD_INTERFACE,
-                "span trace: couldn't cast handler"
-            );
+                "visit_span",
+                depth,
+                ?metadata,
+                formatted_span_fields = formatted_span_fields.to_owned()
+            )
+            .entered();
+
+            // Construct a tree node with the span name as the title
+            // If the node is expanded, then we get to see all the juicy information
+            // Note this ordering of the next ~5 lines is important (style var in relation to tree node)
+            let tree_node_colour_style =
+                ui.push_style_color(StyleColor::Text, colours.value.tracing_event_name); //Colour the title
+            let maybe_tree_node = ui.tree_node(format!("{depth}: {name}", name = metadata.name()));
+            tree_node_colour_style.pop();
+
+            //ImGUI adds spacing between elements normally, but since I'm trying to pack them together we need to remove that spacing
+            let no_spacing_style_var = ui.push_style_var(StyleVar::ItemSpacing([0.0, 0.0]));
+
+            let tree_node = match maybe_tree_node {
+                None => {
+                    // This specific span's node is closed
+                    return;
+                }
+                Some(node) => node,
+            };
+
+            /*
+            Here, I want the metadata labels and the values to all be aligned nicely
+            This is a little tricky to do purely with spaces/tabs, since the fonts might not be monospace
+            So what we actually do is create a table, which is much nicer, and prettier
+            */
+            let table_token = match ui.begin_table("span fields table", 2) {
+                None => {
+                    // I'm not sure why this would be [None], but just in case
+                    return;
+                }
+                Some(token) => token,
+            };
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "source file");
+            ui.table_next_column();
             ui.text_colored(
-                colours.severity.warning,
-                "Couldn't downcast error report's handler to get the span trace",
+                colours.value.file_location,
+                metadata.file().unwrap_or("<unknown source file>"),
             );
+            ui.same_line();
+            ui.text_colored(colours.text.normal, ":");
+            ui.same_line();
+            ui.text_colored(
+                colours.value.file_location,
+                metadata
+                    .line()
+                    .map_or("<unknown line>".to_string(), |line| line.to_string()),
+            );
+
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "module path");
+            ui.table_next_column();
+            ui.text_colored(
+                colours.value.file_location,
+                metadata.module_path().unwrap_or("<unknown module path>"),
+            );
+
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "target");
+            ui.table_next_column();
+            ui.text_colored(colours.value.tracing_event_name, metadata.target());
+
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "level");
+            ui.table_next_column();
+            ui.text_colored(
+                colours.colour_for_tracing_level(metadata.level()),
+                metadata.level().to_string(),
+            );
+
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "fields");
+            ui.table_next_column();
+            let fields = metadata.fields();
+            if fields.is_empty() {
+                // If we don't have fields, we can short-circuit since there's nothing left to display after this
+                ui.text_disabled("<None>");
+                return;
+            }
+            lazy_static! {
+                // Mostly working but will have to manually split string?: https://regex101.com/r/KCn0Q1/1
+                static ref VALUE_EXTRACTOR_REGEX: Regex = Regex::new(indoc::indoc! {r#"
+                    (?P<field>(?#
+                    Each field is made up of a key, an equals sign, and a value
+                    The key is always a single word, underscores allowed - has to be valid rust identifier
+                    The value can be pretty much any value, including spaces and symbols. Assume that it won't include equals sign, or it gets too tricky to compute
+                    )(?P<key>(r#)?\w+)=(?P<value>[^=]*?))(?#
+                    Now we do a positive lookahead to separate the next fields from this field
+                    Each match *MUST* be followed by either another field, or the end of the string.
+                    This makes it much easier to match
+                    Here we repeat <field>, since can't use subroutines/expression references in this dialect of regex
+                    )(?:$|(?: (?=(?:r#)?\w+=[^=]*?)))"#}).expect("Compile-time regex should be correct");
+            }
+            //TODO: Split this into three stages -
+            //  (1) parse (string using regex)
+            //  (2) process (find missing/empty fields)
+            //  (3) display (in the ui)
+            // This should also reduce nesting a bit more, and make it much easier to implement caching of processed spans in the future
+
+            // Try match our regex to the string containing the concatenated fields, so we can extract the `key=value` pairs
+            for (index, maybe_capture) in VALUE_EXTRACTOR_REGEX
+                .captures_iter(formatted_span_fields)
+                .enumerate()
+            {
+                // Display comma separators between each pair, but not before the first
+                if index != 0 {
+                    ui.same_line();
+                    ui.text_colored(colours.text.normal, ", ");
+                    ui.same_line();
+                }
+                // Should give us 3 capture groups: (0) overall match, (1) key, (2) value
+                match maybe_capture {
+                    Err(err) => {
+                        ui.text_colored(
+                            colours.severity.warning,
+                            format!("regex captures error: {err}"),
+                        );
+                    }
+                    Ok(capture /*should be called `match`*/) => {
+                        let key = capture.name("key");
+                        match key {
+                            None => ui.text_disabled("<name?>"),
+                            Some(key) => ui
+                                .text_colored(colours.value.tracing_event_field_name, key.as_str()),
+                        }
+                        ui.same_line();
+                        ui.text_colored(colours.text.normal, "=");
+                        ui.same_line();
+                        let val = capture.name("value");
+                        match val {
+                            None => ui.text_disabled("<value?>"),
+                            Some(value) => ui.text_colored(
+                                colours.value.tracing_event_field_value,
+                                value.as_str(),
+                            ),
+                        }
+                    }
+                }
+            }
+            ui.text(format!("\"{formatted_span_fields}\""));
+
+            // Omitting metadata.kind() because it's always a span, because we're getting a SpanTrace (duh)
+            // Same for callsite - doesn't give any useful information (just a pointer to a private struct)
+            // metadata_label!("callsite");
+            // ui.text_colored(colours.value.misc_value, format!("{:#?}", metadata.callsite()));
+            table_token.end();
+            tree_node.end();
+            no_spacing_style_var.pop();
+            span_visit_span.exit();
         }
-    });
+    }
+    section!("Span trace", display_span_trace(ui, &colours, report));
     //TODO: Do we even need this debug section
     section!("Debug", {
         ui.text_colored(colours.value.misc_value, format!("{:#?}", report));

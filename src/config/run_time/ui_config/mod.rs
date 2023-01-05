@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use theme::Theme;
 
 mod frame_info_config;
-mod theme;
+pub mod theme;
 pub mod theme_ext;
 
 // Base configuration struct that contains options that configure the entire app
