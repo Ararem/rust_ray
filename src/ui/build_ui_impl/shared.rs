@@ -201,6 +201,32 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
             span_section.exit();
         }};
     }
+    section!("Doesnt work - closure", {
+        let x = ||{
+                      format!("");
+            format!("");
+                                    fn why_is_this_not() {}
+        }
+    });
+    // Works
+    let x = || {
+        format!("");
+        format!("");
+        fn why_is_this_not() {}
+    };
+    // Works
+    {
+        format!("");
+        format!("");
+        fn why_is_this_not() {}
+    };
+    section!("Works - no closure", {
+        {
+            format!("");
+            format!("");
+            fn why_is_this_not() {}
+        }
+    });
     section!("Chain", {
         for err in report.chain() {
             // We don't use the alternate specifier since we just want the single error, not sub-errors
@@ -592,12 +618,7 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
     } //end display_span_trace()
       //TODO: Do we even need this debug section
     section!("Debug", {
-            ui.text_colored(colours.value.misc_value, format!("{:#?}", report));
-        let x = ||{
-             format!("");
-            format!("");
-                        fn why_is_this_not(){}
-        }
+        ui.text_colored(colours.value.misc_value, format!("{:#?}", report));
     });
     section!("Stringified", {
         ui.text_colored(

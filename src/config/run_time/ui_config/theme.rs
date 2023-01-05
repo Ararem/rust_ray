@@ -94,7 +94,7 @@ impl Default for ValueColours {
 
             misc_value: [0.31, 1.0, 0.31, 1.0].into(), // Pale green
             missing_value: [0.27, 0.27, 0.27, 1.0].into(), // Dark grey
-            symbol: [0.93, 1.0, 0.79, 1.0].into(), // Off-white (ultra pale green)
+            symbol: [0.93, 1.0, 0.79, 1.0].into(),     // Off-white (ultra pale green)
         }
     }
 }
