@@ -70,10 +70,10 @@ fn main() -> FallibleFn {
             Ok(program_return_value)
         }
         Err(report) => {
-            let formatted_error = format_report_display(&report);
             error!(
                 target: PROGRAM_INFO_LIFECYCLE,
-                formatted_error, "program exited unsuccessfully"
+                report = format_report_display(&report),
+                "program exited unsuccessfully"
             );
             info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :(");
             Err(report)
@@ -138,7 +138,7 @@ fn init_tracing() -> FallibleFn {
     tracing_subscriber::registry()
         .with(standard_layer)
         .with(ErrorLayer::default()) //The ErrorLayer allows [eyre] to capture SpanTraces
-        .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
+        // .with(tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap().0)
         .try_init()?;
 
     Ok(())

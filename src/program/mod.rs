@@ -222,13 +222,11 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
             Ok(ret) => {
                 let error = Report::msg("ui thread finished early")
                     .section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
             Err(boxed_error) => {
                 let error =
                     dyn_panic_to_report(&boxed_error).wrap_err("ui thread panicked while running");
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
         };

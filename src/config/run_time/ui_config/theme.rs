@@ -65,6 +65,9 @@ pub struct ValueColours {
 
     /// Miscellaneous value that doesn't match any of the other values
     pub misc_value: Colour,
+    /// Represents a value that is non-existent/missing
+    pub missing_value: Colour,
+    pub symbol: Colour,
 }
 
 impl Default for ValueColours {
@@ -87,9 +90,11 @@ impl Default for ValueColours {
 
             error_message: [1.0, 0.4, 0.4, 1.0].into(), // Slightly pale red
 
-            value_label: [1.0, 1.0, 1.0, 1.0].into(), // Wight
+            value_label: [0.9, 0.95, 1.0, 1.0].into(), // Ever so slightly blue
 
             misc_value: [0.31, 1.0, 0.31, 1.0].into(), // Pale green
+            missing_value: [0.27, 0.27, 0.27, 1.0].into(), // Dark grey
+            symbol: [0.93, 1.0, 0.79, 1.0].into(), // Off-white (ultra pale green)
         }
     }
 }
