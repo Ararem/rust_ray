@@ -281,90 +281,6 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
 
         ui.table_next_row();
         ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "outer instruction pointer");
-        ui.table_next_column();
-        display_c_mut_pointer(ui, colours, frame_instruction_pointer);
-
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "outer symbol address");
-        ui.table_next_column();
-        display_c_const_pointer(ui, colours, frame_symbol_address);
-
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "outer module base address");
-        ui.table_next_column();
-        display_maybe_c_mut_pointer(ui, colours, frame_module_base_address);
-
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.separator();
-        ui.table_next_column();
-        ui.separator();
-
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "symbol name (demangled)");
-        ui.table_next_column();
-        if let Some(ref symbol_name) = symbol.name() {
-            ui.text_colored(
-                colours.value.function_name,
-                format!(
-                    "{}",
-                    symbol_name /*Display trait gives demangled name*/
-                ),
-            );
-        } else {
-            ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
-        }
-
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "symbol name (mangled)");
-        ui.table_next_column();
-        if let Some(ref symbol_name) = symbol.name() {
-            if let Some(mangled) = symbol_name.as_str() {
-                ui.text_colored(colours.value.function_name, mangled);
-            } else {
-                ui.text_colored(colours.severity.warning, INVALID_VALUE_TEXT)
-            }
-        } else {
-            ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
-        }
-
-        //TODO: Remove the repeated access to symbol_name
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "symbol name (raw)");
-        ui.table_next_column();
-        if let Some(ref symbol_name) = symbol.name() {
-            ui.text_colored(colours.value.symbol, "{");
-            ui.same_line_with_spacing(0.0, 0.0);
-            let bytes = symbol_name.as_bytes();
-            for (i, b) in bytes.iter().enumerate() {
-                // Comma separators between each byte
-                if i != 0 {
-                    ui.same_line_with_spacing(0.0, 0.0);
-                    ui.text_colored(colours.value.symbol, ", ");
-                }
-                ui.same_line_with_spacing(0.0, 0.0);
-                ui.text_colored(colours.value.number, format!("{b:#2X}"));
-            }
-            ui.same_line_with_spacing(0.0, 0.0);
-            ui.text_colored(colours.value.symbol, "}");
-        } else {
-            ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
-        }
-
-        ui.table_next_row();
-        ui.table_next_column();
-        ui.text_colored(colours.value.value_label, "symbol address");
-        ui.table_next_column();
-        display_maybe_c_mut_pointer(ui, colours, symbol.addr());
-
-        ui.table_next_row();
-        ui.table_next_column();
         ui.text_colored(colours.value.value_label, "file location");
         ui.table_next_column();
         if let Some(filename) = symbol.filename() {
@@ -388,6 +304,88 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         } else {
             ui.text_colored(colours.value.missing_value, "???");
         }
+
+        if let Some(ref symbol_name) = symbol.name() {
+            let demangled = format!(
+                "{}",
+                symbol_name /*Display trait gives demangled name*/
+            );
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "symbol name (demangled)");
+            ui.table_next_column();
+            ui.text_colored(colours.value.function_name, &demangled);
+
+            // Although [as_str()] should return the mangled name according to the docs, it doesn't seem to on windows (https://github.com/rust-lang/backtrace-rs/issues/36#issuecomment-285390548):
+            // > Because I tested my code on MacOS and there the "as_str()" function returned the demangled names, but on Linux that did not work :( Now, I am using the "to_string()" function, but to find this bug took a lot of time :D
+            // So if the mangled and demangled names differ, print the mangled one here
+            // This helps avoid duplicate names in the UI
+            if let Some (mangled) = symbol_name.as_str(){
+                if mangled != demangled{
+                    ui.table_next_row();
+                    ui.table_next_column();
+                    ui.text_colored(colours.value.value_label, "symbol name (mangled)");
+                    ui.table_next_column();
+                    ui.text_colored(colours.value.function_name, mangled);
+                }
+            }
+
+            //TODO: Remove the repeated access to symbol_name
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "symbol name (raw)");
+            ui.table_next_column();
+            if let Some(ref symbol_name) = symbol.name() {
+                ui.text_colored(colours.value.symbol, "{");
+                ui.same_line_with_spacing(0.0, 0.0);
+                let bytes = symbol_name.as_bytes();
+                for (i, b) in bytes.iter().enumerate() {
+                    // Comma separators between each byte
+                    if i != 0 {
+                        ui.same_line_with_spacing(0.0, 0.0);
+                        ui.text_colored(colours.value.symbol, ", ");
+                    }
+                    ui.same_line_with_spacing(0.0, 0.0);
+                    ui.text_colored(colours.value.number, format!("{b:#2X}"));
+                }
+                ui.same_line_with_spacing(0.0, 0.0);
+                ui.text_colored(colours.value.symbol, "}");
+            } else {
+                ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
+            }
+        }
+        //[symbol.name()] returned [None]
+        else {
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "symbol name");
+            ui.table_next_column();
+            ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
+        }
+
+        ui.table_next_row();
+        ui.table_next_column();
+        ui.text_colored(colours.value.value_label, "outer instruction pointer");
+        ui.table_next_column();
+        display_c_mut_pointer(ui, colours, frame_instruction_pointer);
+
+        ui.table_next_row();
+        ui.table_next_column();
+        ui.text_colored(colours.value.value_label, "outer symbol address");
+        ui.table_next_column();
+        display_c_const_pointer(ui, colours, frame_symbol_address);
+
+        ui.table_next_row();
+        ui.table_next_column();
+        ui.text_colored(colours.value.value_label, "outer module base address");
+        ui.table_next_column();
+        display_maybe_c_mut_pointer(ui, colours, frame_module_base_address);
+
+        ui.table_next_row();
+        ui.table_next_column();
+        ui.text_colored(colours.value.value_label, "symbol address");
+        ui.table_next_column();
+        display_maybe_c_mut_pointer(ui, colours, symbol.addr());
 
         table_token.end();
         tree_node.end();
