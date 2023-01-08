@@ -15,9 +15,11 @@ use crate::FallibleFn;
 use config_ui_impl::render_config_ui;
 use indoc::indoc;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
-use shared::*;
 use tracing::field::*;
 use tracing::*;
+use shared::input::handle_shortcut;
+use shared::menu_utils::{menu, toggle_menu_item};
+use shared::window_utils::{build_window, build_window_fn};
 
 pub trait UiItem {
     fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;

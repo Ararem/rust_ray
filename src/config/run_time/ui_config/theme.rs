@@ -65,6 +65,7 @@ pub struct ValueColours {
     pub misc_value: Colour,
     /// Represents a value that is non-existent/missing
     pub missing_value: Colour,
+    /// A textual symbol, like hyphens, colons, commas, brackets, etc
     pub symbol: Colour,
     /// A numeric value of some sort
     pub number: Colour,
