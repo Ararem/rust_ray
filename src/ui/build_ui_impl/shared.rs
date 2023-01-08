@@ -6,11 +6,15 @@ use crate::helper::logging::event_targets::*;
 use crate::helper::logging::{format_report_display, format_report_string_no_ansi};
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
-use color_eyre::{section::IndentedSection, Report, Section, SectionExt};
+use backtrace::BacktraceFrame;
+use color_eyre::{Report, Section, SectionExt};
 use fancy_regex::Regex;
-use imgui::{Condition, StyleColor, StyleVar, TableFlags, Ui};
+
+use imgui::{Condition, TableFlags, TreeNodeFlags, TreeNodeId, TreeNodeToken, Ui};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::ffi::c_void;
+use glium::buffer::Content;
 use tracing::{debug, trace, trace_span, warn, Metadata};
 use tracing_error::SpanTraceStatus;
 
@@ -170,6 +174,60 @@ pub fn handle_shortcut(ui: &Ui, name: &str, keybind: &KeyBinding, toggle: &mut b
 ===================
 */
 
+/// Creates a tree node, in such a way that custom text can be used instead of a simple label
+///
+/// This creates a tree node with an empty ("") label, configures it to take up the full width available to it, and then resets the cursor position to just after the node's dowpdown arrow
+/// This allows you to make calls using [imgui::Ui::same_line()] and [imgui::Ui::text_colored()] to make a much nicer label.
+///
+/// # Example:
+/// ```
+/// let maybe_tree_node = tree_node_with_custom_text(ui, TreeNodeId::Ptr(ip)); // Use the frame's instruction pointer as the tree node's ID, so it's unique
+//  ui.text_colored(colours.value.symbol, "[");
+//  ui.same_line_with_spacing(0.0, 0.0);
+//  ui.text_colored(colours.value.number, depth.to_string());
+//  ui.same_line_with_spacing(0.0, 0.0);
+//  ui.text_colored(colours.value.symbol, "]: ");
+//  ui.same_line_with_spacing(0.0, 0.0);
+//  ui.text_colored(colours.value.name, metadata.name());
+//
+//  let tree_node = match maybe_tree_node {
+//      None => {
+//          // This specific span's node is closed
+//          return;
+//      }
+//      Some(node) => node,
+//  };
+/// ```
+#[must_use]
+pub fn tree_node_with_custom_text<Id, TId>(ui: &imgui::Ui, id: Id) -> Option<TreeNodeToken>
+where
+    Id: Into<TreeNodeId<TId>>,
+    TId: AsRef<str>,
+{
+    // If the node is expanded, then we get to see all the juicy information
+    // Empty label is important to make sure we don't display anything, will customise further down
+    // Also important is the SPAN_AVAIL_WIDTH flag, so it fills the "empty" space on the right of the arrow
+    // This means the hitbox is extended, but if we use [same_line()] we can overlap it
+    // Neat!
+
+    // Calculate the indented cursor position, so we can find where we should start putting the text
+    // So that it appears in-line with the tree node
+    // Do this before creating the node because the node fills the remaining space
+    ui.indent();
+    let cursor_pos = ui.cursor_pos();
+    ui.unindent();
+
+    let maybe_tree_node = ui
+        .tree_node_config(id)
+        .label::<&str, &str>("")
+        .flags(TreeNodeFlags::SPAN_AVAIL_WIDTH)
+        .push();
+
+    // Fancy colours are always better than simple ones right?
+    ui.same_line_with_pos(cursor_pos[0]); // Reset pos to just after tree node
+    maybe_tree_node
+}
+
 pub fn display_eyre_report(ui: &Ui, report: &Report) {
     /*
     A note on how I've structured this:
@@ -201,32 +259,6 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
             span_section.exit();
         }};
     }
-    section!("Doesnt work - closure", {
-        let x = ||{
-                      format!("");
-            format!("");
-                                    fn why_is_this_not() {}
-        }
-    });
-    // Works
-    let x = || {
-        format!("");
-        format!("");
-        fn why_is_this_not() {}
-    };
-    // Works
-    {
-        format!("");
-        format!("");
-        fn why_is_this_not() {}
-    };
-    section!("Works - no closure", {
-        {
-            format!("");
-            format!("");
-            fn why_is_this_not() {}
-        }
-    });
     section!("Chain", {
         for err in report.chain() {
             // We don't use the alternate specifier since we just want the single error, not sub-errors
@@ -237,26 +269,153 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
             ui.text_colored(colours.value.error_message, err_string);
         }
     });
-    section!("Backtrace", {
-        if let Some(handler) = report.handler().downcast_ref::<color_eyre::Handler>() {
-            if let Some(backtrace) = handler.backtrace() {
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "have backtrace");
-                ui.text("TODO: Backtrace display");
-            } else {
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "no backtrace: missing");
-                ui.text_colored(colours.severity.warning, "This error doesn't have a backtrace. Try checking `RUST_BACKTRACE` and/or `RUST_BACKTRACE` environment variables are set")
+
+
+    section!("Backtrace", display_backtrace(ui, &colours, report));
+    fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
+        let handler = match report.handler().downcast_ref::<color_eyre::Handler>() {
+            // Couldn't downcast to get the handler
+            None => {
+                trace!(
+                    target: UI_TRACE_BUILD_INTERFACE,
+                    "backtrace: couldn't cast handler"
+                );
+                ui.text_colored(
+                    colours.severity.warning,
+                    "Couldn't downcast error report's handler to get the backtrace",
+                );
+                return;
             }
-        } else {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "no backtrace: couldn't cast handler"
+            Some(handler) => handler,
+        };
+
+        let backtrace = match handler.backtrace() {
+            None => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "backtrace: non-existent");
+                ui.text_colored(colours.severity.warning, "This error doesn't have a backtrace. Try checking `RUST_BACKTRACE` and/or `RUST_BACKTRACE` environment variables are set");
+                return;
+            }
+            Some(backtrace) => backtrace,
+        };
+
+        /// The number of characters that a [usize] requires when formatted in hex
+        const USIZE_HEX_WIDTH: usize =
+            2 /*0x prefix*/ + /*2 hex chars per byte*/2 * core::mem::size_of::<usize>();
+        for (index, frame) in backtrace.frames().iter().enumerate() {
+            /*
+            We have a minor problem with displaying the backtrace frames: each frame doesn't *always* actually correspond to a single function
+            From the docs ([backtrace::BacktraceFrame::symbols()], https://docs.rs/backtrace/latest/backtrace/struct.BacktraceFrame.html#method.symbols):
+            > Normally there is only one symbol per frame, but sometimes if a number of functions are inlined into one frame then multiple symbols will be returned. The first symbol listed is the “innermost function”, whereas the last symbol is the outermost (last caller).
+            > Note that if this frame came from an unresolved backtrace then this will return an empty list.
+            So there's a chance that we'll have multiple symbols (aka function calls) compressed into a single stack frame
+
+            In order to solve this, I've decided to split these compressed frames into sub-frames, i.e. Frame 51.0, 51.1, 51.2 etc
+            This means that normal singular frames should be fine
+             */
+            match frame.symbols().len(){
+                _ => display_empty_frame(ui, colours, index, frame),
+            }
+        }
+
+        /// Displays an empty [BacktraceFrame] (one that has no symbols associated with it)
+        /// This should only happen:
+        /// > If this frame came from an unresolved backtrace
+        fn display_empty_frame(ui: &Ui, colours: &Theme, index: usize, frame: &BacktraceFrame){
+            let instruction_pointer: *mut c_void = frame.ip();
+            let symbol_address: *mut c_void = frame.symbol_address();
+            let module_base_address: Option<*mut c_void> = frame.module_base_address();
+            //[frame.symbols()] is empty
+
+            let maybe_tree_node = tree_node_with_custom_text(ui, TreeNodeId::<&str>::Ptr(frame.to_void_ptr() as *mut c_void)); // Use the BacktraceFrame for the node's ID
+
+            ui.text_colored(colours.value.symbol, format!("Frame {index:>2}:\t")); // The 'depth' of the stack frane
+            ui.same_line_with_spacing(0.0, 0.0);
+            ui.text_colored(colours.value.missing_value, "<Unknown>");
+
+            let tree_node = match maybe_tree_node {
+                None => return,
+                Some(node) => node,
+            };
+
+            /*
+            Here, I want the metadata labels and the values to all be aligned nicely
+            This is a little tricky to do purely with spaces/tabs, since the fonts might not be monospace
+            So what we actually do is create a table, which is much nicer, and prettier
+            The TableFlags make the table waste much less space on the metadata label columns
+            */
+            let table_token = match ui.begin_table_with_flags(
+                "span fields table",
+                2,
+                TableFlags::SIZING_FIXED_FIT,
+            ) {
+                None => {
+                    // I'm not sure why this would be [None], but just in case
+                    return;
+                }
+                Some(token) => token,
+            };
+
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "instruction pointer");
+            ui.table_next_column();
+            ui.text_colored(colours.value.number, format!("{ip:width$X}", ip = instruction_pointer as usize, width=USIZE_HEX_WIDTH));
+
+             ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "symbol address");
+            ui.table_next_column();
+            ui.text_colored(colours.value.number, format!("{ip:width$X}", ip = symbol_address as usize, width=USIZE_HEX_WIDTH));
+
+             ui.table_next_row();
+            ui.table_next_column();
+            ui.text_colored(colours.value.value_label, "module base address");
+            ui.table_next_column();
+            match module_base_address{
+                None => {
+                    ui.text_colored(colours.value.missing_value, "<Unknown>");
+                }
+                Some(_) => {}
+            }
+
+
+            table_token.end();
+            tree_node.end();
+        }
+
+        fn display_symbol_final(ui:&Ui, colours:&Theme, frame_index: &str, module_base_address: Option<&str>, symbol_name: Option<&str>, file_name: Option<&str>, column_number: Option<&str>){
+            let maybe_tree_node = tree_node_with_custom_text(ui, TreeNodeId::<&str>::Ptr(frame.to_void_ptr() as *const c_void)); // Use the BacktraceFrame for the node's ID
+
+            ui.text_colored(colours.value.symbol, format!("Frame {index:>2}:\t")); // The 'depth' of the stack frane
+            ui.same_line_with_spacing(0.0, 0.0);
+            ui.text_colored(colours.value.number, format!("ip: {:#?}", frame.ip())); // Instruction pointer
+
+            let tree_node = match maybe_tree_node {
+                None => return,
+                Some(node) => node,
+            };
+
+            ui.text_colored()
+
+            ui.text_colored(
+                colours.value.misc_value,
+                format!("@mod: {:#?}", frame.module_base_address()),
             );
             ui.text_colored(
-                colours.severity.warning,
-                "Couldn't downcast error report's handler to get the backtrace",
+                colours.value.misc_value,
+                format!("syms: {:#?}", frame.symbols()),
             );
+            ui.new_line();
+
+
+            tree_node.end();
         }
-    });
+
+        ui.text("========================================================================");
+        ui.text_colored(colours.value.misc_value, format!("{:#?}", backtrace));
+    }
+
+
     section!("Span trace", display_span_trace(ui, &colours, report));
     fn display_span_trace(ui: &Ui, colours: &Theme, report: &Report) {
         let handler = match report.handler().downcast_ref::<color_eyre::Handler>() {
@@ -279,7 +438,7 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
             None => {
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: non-existent");
                 ui.text_colored(
-                    colours.severity.neutral,
+                    colours.value.missing_value,
                     "This error doesn't have a span trace; it was probably captured outside of any spans",
                 );
                 return;
@@ -425,7 +584,7 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                     // Which means that the field wasn't recorded
                     let field_value = match fields_map.remove(name) {
                         None => SpanFieldValue::Missing,
-                        Some(values) if values.len() == 0 => SpanFieldValue::Missing,
+                        Some(values) if values.is_empty() => SpanFieldValue::Missing,
                         Some(values) if values.len() == 1 => SpanFieldValue::Single(values[0]),
                         Some(values) => SpanFieldValue::Multiple(values),
                     };
@@ -470,14 +629,14 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                     }
                     return;
                 }
-                for (field_index, field) in fields.iter().enumerate() {
-                    // Display comma separators between each pair, but not before the first
-                    // ~~This also keeps every field on the same line~~
-                    if field_index != 0 {
-                        ui.same_line();
-                        ui.text_colored(colours.value.symbol, ", ");
-                        // ui.same_line();
-                    }
+                for field in fields.iter() {
+                    // Removed this because it broke when we had multiple values per field
+                    // Also not really necessary
+                    // // Display comma separators between each pair, but not before the first
+                    // if field_index != 0 {
+                    //     ui.same_line_with_spacing(0.0, 0.0);
+                    //     ui.text_colored(colours.value.symbol, ", ");
+                    // }
                     if field.valid {
                         ui.text_colored(colours.value.tracing_event_field_name, field.name);
                     } else {
@@ -486,14 +645,20 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                             ui.tooltip_text("This field doesn't exist in the original span metadata. There was likely an error parsing the span's fields, and some of the fields may be incorrect");
                         }
                     }
-                    ui.same_line();
+                    ui.same_line_with_spacing(0.0, 0.0);
                     ui.text_colored(colours.value.symbol, "=");
-                    ui.same_line();
+                    ui.same_line_with_spacing(0.0, 0.0);
                     match &field.values {
                         SpanFieldValue::Missing => {
                             ui.text_colored(colours.severity.warning, "<missing>");
                             if ui.is_item_hovered() {
-                                ui.tooltip_text("This field exists in the span's metadata, but was empty when the error occurred. It probably wasn't recorded before the error happened.");
+                                // TODO: This seems to be a bug with the [ErrorLayer]
+                                //  I've done testing by explicitly recording a field before the error occurs and it's still marked as empty
+                                //  My assumption is that [ErrorLayer] is a bit "dumb" and only records the fields when the span enters, and never changes them again
+                                //  So it does nothing when `.record("field", value)` is called
+                                // TODO: Either create an issue report with them, or (preferably) implement a custom [ErrorLayer]/[Formatter] that's not completely terrible
+                                //  Because their default one really is atrocious
+                                ui.tooltip_text("This field exists in the span's metadata, but was [Empty] because it wasn't assigned on span creation. This is a bug from [tracing_error]");
                             }
                         }
                         SpanFieldValue::Single(val) => {
@@ -501,14 +666,14 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                         }
                         SpanFieldValue::Multiple(values) => {
                             let group = ui.begin_group();
-                            ui.text_colored(colours.value.symbol, "[");
-                            for &val in values.iter() {
-                                ui.text_colored(
-                                    colours.value.tracing_event_field_value,
-                                    format!("\t{}", val),
-                                );
+                            for (val_index, &val) in values.iter().enumerate() {
+                                ui.text_colored(colours.value.tracing_event_field_value, val);
+                                // Put commas at the end of each value, except the last
+                                if val_index < values.len() - 1 {
+                                    ui.same_line_with_spacing(0.0, 0.0);
+                                    ui.text_colored(colours.value.symbol, ",");
+                                }
                             }
-                            ui.text_colored(colours.value.symbol, "]");
                             group.end();
                             if ui.is_item_hovered() {
                                 ui.tooltip_text("This field has multiple values. Each value is listed on it's own line");
@@ -518,16 +683,16 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                 }
             }
 
-            // Construct a tree node with the span name as the title
-            // If the node is expanded, then we get to see all the juicy information
-            // Note this ordering of the next ~5 lines is important (style var calls in relation to tree node calls)
-            let tree_node_colour_style =
-                ui.push_style_color(StyleColor::Text, colours.value.tracing_event_name); //Colour the title
-            let maybe_tree_node = ui.tree_node(format!("{depth}: {name}", name = metadata.name()));
-            tree_node_colour_style.pop();
+            let maybe_tree_node = tree_node_with_custom_text(ui, metadata.name());
 
-            //ImGUI adds spacing between elements normally, but since I'm trying to pack them together we need to remove that spacing
-            let no_spacing_style_var = ui.push_style_var(StyleVar::ItemSpacing([0.0, 0.0]));
+            // Fancy colours are always better than simple ones right?
+            ui.text_colored(colours.value.symbol, "[");
+            ui.same_line_with_spacing(0.0, 0.0);
+            ui.text_colored(colours.value.number, depth.to_string());
+            ui.same_line_with_spacing(0.0, 0.0);
+            ui.text_colored(colours.value.symbol, "]: ");
+            ui.same_line_with_spacing(0.0, 0.0);
+            ui.text_colored(colours.value.tracing_event_name, metadata.name());
 
             let tree_node = match maybe_tree_node {
                 None => {
@@ -562,9 +727,9 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
                 colours.value.file_location,
                 metadata.file().unwrap_or("<unknown source file>"),
             );
-            ui.same_line();
+            ui.same_line_with_spacing(0.0, 0.0);
             ui.text_colored(colours.value.symbol, ":");
-            ui.same_line();
+            ui.same_line_with_spacing(0.0, 0.0);
             ui.text_colored(
                 colours.value.file_location,
                 metadata
@@ -611,7 +776,6 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
 
             table_token.end();
             tree_node.end();
-            no_spacing_style_var.pop();
 
             span_visit_span.exit();
         } //end visit_each_span()

@@ -45,8 +45,6 @@ pub struct ValueColours {
 
     /// A value that is the name of a [tracing::event::Event] or [tracing::span::Span]
     pub tracing_event_name: Colour,
-    /// An event target for [tracing]
-    pub tracing_event_target: Colour,
     /// The name of a field attached to a span or event from [tracing]
     pub tracing_event_field_name: Colour,
     /// The value of a field in a [tracing] span/event
@@ -68,6 +66,8 @@ pub struct ValueColours {
     /// Represents a value that is non-existent/missing
     pub missing_value: Colour,
     pub symbol: Colour,
+    /// A numeric value of some sort
+    pub number: Colour,
 }
 
 impl Default for ValueColours {
@@ -81,7 +81,6 @@ impl Default for ValueColours {
             level_error: [1.0, 0.0, 0.0, 1.0].into(),     // Bright red
 
             tracing_event_name: [1.0, 0.324, 0.324, 1.0].into(), // Pale red
-            tracing_event_target: [1.0, 0.324, 0.324, 1.0].into(), // Pale red
             tracing_event_field_name: [0.224, 0.462, 1.0, 1.0].into(), // Medium pale blue
             tracing_event_field_value: [0.516, 0.664, 1.0, 1.0].into(), // Lighter blue
 
@@ -95,6 +94,7 @@ impl Default for ValueColours {
             misc_value: [0.31, 1.0, 0.31, 1.0].into(), // Pale green
             missing_value: [0.27, 0.27, 0.27, 1.0].into(), // Dark grey
             symbol: [0.93, 1.0, 0.79, 1.0].into(),     // Off-white (ultra pale green)
+            number: [0.05, 1.0, 0.68, 1.0].into(), // Green with a tint of blue
         }
     }
 }
