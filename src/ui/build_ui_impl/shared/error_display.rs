@@ -128,6 +128,7 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
          */
         match frame.symbols().len() {
             0 => display_empty_frame(ui, colours, index, frame),
+            1 => display_single_frame(ui, colours, index, frame),
             _ => display_compressed_frame(ui, colours, index, frame),
         }
     }
@@ -196,6 +197,23 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         tree_node.end();
     }
 
+    fn display_single_frame(ui: &Ui, colours: &Theme, index: usize, frame: &BacktraceFrame){
+        let frame_instruction_pointer: *mut c_void = frame.ip();
+        let frame_symbol_address: *mut c_void = frame.symbol_address();
+        let frame_module_base_address: Option<*mut c_void> = frame.module_base_address();
+        let frame_index_str = format!("{index:>2}");
+
+        display_symbol_frame(
+            ui,
+            colours,
+            &frame_index_str,
+            &frame.symbols()[0],
+            frame_instruction_pointer,
+            frame_symbol_address,
+            frame_module_base_address,
+        );
+    }
+
     /// Displays a 'compressed' [BacktraceFrame] (one that has more than one symbols associated with it)
     ///
     /// From the [backtrace] docs:
@@ -227,6 +245,7 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         }
     }
 
+    /// The shared function called by
     fn display_symbol_frame(
         ui: &Ui,
         colours: &Theme,
@@ -247,14 +266,66 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         ui.same_line_with_spacing(0.0, 0.0);
         ui.text_colored(colours.value.symbol, " - ");
         ui.same_line_with_spacing(0.0, 0.0);
+        // Demangled symbol name in title
         if let Some(ref symbol_name) = symbol.name() {
-            ui.text_colored(
-                colours.value.function_name,
-                format!(
-                    "{}",
-                    symbol_name /*Display trait gives demangled name*/
-                ),
-            );
+            let full = symbol_name.to_string(); // Use to_string() for demangled name
+            let mut short = String::with_capacity(128);
+            let mut generic_depth: u64 = 0; // u8 since we should never go >256 and it should always be +ve, -ve is an error
+                                            // Here we process the symbol name to make it easier to read
+                                            // Remove the generic type arguments
+                                            // And any `::impl$XXX::` parts
+            let mut index: usize = 0;
+            'shorten: loop {
+                let segment = &full[index..];
+                if index >= full.len() {
+                    // Got to the end of the string
+                    break 'shorten;
+                }
+
+                let char = match &segment.chars().next() {
+                    None => {
+                        break warn!(
+                            target: GENERAL_WARNING_NON_FATAL,
+                            full, short, segment, index, "didn't have a char at index {index}"
+                        )
+                    }
+                    Some(c) => *c,
+                };
+
+                if char == '<' {
+                    generic_depth += 1;
+                    index += 1;
+                    continue;
+                }
+                if char == '>' {
+                    generic_depth -= 1;
+                    index += 1;
+                    continue;
+                }
+
+                if generic_depth != 0 {
+                    index += 1;
+                    continue;
+                }
+
+                if segment.starts_with("::impl$") {
+                    // Find where the next part of the path starts
+                    // By skipping to the next colon
+                    index += 7; // Skip the chars of `::impl$`
+                    let next_colon_index = match full[index..].find(':'){
+                        None => break warn!(target: GENERAL_WARNING_NON_FATAL, full, short, segment, index, "didn't find next colon - symbol path seems to end with impl block. this shouldn't happen"),
+                        Some(idx) => index + idx
+                    };
+                    index = next_colon_index;
+                    continue 'shorten;
+                }
+
+                //If we get here, we're skipped all the unnecessary chars, so add this ones
+                short.push(char);
+                index += 1;
+            }
+
+            ui.text_colored(colours.value.function_name, short);
         } else {
             ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
         }
@@ -320,38 +391,14 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
             // > Because I tested my code on MacOS and there the "as_str()" function returned the demangled names, but on Linux that did not work :( Now, I am using the "to_string()" function, but to find this bug took a lot of time :D
             // So if the mangled and demangled names differ, print the mangled one here
             // This helps avoid duplicate names in the UI
-            if let Some (mangled) = symbol_name.as_str(){
-                if mangled != demangled{
+            if let Some(mangled) = symbol_name.as_str() {
+                if mangled != demangled {
                     ui.table_next_row();
                     ui.table_next_column();
                     ui.text_colored(colours.value.value_label, "symbol name (mangled)");
                     ui.table_next_column();
                     ui.text_colored(colours.value.function_name, mangled);
                 }
-            }
-
-            //TODO: Remove the repeated access to symbol_name
-            ui.table_next_row();
-            ui.table_next_column();
-            ui.text_colored(colours.value.value_label, "symbol name (raw)");
-            ui.table_next_column();
-            if let Some(ref symbol_name) = symbol.name() {
-                ui.text_colored(colours.value.symbol, "{");
-                ui.same_line_with_spacing(0.0, 0.0);
-                let bytes = symbol_name.as_bytes();
-                for (i, b) in bytes.iter().enumerate() {
-                    // Comma separators between each byte
-                    if i != 0 {
-                        ui.same_line_with_spacing(0.0, 0.0);
-                        ui.text_colored(colours.value.symbol, ", ");
-                    }
-                    ui.same_line_with_spacing(0.0, 0.0);
-                    ui.text_colored(colours.value.number, format!("{b:#2X}"));
-                }
-                ui.same_line_with_spacing(0.0, 0.0);
-                ui.text_colored(colours.value.symbol, "}");
-            } else {
-                ui.text_colored(colours.severity.warning, UNKNOWN_VALUE_TEXT);
             }
         }
         //[symbol.name()] returned [None]
