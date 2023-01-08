@@ -39,9 +39,11 @@ where
     // Calculate the indented cursor position, so we can find where we should start putting the text
     // So that it appears in-line with the tree node
     // Do this before creating the node because the node fills the remaining space
-    ui.indent();
+    // Originally this used [ui.indent()], but this doesn't scale with larger font sizes (the dropwdown arrow grows but the indent is the same, so the text starts overlapping the arrow)
+    // So we do a fake indent using the font size, which works much better
+    ui.indent_by(ui.current_font_size());
     let cursor_pos = ui.cursor_pos();
-    ui.unindent();
+    ui.unindent_by(ui.current_font_size());
 
     let maybe_tree_node = ui
         .tree_node_config(id)
