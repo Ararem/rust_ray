@@ -3,7 +3,7 @@ use crate::config::run_time::ui_config::theme::Theme;
 use crate::helper;
 use crate::helper::logging::event_targets::*;
 use crate::ui::build_ui_impl::shared::constants::{
-    INVALID_VALUE_TEXT, MISSING_VALUE_TEXT, NO_VALUE_TEXT, UNKNOWN_VALUE_TEXT,
+    MISSING_VALUE_TEXT, NO_VALUE_TEXT, UNKNOWN_VALUE_TEXT,
 };
 use crate::ui::build_ui_impl::shared::{
     display_c_const_pointer, display_c_mut_pointer, display_maybe_c_mut_pointer, tree_utils,
@@ -14,13 +14,10 @@ use color_eyre::section::SectionExt;
 use color_eyre::Report;
 use fancy_regex::*;
 use helper::logging::*;
-use imgui::StyleColor::Text;
 use imgui::{Condition, TableFlags, TreeNodeId, Ui};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::sync::atomic::Ordering::SeqCst;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{trace, trace_span, warn, Metadata};
 use tracing_error::SpanTraceStatus;
 
@@ -67,18 +64,7 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
     });
 
     section!("Backtrace", display_backtrace(ui, &colours, report));
-
     section!("Span trace", display_span_trace(ui, &colours, report));
-    //TODO: Do we even need this debug section
-    section!("Debug", {
-        ui.text_colored(colours.value.misc_value, format!("{:#?}", report));
-    });
-    section!("Stringified", {
-        ui.text_colored(
-            colours.value.misc_value,
-            format_report_string_no_ansi(report),
-        );
-    });
     //TODO: Report sections
     span_display_error_report.exit();
 }
@@ -147,7 +133,11 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
             TreeNodeId::<&str>::Ptr(frame as *const BacktraceFrame as *const c_void), // Use the BacktraceFrame for the node's ID
         );
 
-        ui.text_colored(colours.value.symbol, format!("Frame {index:>2}:\t")); // The 'depth' of the stack frane
+        ui.text_colored(colours.value.value_label, "Frame");
+        ui.same_line_with_spacing(0.0, 0.0);
+        ui.text_colored(colours.value.number, format!("{index:>2}")); // The 'depth' of the stack frane
+        ui.same_line_with_spacing(0.0, 0.0);
+        ui.text_colored(colours.value.symbol, ":\t"); // The 'depth' of the stack frane
         ui.same_line_with_spacing(0.0, 0.0);
         display_c_mut_pointer(ui, colours, instruction_pointer);
         ui.same_line_with_spacing(0.0, 0.0);
@@ -197,7 +187,7 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         tree_node.end();
     }
 
-    fn display_single_frame(ui: &Ui, colours: &Theme, index: usize, frame: &BacktraceFrame){
+    fn display_single_frame(ui: &Ui, colours: &Theme, index: usize, frame: &BacktraceFrame) {
         let frame_instruction_pointer: *mut c_void = frame.ip();
         let frame_symbol_address: *mut c_void = frame.symbol_address();
         let frame_module_base_address: Option<*mut c_void> = frame.module_base_address();
@@ -260,7 +250,11 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
             TreeNodeId::<&str>::Ptr(symbol as *const BacktraceSymbol as *const c_void), // Use the BacktraceSymbol for the node's ID
         );
 
-        ui.text_colored(colours.value.symbol, format!("Frame {frame_index_str}:\t")); // The 'depth' of the stack frane
+        ui.text_colored(colours.value.value_label, "Frame ");
+        ui.same_line_with_spacing(0.0, 0.0);
+        ui.text_colored(colours.value.number, frame_index_str);
+        ui.same_line_with_spacing(0.0, 0.0);
+        ui.text_colored(colours.value.symbol, ":\t");
         ui.same_line_with_spacing(0.0, 0.0);
         display_c_mut_pointer(ui, colours, frame_instruction_pointer);
         ui.same_line_with_spacing(0.0, 0.0);
@@ -437,9 +431,6 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         table_token.end();
         tree_node.end();
     }
-
-    ui.text("========================================================================");
-    ui.text_colored(colours.value.misc_value, format!("{:#?}", backtrace));
 }
 
 // ===== SPAN TRACE =====
@@ -522,11 +513,11 @@ fn visit_each_span(
     let maybe_tree_node = tree_utils::tree_node_with_custom_text(ui, metadata.name());
 
     // Fancy colours are always better than simple ones right?
-    ui.text_colored(colours.value.symbol, "[");
+    ui.text_colored(colours.value.value_label, "Span ");
     ui.same_line_with_spacing(0.0, 0.0);
-    ui.text_colored(colours.value.number, depth.to_string());
+    ui.text_colored(colours.value.number, format!("{depth:>2}"));
     ui.same_line_with_spacing(0.0, 0.0);
-    ui.text_colored(colours.value.symbol, "]: ");
+    ui.text_colored(colours.value.symbol, ":\t");
     ui.same_line_with_spacing(0.0, 0.0);
     ui.text_colored(colours.value.tracing_event_name, metadata.name());
 

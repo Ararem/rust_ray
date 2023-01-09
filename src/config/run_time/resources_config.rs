@@ -7,6 +7,7 @@ pub struct ResourcesConfig {
 }
 
 impl ResourcesConfig {
+    #[allow(unused)]
     pub fn new() -> Self {
         Self::default()
     }

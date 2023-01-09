@@ -47,9 +47,6 @@ pub(super) fn build_ui(
     )
     .entered();
 
-    const NO_SHORTCUT: &str = "N/A"; // String that we use as the shortcut text when there isn't one
-    const NO_TOOLTIP: &str = "This item doesn't have a tooltip, sorry!";
-
     // refs to reduce clutter
     let show_demo_window = &mut data.windows.show_demo_window;
     let show_metrics_window = &mut data.windows.show_metrics_window;
