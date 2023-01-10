@@ -15,13 +15,17 @@ use color_eyre::Report;
 use fancy_regex::*;
 use helper::logging::*;
 use imgui::{Condition, TableFlags, TreeNodeId, Ui};
+use indoc::indoc;
+use itertools::Itertools;
 use lazy_static::lazy_static;
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Mutex;
-use tracing::{debug, trace, trace_span, warn, Metadata};
+use tracing::field::Empty;
+use tracing::{trace, trace_span, warn, Metadata};
 use tracing_error::SpanTraceStatus;
 
 lazy_static! {
@@ -57,75 +61,90 @@ pub fn render_errors_popup(ui: &Ui) {
         ui.open_popup(MODAL_NAME);
     }
 
-    trace_span!(target: UI_TRACE_BUILD_INTERFACE, "error_modal").in_scope(||{
+    trace_span!(target: UI_TRACE_BUILD_INTERFACE, "error_modal").in_scope(|| {
         // If we have an error, its modal time....
         // Also demonstrate passing a bool, this will create a regular close button which
         // will close the popup. Note that the visibility state of popups is owned by imgui, so the input value
         // of the bool actually doesn't matter here.
         let mut opened_sesame = true;
-        let maybe_token = ui.modal_popup_config(MODAL_NAME).opened(&mut opened_sesame).begin_popup();
+        let popup_token = match ui
+            .modal_popup_config(MODAL_NAME)
+            .opened(&mut opened_sesame)
+            .begin_popup()
+        {
+            None => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "errors modal not visible");
+                return;
+            }
+            Some(token) => token,
+        };
         let mut errors_vec = match ERRORS.lock() {
             Ok(lock) => lock,
             Err(err) => {
                 warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                "errors Vec mutex was poisoned by some other thread"
-            );
+                    target: GENERAL_WARNING_NON_FATAL,
+                    "errors Vec mutex was poisoned by some other thread"
+                );
                 err.into_inner()
             }
         };
         let colours = read_config_value(|config| config.runtime.ui.colours);
-        match maybe_token {
-            None => {
-                // Modal closed, clear the current error
-                errors_vec.clear();
-                trace!(
-                    target: UI_TRACE_BUILD_INTERFACE,
-                    "errors modal not visible"
-                );
-            }
-            Some(token) => {
 
-                if errors_vec.is_empty(){
-                    trace!(target: UI_TRACE_BUILD_INTERFACE, "don't have any errors but errors modal is open!?!?");
-                    warn!(target: GENERAL_WARNING_NON_FATAL, "error modal was opened but we don't have an error to display. this probably shouldn't have happened");
-                    ui.text_colored(
-                        colours.severity.warning,
-                        "This popup shouldn't be visible, sorry about that. Normally it would show you an error that happened with reloading the config, but we don't have any error to display (yay)",
-                    );
-                    ui.close_current_popup();
-                    return;
-                }
+        if errors_vec.is_empty() {
+            trace!(
+                target: UI_TRACE_BUILD_INTERFACE,
+                "errors modal: visible but empty"
+            );
+            ui.text_colored(colours.text.normal, "No errors to display!\nYou can safely close this window");
+            // Here's a little egg for easter I put in here
+            let random_chars = (0..=thread_rng().gen_range(12usize..=20usize)) //Generates a random range of 12 to 20 elements
+                .map(|_| thread_rng().gen_range('\u{0021}'..='\u{00FF}')).join(""); //Maps each element to a random char in a reasonable range of unicode chars
+            ui.text_colored([0.5, 0.5, 0.5, 0.02 /*Almost invisible*/], format!(indoc!{r"
+                The errors, where have they gone!?
 
-                // This is wacky, but I need to remove elements while iterating over them
-                // Can't use a second vec and check for equality later, since `Report` doesn't implement Equals
-                // So gotta do this wacky thing
-                let mut first_item = true;
-                errors_vec.retain_mut(|report| {
-                    if !first_item{
-                        ui.separator();
-                        ui.separator();
-                    }
-                    first_item = false;
-                    let _id = ui.push_id_ptr(report); // So the button doesn't get shared across all errors cause the id is the same
+                Perhaps there are none? No, that's not possible. There are always errors somewhere.
+
+                They must be...hiding...yes that's it. They are biding their time, waiting for the perfect opportunity to strike.
+
+                <<Debugging complete>>
+
+                Ooh, I think I've found them! They're in the {}
+            "}, random_chars));
+            popup_token.end();
+            return;
+        }
+
+        if let Some(tab_bar_token) = ui.tab_bar("Error tab bar") {
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab bar visible");
+            errors_vec.retain(|report|{
+                let span_error_tabs = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "error_tabs", report=format_report_display(report), opened = Empty).entered();
+                // This bool is passed into [imgui] when creating each tab, so [imgui] will set it to [false] when the user closes the tab
+                // Since we're inside [retain_mut()], we can use this to decide which reports to keep, since it'll only be false once the user closes it
+                let mut opened = true;
+                let title = format!("{}", report.chain().next().expect("Every error should have at least one error in the chain, but `.next()` returned [None]"));
+                if let Some(tab) = ui.tab_item_with_opened(&title, &mut opened){
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab {title} selected");
                     display_eyre_report(ui, report);
-                    let remove = ui.button("Hide Error");
-                    if remove{
-                        // Print the short version of the error to the log, no need for the full one since we had that earlier
-                        trace!(target: UI_DEBUG_USER_INTERACTION, report=format!("{:#}", report), "User hiding error");
-                    }
-                    !remove
-                });
-
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "close button");
-                ui.spacing();
-                if ui.button("Close") {
-                    debug!(target: UI_DEBUG_USER_INTERACTION, "[Button] Pressed Close Error modal");
-                    ui.close_current_popup();
+                    tab.end();
                 }
-                token.end();
-            }
-        };});
+                else{
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab {title} not selected");
+                }
+
+                // Print the short version of the error to the log, no need for the full one since we had that earlier
+                if !opened{
+                    trace!(target: UI_DEBUG_USER_INTERACTION, "User hiding error tab {title}");
+                }
+                span_error_tabs.record("opened", opened);
+                span_error_tabs.exit();
+                opened
+            });
+            tab_bar_token.end();
+        } else {
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab bar hidden");
+        }
+        popup_token.end();
+    });
 }
 
 /// Function that displays an [eyre::Report] in [imgui]

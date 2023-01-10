@@ -1,0 +1,4 @@
+# rustfmt config file
+#max_width=300
+error_on_line_overflow=true
+error_on_unformatted=true
