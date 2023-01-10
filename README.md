@@ -4,7 +4,8 @@
 A little learning test raytracer project in rust.
 
 ## Helpful Links
-* [shadow-rs](https://github.com/baoyachi/shadow-rs) - used to get build information
+* [Inigo Quilez](https://iquilezles.org/) An *AMAZINGLY* helpful author of many shadertoy shaders, and very helpful code/tutorials. 
+* [RayTracing in a weekend](https://in1weekend.blogspot.com/) One of the best resources for getting a raytracer built, goes through many of the steps in detail and gives you a fully functional tracer at the end!
 
 ## License
 
@@ -35,6 +36,7 @@ These are the default fonts provided with the application. They are copied to th
 * JetBrains Mono
 * Roboto
 * Source Code Pro
+* Metropolis
 
 ### Crates
 
