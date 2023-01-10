@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub mod ui_config;
 
 /// Base configuration struct that contains options that configure the entire app
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct InitTimeAppConfig {
     pub ui_config: ui_config::UiConfig,
 }

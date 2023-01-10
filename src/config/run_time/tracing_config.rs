@@ -1,7 +1,7 @@
 use crate::helper::logging::event_targets::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TracingConfig {
     /// Controls how errors are logged in the app
     ///
@@ -42,7 +42,7 @@ impl Default for TracingConfig {
 }
 
 /// Holds a regex that matches on an event's target, and a [bool] that indicates whether that target should be enabled or disabled
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct LogTargetFilter {
     pub target: String,
     pub enabled: bool,
@@ -57,7 +57,7 @@ impl LogTargetFilter {
 }
 
 /// Enum that controls how errors (color_eyre::eyre::Report) are formatted
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub enum ErrorLogStyle {
     Short,
     ShortWithCause,

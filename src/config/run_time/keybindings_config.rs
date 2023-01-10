@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 pub type KeyCode = imgui_winit_support::winit::event::VirtualKeyCode;
 
 /// Config struct that holds keybinding values
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct KeybindingsConfig {
     /// Toggles the visibility of the [imgui] metrics window (see [imgui::Ui::show_metrics_window()])
     pub toggle_metrics_window: KeyBinding,
@@ -24,7 +24,7 @@ pub struct KeybindingsConfig {
 }
 
 /// Represents a keybinding (a key, and possible modifiers)
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct KeyBinding {
     pub shortcut: KeyCode,
     pub modifier_ctrl: bool,

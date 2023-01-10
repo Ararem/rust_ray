@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FrameInfoConfig {
     /// Size of the 'chunks' used when averaging frame values
     pub chunked_average_smoothing_size: usize,

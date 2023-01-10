@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub type Colour = mint::Vector4<f32>;
 
 /// Colour arrays for use with [`imgui`]
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Theme {
     pub text: TextColours,
     pub value: ValueColours,
@@ -12,7 +12,7 @@ pub struct Theme {
 }
 
 /// Theme struct for general text colours that would be used with most normal (non-specialised) text
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize,  PartialEq)]
 pub struct TextColours {
     pub normal: Colour,
     pub subtle: Colour,
@@ -30,7 +30,7 @@ impl Default for TextColours {
 /// Theme struct that contains colours for different types of values that can be displayed.
 ///
 /// For example, there are different levels for each of the possible values of [tracing]'s [tracing::Level], and for function names
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ValueColours {
     /// Colour for the associated [tracing::Level::TRACE]
     pub level_trace: Colour,
@@ -101,7 +101,7 @@ impl Default for ValueColours {
 }
 
 /// Colours for things that may have a severity, such as the status of something
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SeverityColours {
     /// Some information that indicates something good
     pub good: Colour,

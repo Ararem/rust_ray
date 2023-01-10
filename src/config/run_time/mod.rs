@@ -12,7 +12,7 @@ use tracing_config::TracingConfig;
 use ui_config::UiConfig;
 
 /// Base configuration struct that contains options that configure the entire app
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RuntimeAppConfig {
     pub keybindings: KeybindingsConfig,
     pub resources: ResourcesConfig,

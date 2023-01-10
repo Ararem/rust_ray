@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use winit::dpi::{LogicalSize, Size};
 
 /// Base configuration struct that contains options that configure the entire app
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UiConfig {
     /// Default value for the size of the main operating system window
     pub default_window_size: Size,

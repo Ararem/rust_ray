@@ -10,7 +10,7 @@ pub mod theme;
 pub mod theme_ext;
 
 // Base configuration struct that contains options that configure the entire app
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UiConfig {
     /// Oversampling font should help improve text rendering at expense of larger font atlas texture.
     /// Personally, I can't tell the difference
