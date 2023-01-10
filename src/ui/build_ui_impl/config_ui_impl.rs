@@ -1,4 +1,3 @@
-use color_eyre::Report;
 use crate::config::init_time::InitTimeAppConfig;
 use crate::config::load_config_from_disk;
 use crate::config::run_time::RuntimeAppConfig;
@@ -7,6 +6,7 @@ use crate::helper::logging::format_report_display;
 use crate::ui::build_ui_impl::shared::error_display::an_error_occurred;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
+use color_eyre::Report;
 use imgui::Ui;
 use tracing::{debug, trace, trace_span, warn};
 
