@@ -1,7 +1,7 @@
+use crate::helper::logging::event_targets::*;
+use crate::FallibleFn;
 use imgui::Ui;
 use tracing::{debug, trace, trace_span};
-use crate::FallibleFn;
-use crate::helper::logging::event_targets::*;
 
 pub fn menu<T: FnOnce() -> FallibleFn>(ui: &Ui, name: &str, generate_menu_items: T) -> FallibleFn {
     trace_span!(target: UI_TRACE_BUILD_INTERFACE, "tools_menu").in_scope(|| {

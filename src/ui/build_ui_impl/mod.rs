@@ -9,18 +9,18 @@ use crate::program::thread_messages::ProgramThreadMessage::QuitAppNoError;
 use crate::program::thread_messages::QuitAppNoErrorReason::QuitInteractionByUser;
 use crate::program::thread_messages::ThreadMessage::Program;
 use crate::program::thread_messages::*;
+use crate::ui::build_ui_impl::shared::error_display::render_errors_popup;
 use crate::ui::ui_data::UiData;
 use crate::ui::ui_system::UiManagers;
 use crate::FallibleFn;
 use config_ui_impl::render_config_ui;
 use indoc::indoc;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
-use tracing::field::*;
-use tracing::*;
 use shared::input::handle_shortcut;
 use shared::menu_utils::{menu, toggle_menu_item};
 use shared::window_utils::{build_window, build_window_fn};
-use crate::ui::build_ui_impl::shared::error_display::render_errors_popup;
+use tracing::field::*;
+use tracing::*;
 
 pub trait UiItem {
     fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;

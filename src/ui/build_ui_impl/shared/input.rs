@@ -1,7 +1,7 @@
-use imgui::Ui;
-use tracing::{debug, trace, trace_span};
 use crate::config::run_time::keybindings_config::KeyBinding;
 use crate::helper::logging::event_targets::*;
+use imgui::Ui;
+use tracing::{debug, trace, trace_span};
 
 pub fn handle_shortcut(ui: &Ui, name: &str, keybind: &KeyBinding, toggle: &mut bool) {
     trace_span!(target: UI_TRACE_USER_INPUT, "handle_shortcut", name, %keybind).in_scope(||{

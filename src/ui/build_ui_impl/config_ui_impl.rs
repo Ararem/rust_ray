@@ -18,27 +18,27 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
         return Ok(());
     }
 
-        trace!(
-            target: UI_TRACE_BUILD_INTERFACE,
-            "[Button] Reload From Disk"
-        );
+    trace!(
+        target: UI_TRACE_BUILD_INTERFACE,
+        "[Button] Reload From Disk"
+    );
 
-        if ui.button("Reload From Disk") {
-            debug!(
-                target: UI_DEBUG_USER_INTERACTION,
-                "[Button] Reload From Disk pressed"
+    if ui.button("Reload From Disk") {
+        debug!(
+            target: UI_DEBUG_USER_INTERACTION,
+            "[Button] Reload From Disk pressed"
+        );
+        // Try loading, and if there was an error, log it and open a popup modal for the user
+        if let Err(report) = load_config_from_disk() {
+            warn!(
+                target: GENERAL_WARNING_NON_FATAL,
+                report = format_report_display(&report),
+                "could not load config from disk"
             );
-            // Try loading, and if there was an error, log it and open a popup modal for the user
-            if let Err(report) = load_config_from_disk() {
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    report = format_report_display(&report),
-                    "could not load config from disk"
-                );
-               an_error_occurred(report);
-                an_error_occurred(Report::msg("Test"))
-            }
+            an_error_occurred(report);
+            an_error_occurred(Report::msg("Test"))
         }
+    }
 
     span_render_config.exit();
     Ok(())

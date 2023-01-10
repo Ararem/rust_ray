@@ -1,8 +1,8 @@
+use crate::helper::logging::event_targets::*;
+use crate::ui::build_ui_impl::UiItem;
+use crate::FallibleFn;
 use imgui::{Condition, Ui};
 use tracing::trace_span;
-use crate::FallibleFn;
-use crate::ui::build_ui_impl::UiItem;
-use crate::helper::logging::event_targets::*;
 pub fn build_window<T: UiItem>(
     label: &str,
     item: &mut T,

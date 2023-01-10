@@ -1,9 +1,9 @@
 //! Module of shared functions used for the UI building
 
-use std::ffi::c_void;
 use crate::config::run_time::ui_config::theme::Theme;
-use imgui::Ui;
 use crate::ui::build_ui_impl::shared::constants::{MISSING_VALUE_TEXT, NULL_POINTER_TEXT};
+use imgui::Ui;
+use std::ffi::c_void;
 
 pub mod constants;
 pub mod error_display;
@@ -26,7 +26,7 @@ pub fn display_maybe_c_const_pointer(ui: &Ui, colours: &Theme, maybe_ptr: Option
     }
 }
 pub fn display_c_mut_pointer(ui: &Ui, colours: &Theme, ptr: *mut c_void) {
-    display_c_const_pointer(ui,colours, ptr.cast_const())
+    display_c_const_pointer(ui, colours, ptr.cast_const())
 }
 pub fn display_c_const_pointer(ui: &Ui, colours: &Theme, ptr: *const c_void) {
     // /// The number of characters that a [usize] requires when formatted in hex
