@@ -53,6 +53,7 @@ pub fn render_errors_popup(ui: &Ui) {
     // Open the popup if we need to
     // This is because ImGui owns the popups, not us
     if SHOW_ERRORS_POPUP.swap(false, Relaxed) {
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "opening errors popup");
         ui.open_popup(MODAL_NAME);
     }
 
@@ -108,7 +109,12 @@ pub fn render_errors_popup(ui: &Ui) {
                     first_item = false;
                     let _id = ui.push_id_ptr(report); // So the button doesn't get shared across all errors cause the id is the same
                     display_eyre_report(ui, report);
-                    !ui.button("Hide Error")
+                    let remove = ui.button("Hide Error");
+                    if remove{
+                        // Print the short version of the error to the log, no need for the full one since we had that earlier
+                        trace!(target: UI_DEBUG_USER_INTERACTION, report=format!("{:#}", report), "User hiding error");
+                    }
+                    !remove
                 });
 
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "close button");

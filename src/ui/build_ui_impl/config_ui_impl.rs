@@ -36,6 +36,7 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
                     "could not load config from disk"
                 );
                an_error_occurred(report);
+                an_error_occurred(Report::msg("Test"))
             }
         }
 

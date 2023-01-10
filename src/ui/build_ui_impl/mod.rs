@@ -20,6 +20,7 @@ use tracing::*;
 use shared::input::handle_shortcut;
 use shared::menu_utils::{menu, toggle_menu_item};
 use shared::window_utils::{build_window, build_window_fn};
+use crate::ui::build_ui_impl::shared::error_display::render_errors_popup;
 
 pub trait UiItem {
     fn render(&mut self, ui: &imgui::Ui, visible: bool) -> FallibleFn;
@@ -161,6 +162,7 @@ pub(super) fn build_ui(
     }
     build_window("UI Management", managers, show_ui_management_window, ui)?;
     build_window_fn("Config", render_config_ui, show_config_window, ui)?;
+    render_errors_popup(ui);
 
     trace_span!(target: UI_TRACE_USER_INPUT, "handle_input").in_scope(|| {
         handle_shortcut(
