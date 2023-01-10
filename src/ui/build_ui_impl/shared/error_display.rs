@@ -2,12 +2,8 @@ use crate::config::read_config_value;
 use crate::config::run_time::ui_config::theme::Theme;
 use crate::helper;
 use crate::helper::logging::event_targets::*;
-use crate::ui::build_ui_impl::shared::constants::{
-    MISSING_VALUE_TEXT, NO_VALUE_TEXT, UNKNOWN_VALUE_TEXT,
-};
-use crate::ui::build_ui_impl::shared::{
-    display_c_const_pointer, display_c_mut_pointer, display_maybe_c_mut_pointer, tree_utils,
-};
+use crate::ui::build_ui_impl::shared::constants::{MISSING_VALUE_TEXT, NO_VALUE_TEXT, UNKNOWN_VALUE_TEXT};
+use crate::ui::build_ui_impl::shared::{display_c_const_pointer, display_c_mut_pointer, display_maybe_c_mut_pointer, tree_utils};
 use backtrace::{BacktraceFrame, BacktraceSymbol};
 use color_eyre::section::Section;
 use color_eyre::section::SectionExt;
@@ -40,10 +36,7 @@ pub fn an_error_occurred(report: Report) {
     let mut errors_vec = match ERRORS.lock() {
         Ok(lock) => lock,
         Err(err) => {
-            warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                "errors Vec mutex was poisoned by some other thread"
-            );
+            warn!(target: GENERAL_WARNING_NON_FATAL, "errors Vec mutex was poisoned by some other thread");
             err.into_inner()
         }
     };
@@ -67,11 +60,7 @@ pub fn render_errors_popup(ui: &Ui) {
         // will close the popup. Note that the visibility state of popups is owned by imgui, so the input value
         // of the bool actually doesn't matter here.
         let mut opened_sesame = true;
-        let popup_token = match ui
-            .modal_popup_config(MODAL_NAME)
-            .opened(&mut opened_sesame)
-            .begin_popup()
-        {
+        let popup_token = match ui.modal_popup_config(MODAL_NAME).opened(&mut opened_sesame).begin_popup() {
             None => {
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "errors modal not visible");
                 return;
@@ -81,25 +70,23 @@ pub fn render_errors_popup(ui: &Ui) {
         let mut errors_vec = match ERRORS.lock() {
             Ok(lock) => lock,
             Err(err) => {
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    "errors Vec mutex was poisoned by some other thread"
-                );
+                warn!(target: GENERAL_WARNING_NON_FATAL, "errors Vec mutex was poisoned by some other thread");
                 err.into_inner()
             }
         };
         let colours = read_config_value(|config| config.runtime.ui.colours);
 
         if errors_vec.is_empty() {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "errors modal: visible but empty"
-            );
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "errors modal: visible but empty");
             ui.text_colored(colours.text.normal, "No errors to display!\nYou can safely close this window");
             // Here's a little egg for easter I put in here
             let random_chars = (0..=thread_rng().gen_range(12usize..=20usize)) //Generates a random range of 12 to 20 elements
-                .map(|_| thread_rng().gen_range('\u{0021}'..='\u{00FF}')).join(""); //Maps each element to a random char in a reasonable range of unicode chars
-            ui.text_colored([0.5, 0.5, 0.5, 0.02 /*Almost invisible*/], format!(indoc!{r"
+                .map(|_| thread_rng().gen_range('\u{0021}'..='\u{00FF}'))
+                .join(""); //Maps each element to a random char in a reasonable range of unicode chars
+            ui.text_colored(
+                [0.5, 0.5, 0.5, 0.02 /*Almost invisible*/],
+                format!(
+                    indoc! {r"
                 The errors, where have they gone!?
 
                 Perhaps there are none? No, that's not possible. There are always errors somewhere.
@@ -109,30 +96,35 @@ pub fn render_errors_popup(ui: &Ui) {
                 <<Debugging complete>>
 
                 Ooh, I think I've found them! They're in the {}
-            "}, random_chars));
+            "},
+                    random_chars
+                ),
+            );
             popup_token.end();
             return;
         }
 
         if let Some(tab_bar_token) = ui.tab_bar("Error tab bar") {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab bar visible");
-            errors_vec.retain(|report|{
-                let span_error_tabs = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "error_tabs", report=format_report_display(report), opened = Empty).entered();
+            errors_vec.retain(|report| {
+                let span_error_tabs = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "error_tabs", report = format_report_display(report), opened = Empty).entered();
                 // This bool is passed into [imgui] when creating each tab, so [imgui] will set it to [false] when the user closes the tab
                 // Since we're inside [retain_mut()], we can use this to decide which reports to keep, since it'll only be false once the user closes it
                 let mut opened = true;
-                let title = format!("{}", report.chain().next().expect("Every error should have at least one error in the chain, but `.next()` returned [None]"));
-                if let Some(tab) = ui.tab_item_with_opened(&title, &mut opened){
+                let title = format!(
+                    "{}",
+                    report.chain().next().expect("Every error should have at least one error in the chain, but `.next()` returned [None]")
+                );
+                if let Some(tab) = ui.tab_item_with_opened(&title, &mut opened) {
                     trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab {title} selected");
                     display_eyre_report(ui, report);
                     tab.end();
-                }
-                else{
+                } else {
                     trace!(target: UI_TRACE_BUILD_INTERFACE, "error tab {title} not selected");
                 }
 
                 // Print the short version of the error to the log, no need for the full one since we had that earlier
-                if !opened{
+                if !opened {
                     trace!(target: UI_DEBUG_USER_INTERACTION, "User hiding error tab {title}");
                 }
                 span_error_tabs.record("opened", opened);
@@ -160,16 +152,12 @@ pub fn display_eyre_report(ui: &Ui, report: &Report) {
     Afterwards, max was 5 tabs
     */
 
-    let span_display_error_report =
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "display_error_report").entered();
+    let span_display_error_report = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "display_error_report").entered();
     let colours = read_config_value(|config| config.runtime.ui.colours);
     macro_rules! section {
         ($title:literal, $body:expr) => {{
             let span_section = trace_span!(target: UI_TRACE_BUILD_INTERFACE, $title).entered();
-            let maybe_node = ui
-                .tree_node_config($title)
-                .opened(true, Condition::FirstUseEver)
-                .push(); // Should be open by default
+            let maybe_node = ui.tree_node_config($title).opened(true, Condition::FirstUseEver).push(); // Should be open by default
             if let Some(opened_node) = maybe_node {
                 trace!(target: UI_TRACE_BUILD_INTERFACE, "node expanded");
                 $body;
@@ -208,14 +196,8 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
     let handler = match report.handler().downcast_ref::<color_eyre::Handler>() {
         // Couldn't downcast to get the handler
         None => {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "backtrace: couldn't cast handler"
-            );
-            ui.text_colored(
-                colours.severity.warning,
-                "Couldn't downcast error report's handler to get the backtrace",
-            );
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "backtrace: couldn't cast handler");
+            ui.text_colored(colours.severity.warning, "Couldn't downcast error report's handler to get the backtrace");
             return;
         }
         Some(handler) => handler,
@@ -224,7 +206,10 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
     let backtrace = match handler.backtrace() {
         None => {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "backtrace: non-existent");
-            ui.text_colored(colours.severity.warning, "This error doesn't have a backtrace. Try checking `RUST_BACKTRACE` and/or `RUST_BACKTRACE` environment variables are set");
+            ui.text_colored(
+                colours.severity.warning,
+                "This error doesn't have a backtrace. Try checking `RUST_BACKTRACE` and/or `RUST_BACKTRACE` environment variables are set",
+            );
             return;
         }
         Some(backtrace) => backtrace,
@@ -234,7 +219,8 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         /*
         We have a minor problem with displaying the backtrace frames: each frame doesn't *always* actually correspond to a single function
         From the docs ([backtrace::BacktraceFrame::symbols()], https://docs.rs/backtrace/latest/backtrace/struct.BacktraceFrame.html#method.symbols):
-        > Normally there is only one symbol per frame, but sometimes if a number of functions are inlined into one frame then multiple symbols will be returned. The first symbol listed is the “innermost function”, whereas the last symbol is the outermost (last caller).
+        > Normally there is only one symbol per frame, but sometimes if a number of functions are inlined into one frame
+        > then multiple symbols will be returned. The first symbol listed is the “innermost function”, whereas the last symbol is the outermost (last caller).
         > Note that if this frame came from an unresolved backtrace then this will return an empty list.
         So there's a chance that we'll have multiple symbols (aka function calls) compressed into a single stack frame
 
@@ -285,14 +271,13 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         So what we actually do is create a table, which is much nicer, and prettier
         The TableFlags make the table waste much less space on the metadata label columns
         */
-        let table_token =
-            match ui.begin_table_with_flags("span fields table", 2, TableFlags::SIZING_FIXED_FIT) {
-                None => {
-                    // I'm not sure why this would be [None], but just in case
-                    return;
-                }
-                Some(token) => token,
-            };
+        let table_token = match ui.begin_table_with_flags("span fields table", 2, TableFlags::SIZING_FIXED_FIT) {
+            None => {
+                // I'm not sure why this would be [None], but just in case
+                return;
+            }
+            Some(token) => token,
+        };
 
         ui.table_next_row();
         ui.table_next_column();
@@ -340,27 +325,14 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
     /// > of functions are inlined into one frame then multiple symbols will be
     /// > returned. The first symbol listed is the "innermost function", whereas
     /// > the last symbol is the outermost (last caller).
-    fn display_compressed_frame(
-        ui: &Ui,
-        colours: &Theme,
-        frame_index: usize,
-        frame: &BacktraceFrame,
-    ) {
+    fn display_compressed_frame(ui: &Ui, colours: &Theme, frame_index: usize, frame: &BacktraceFrame) {
         let frame_instruction_pointer: *mut c_void = frame.ip();
         let frame_symbol_address: *mut c_void = frame.symbol_address();
         let frame_module_base_address: Option<*mut c_void> = frame.module_base_address();
 
         for (sub_frame_index, symbol) in frame.symbols().iter().enumerate() {
             let frame_index_str = format!("{frame_index:>2}.{sub_frame_index}");
-            display_symbol_frame(
-                ui,
-                colours,
-                &frame_index_str,
-                symbol,
-                frame_instruction_pointer,
-                frame_symbol_address,
-                frame_module_base_address,
-            );
+            display_symbol_frame(ui, colours, &frame_index_str, symbol, frame_instruction_pointer, frame_symbol_address, frame_module_base_address);
         }
     }
 
@@ -406,12 +378,7 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
                 }
 
                 let char = match &segment.chars().next() {
-                    None => {
-                        break warn!(
-                            target: GENERAL_WARNING_NON_FATAL,
-                            full, short, segment, index, "didn't have a char at index {index}"
-                        )
-                    }
+                    None => break warn!(target: GENERAL_WARNING_NON_FATAL, full, short, segment, index, "didn't have a char at index {index}"),
                     Some(c) => *c,
                 };
 
@@ -435,9 +402,14 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
                     // Find where the next part of the path starts
                     // By skipping to the next colon
                     index += 7; // Skip the chars of `::impl$`
-                    let next_colon_index = match full[index..].find(':'){
-                        None => break warn!(target: GENERAL_WARNING_NON_FATAL, full, short, segment, index, "didn't find next colon - symbol path seems to end with impl block. this shouldn't happen"),
-                        Some(idx) => index + idx
+                    let next_colon_index = match full[index..].find(':') {
+                        None => {
+                            break warn!(
+                                target: GENERAL_WARNING_NON_FATAL,
+                                full, short, segment, index, "didn't find next colon - symbol path seems to end with impl block. this shouldn't happen"
+                            )
+                        }
+                        Some(idx) => index + idx,
                     };
                     index = next_colon_index;
                     continue 'shorten;
@@ -464,14 +436,13 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         So what we actually do is create a table, which is much nicer, and prettier
         The TableFlags make the table waste much less space on the metadata label columns
         */
-        let table_token =
-            match ui.begin_table_with_flags("span fields table", 2, TableFlags::SIZING_FIXED_FIT) {
-                None => {
-                    // I'm not sure why this would be [None], but just in case
-                    return;
-                }
-                Some(token) => token,
-            };
+        let table_token = match ui.begin_table_with_flags("span fields table", 2, TableFlags::SIZING_FIXED_FIT) {
+            None => {
+                // I'm not sure why this would be [None], but just in case
+                return;
+            }
+            Some(token) => token,
+        };
 
         ui.table_next_row();
         ui.table_next_column();
@@ -500,10 +471,7 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
         }
 
         if let Some(ref symbol_name) = symbol.name() {
-            let demangled = format!(
-                "{}",
-                symbol_name /*Display trait gives demangled name*/
-            );
+            let demangled = format!("{}", symbol_name /*Display trait gives demangled name*/);
             ui.table_next_row();
             ui.table_next_column();
             ui.text_colored(colours.value.value_label, "symbol name (demangled)");
@@ -511,7 +479,8 @@ fn display_backtrace(ui: &Ui, colours: &Theme, report: &Report) {
             ui.text_colored(colours.value.function_name, &demangled);
 
             // Although [as_str()] should return the mangled name according to the docs, it doesn't seem to on windows (https://github.com/rust-lang/backtrace-rs/issues/36#issuecomment-285390548):
-            // > Because I tested my code on MacOS and there the "as_str()" function returned the demangled names, but on Linux that did not work :( Now, I am using the "to_string()" function, but to find this bug took a lot of time :D
+            // > Because I tested my code on MacOS and there the "as_str()" function returned the demangled names,
+            // but on Linux that did not work :( Now, I am using the "to_string()" function, but to find this bug took a lot of time :D
             // So if the mangled and demangled names differ, print the mangled one here
             // This helps avoid duplicate names in the UI
             if let Some(mangled) = symbol_name.as_str() {
@@ -567,14 +536,8 @@ fn display_span_trace(ui: &Ui, colours: &Theme, report: &Report) {
     let handler = match report.handler().downcast_ref::<color_eyre::Handler>() {
         // Couldn't downcast to get the handler
         None => {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "span trace: couldn't cast handler"
-            );
-            ui.text_colored(
-                colours.severity.warning,
-                "Couldn't downcast error report's handler to get the span trace",
-            );
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: couldn't cast handler");
+            ui.text_colored(colours.severity.warning, "Couldn't downcast error report's handler to get the span trace");
             return;
         }
         Some(handler) => handler,
@@ -583,10 +546,7 @@ fn display_span_trace(ui: &Ui, colours: &Theme, report: &Report) {
     let span_trace = match handler.span_trace() {
         None => {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: non-existent");
-            ui.text_colored(
-                colours.value.missing_value,
-                "This error doesn't have a span trace; it was probably captured outside of any spans",
-            );
+            ui.text_colored(colours.value.missing_value, "This error doesn't have a span trace; it was probably captured outside of any spans");
             return;
         }
         Some(span_trace) => span_trace,
@@ -594,19 +554,16 @@ fn display_span_trace(ui: &Ui, colours: &Theme, report: &Report) {
 
     match span_trace.status() {
         SpanTraceStatus::UNSUPPORTED => {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "span trace: not supported"
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: not supported");
+            ui.text_colored(
+                colours.severity.warning,
+                "SpanTraces are not supported, likely because there is no [ErrorLayer] or the [ErrorLayer] is from a different version of [tracing_error]",
             );
-            ui.text_colored(colours.severity.warning, "SpanTraces are not supported, likely because there is no [ErrorLayer] or the [ErrorLayer] is from a different version of [tracing_error]");
             return;
         }
         SpanTraceStatus::EMPTY => {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: empty");
-            ui.text_colored(
-                colours.severity.warning,
-                "The SpanTrace is empty, likely because it was captured outside of any spans",
-            );
+            ui.text_colored(colours.severity.warning, "The SpanTrace is empty, likely because it was captured outside of any spans");
             return;
         }
         _ => (),
@@ -614,23 +571,15 @@ fn display_span_trace(ui: &Ui, colours: &Theme, report: &Report) {
     trace!(target: UI_TRACE_BUILD_INTERFACE, "span trace: captured");
     // [with_spans] calls the closure on every span in the trace, as long as the closure returns `true`
     let mut depth = 0;
-    span_trace.with_spans(
-        |metadata: &'static Metadata<'static>, formatted_span_fields: &str| -> bool {
-            visit_each_span(ui, colours, metadata, formatted_span_fields, depth);
-            depth += 1;
-            true
-        },
-    );
+    span_trace.with_spans(|metadata: &'static Metadata<'static>, formatted_span_fields: &str| -> bool {
+        visit_each_span(ui, colours, metadata, formatted_span_fields, depth);
+        depth += 1;
+        true
+    });
 }
 
 /// 'Visits' each span in the span-trace, and displays it in the ui
-fn visit_each_span(
-    ui: &Ui,
-    colours: &Theme,
-    metadata: &'static Metadata<'static>,
-    formatted_span_fields: &str,
-    depth: i32,
-) {
+fn visit_each_span(ui: &Ui, colours: &Theme, metadata: &'static Metadata<'static>, formatted_span_fields: &str, depth: i32) {
     let span_visit_span = trace_span!(
         target: UI_TRACE_BUILD_INTERFACE,
         "visit_span",
@@ -664,40 +613,28 @@ fn visit_each_span(
     So what we actually do is create a table, which is much nicer, and prettier
     The TableFlags make the table waste much less space on the metadata label columns
     */
-    let table_token =
-        match ui.begin_table_with_flags("span fields table", 2, TableFlags::SIZING_FIXED_FIT) {
-            None => {
-                // I'm not sure why this would be [None], but just in case
-                return;
-            }
-            Some(token) => token,
-        };
+    let table_token = match ui.begin_table_with_flags("span fields table", 2, TableFlags::SIZING_FIXED_FIT) {
+        None => {
+            // I'm not sure why this would be [None], but just in case
+            return;
+        }
+        Some(token) => token,
+    };
     ui.table_next_row();
     ui.table_next_column();
     ui.text_colored(colours.value.value_label, "source file");
     ui.table_next_column();
-    ui.text_colored(
-        colours.value.file_location,
-        metadata.file().unwrap_or("<unknown source file>"),
-    );
+    ui.text_colored(colours.value.file_location, metadata.file().unwrap_or("<unknown source file>"));
     ui.same_line_with_spacing(0.0, 0.0);
     ui.text_colored(colours.value.symbol, ":");
     ui.same_line_with_spacing(0.0, 0.0);
-    ui.text_colored(
-        colours.value.file_location,
-        metadata
-            .line()
-            .map_or("<unknown line>".to_string(), |line| line.to_string()),
-    );
+    ui.text_colored(colours.value.file_location, metadata.line().map_or("<unknown line>".to_string(), |line| line.to_string()));
 
     ui.table_next_row();
     ui.table_next_column();
     ui.text_colored(colours.value.value_label, "module path");
     ui.table_next_column();
-    ui.text_colored(
-        colours.value.file_location,
-        metadata.module_path().unwrap_or("<unknown module path>"),
-    );
+    ui.text_colored(colours.value.file_location, metadata.module_path().unwrap_or("<unknown module path>"));
 
     ui.table_next_row();
     ui.table_next_column();
@@ -709,10 +646,7 @@ fn visit_each_span(
     ui.table_next_column();
     ui.text_colored(colours.value.value_label, "level");
     ui.table_next_column();
-    ui.text_colored(
-        colours.colour_for_tracing_level(metadata.level()),
-        metadata.level().to_string(),
-    );
+    ui.text_colored(colours.colour_for_tracing_level(metadata.level()), metadata.level().to_string());
 
     ui.table_next_row();
     ui.table_next_column();
@@ -749,9 +683,7 @@ enum SpanFieldValue<'field> {
 }
 
 /// Takes in the formatted representation of the span fields, and parses it into a map of field names and field values (may be multiple values per name)
-fn parse_span_fields<'field>(
-    formatted_span_fields: &'field str,
-) -> HashMap<&'field str, Vec<&'field str>> {
+fn parse_span_fields<'field>(formatted_span_fields: &'field str) -> HashMap<&'field str, Vec<&'field str>> {
     // The [HashMap] we store our fields in
     // We use a [Vec<String>] for the value because although not explicitly stated, the default [eyre] formatter just continually appends to it's internal String buffer
     // This means that every time we `.record()` a field, it just adds on that value to the string, and doesn't remove the old one
@@ -765,26 +697,32 @@ fn parse_span_fields<'field>(
         match maybe_capture {
             Err(err) => {
                 warn!(
-                                target: GENERAL_WARNING_NON_FATAL,
-                                report = format_report_display(
-                                    &Report::new(err)
-                                    .wrap_err("encountered error when matching value extractor regex to formatted fields string")
-                                    .section(VALUE_EXTRACTOR_REGEX.as_str().header("value extractor regex:"))
-                                    .section(formatted_span_fields.to_owned().header("input string:"))
-                                )
-                            );
+                    target: GENERAL_WARNING_NON_FATAL,
+                    report = format_report_display(
+                        &Report::new(err)
+                            .wrap_err("encountered error when matching value extractor regex to formatted fields string")
+                            .section(VALUE_EXTRACTOR_REGEX.as_str().header("value extractor regex:"))
+                            .section(formatted_span_fields.to_owned().header("input string:"))
+                    )
+                );
             }
             Ok(capture /*should be called `match`*/) => {
                 let key = match capture.name("key") {
                     None => {
-                        warn!(target: GENERAL_WARNING_NON_FATAL, "cannot have a match for <field> without also having a match for <key>: `capture.name(\"key\")` returned [None]");
+                        warn!(
+                            target: GENERAL_WARNING_NON_FATAL,
+                            "cannot have a match for <field> without also having a match for <key>: `capture.name(\"key\")` returned [None]"
+                        );
                         continue;
                     }
                     Some(key) => key.as_str(),
                 };
                 let value = match capture.name("value") {
                     None => {
-                        warn!(target: GENERAL_WARNING_NON_FATAL, "cannot have a match for <field> without also having a match for <value>: `capture.name(\"value\")` returned [None]");
+                        warn!(
+                            target: GENERAL_WARNING_NON_FATAL,
+                            "cannot have a match for <field> without also having a match for <value>: `capture.name(\"value\")` returned [None]"
+                        );
                         continue;
                     }
                     Some(value) => value.as_str(),
@@ -868,19 +806,14 @@ fn display_span_fields<'field>(ui: &Ui, colours: &Theme, fields: Vec<ProcessedSp
                 }
                 group.end();
                 if ui.is_item_hovered() {
-                    ui.tooltip_text(
-                        "This field has multiple values. Each value is listed on it's own line",
-                    );
+                    ui.tooltip_text("This field has multiple values. Each value is listed on it's own line");
                 }
             }
         }
     }
 }
 
-fn process_span_fields<'field>(
-    metadata: &'static Metadata<'static>,
-    mut fields_map: HashMap<&'field str, Vec<&'field str>>,
-) -> Vec<ProcessedSpanField<'field>> {
+fn process_span_fields<'field>(metadata: &'static Metadata<'static>, mut fields_map: HashMap<&'field str, Vec<&'field str>>) -> Vec<ProcessedSpanField<'field>> {
     let mut fields: Vec<ProcessedSpanField<'field>> = vec![];
     // Loop over each field that we *should* have, according to the metadata
     for meta_field in metadata.fields() {
@@ -904,7 +837,10 @@ fn process_span_fields<'field>(
     // There shouldn't be any, since I'm not aware of any way that fields can be added to the string without also being present in the metadata
     // I believe this may occur however if the string is incorrectly parsed
     if !fields_map.is_empty() {
-        warn!(target: GENERAL_WARNING_NON_FATAL, "had leftover fields that were parsed but not present in metadata. likely this means the source string was not parsed correctly");
+        warn!(
+            target: GENERAL_WARNING_NON_FATAL,
+            "had leftover fields that were parsed but not present in metadata. likely this means the source string was not parsed correctly"
+        );
     }
     for (name, values) in fields_map {
         let values = match values.len() {
@@ -912,11 +848,7 @@ fn process_span_fields<'field>(
             1 => SpanFieldValue::Single(values[0]),
             _ => SpanFieldValue::Multiple(values),
         };
-        fields.push(ProcessedSpanField::<'field> {
-            name,
-            values,
-            valid: false,
-        });
+        fields.push(ProcessedSpanField::<'field> { name, values, valid: false });
     }
 
     fields

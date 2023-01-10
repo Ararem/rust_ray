@@ -81,8 +81,8 @@ impl Default for ValueColours {
             level_warn: [1.0, 0.683, 0.0, 1.0].into(),    // Yellow
             level_error: [1.0, 0.0, 0.0, 1.0].into(),     // Bright red
 
-            tracing_event_name: [1.0, 0.324, 0.324, 1.0].into(), // Pale red
-            tracing_event_field_name: [0.224, 0.462, 1.0, 1.0].into(), // Medium pale blue
+            tracing_event_name: [1.0, 0.324, 0.324, 1.0].into(),        // Pale red
+            tracing_event_field_name: [0.224, 0.462, 1.0, 1.0].into(),  // Medium pale blue
             tracing_event_field_value: [0.516, 0.664, 1.0, 1.0].into(), // Lighter blue
 
             function_name: [0.0, 1.0, 0.872, 1.0].into(), // Light cyan
@@ -92,10 +92,10 @@ impl Default for ValueColours {
 
             value_label: [0.9, 0.95, 1.0, 1.0].into(), // Ever so slightly blue
 
-            misc_value: [0.31, 1.0, 0.31, 1.0].into(), // Pale green
+            misc_value: [0.31, 1.0, 0.31, 1.0].into(),     // Pale green
             missing_value: [0.27, 0.27, 0.27, 1.0].into(), // Dark grey
-            symbol: [0.93, 1.0, 0.79, 1.0].into(),     // Off-white (ultra pale green)
-            number: [0.05, 1.0, 0.68, 1.0].into(),     // Green with a tint of blue
+            symbol: [0.93, 1.0, 0.79, 1.0].into(),         // Off-white (ultra pale green)
+            number: [0.05, 1.0, 0.68, 1.0].into(),         // Green with a tint of blue
         }
     }
 }

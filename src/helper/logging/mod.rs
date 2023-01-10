@@ -57,8 +57,7 @@ pub fn dyn_error_to_report(error: &Box<dyn Error>) -> Report {
             format!("{error:#?}")
         }
     };
-    Report::msg(formatted_error)
-        .note("this error was converted from a `&Box<dyn Error>`, information may be missing and/or incorrect")
+    Report::msg(formatted_error).note("this error was converted from a `&Box<dyn Error>`, information may be missing and/or incorrect")
 }
 
 /// Function to convert a boxed panic error (`&Box<dyn Any + Send>`) to an owned [Report]
@@ -111,6 +110,5 @@ pub fn dyn_panic_to_report(boxed_error: &Box<dyn Any + Send>) -> Report {
     if let Some(val) = (**boxed_error).downcast_ref::<&str>() {
         formatted_error = format!("[str]: {}", *val);
     }
-    Report::msg(formatted_error)
-        .note("this error was converted from a `&Box<dyn Any+Send>`, information may be missing and/or incorrect")
+    Report::msg(formatted_error).note("this error was converted from a `&Box<dyn Any+Send>`, information may be missing and/or incorrect")
 }

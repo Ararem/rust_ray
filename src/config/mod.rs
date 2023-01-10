@@ -37,13 +37,7 @@ pub fn save_config_to_disk() -> FallibleFn {
     let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
     let config = read_config_value(|config| config.clone());
 
-    let serialised = to_string_pretty(
-        &config,
-        PrettyConfig::default()
-            .separate_tuple_members(true)
-            .enumerate_arrays(true),
-    )
-    .wrap_err("couldn't serialise config")?;
+    let serialised = to_string_pretty(&config, PrettyConfig::default().separate_tuple_members(true).enumerate_arrays(true)).wrap_err("couldn't serialise config")?;
 
     fs::write(config_path, serialised).wrap_err("couldn't save serialised config to file")?;
 
@@ -61,11 +55,8 @@ pub fn load_config_from_disk() -> FallibleFn {
 fn fallible_get_disk_config() -> Res<AppConfig> {
     //load up the file
     let config_path = app_current_directory()?.join(BASE_CONFIG_PATH);
-    let data = fs::read_to_string(&config_path)
-        .wrap_err_with(|| format!("could not read init config file at {config_path:?}"))?;
-    let config = ron::from_str::<AppConfig>(&data)
-        .wrap_err("failed to deserialise config")
-        .section(data.header("Config Data"))?;
+    let data = fs::read_to_string(&config_path).wrap_err_with(|| format!("could not read init config file at {config_path:?}"))?;
+    let config = ron::from_str::<AppConfig>(&data).wrap_err("failed to deserialise config").section(data.header("Config Data"))?;
 
     Ok(config)
 }
@@ -100,10 +91,7 @@ pub fn read_config_value<T>(func: fn(&AppConfig) -> T) -> T {
             // Might recurse if we log warning and then logger tries to access config
             // But i've put a bypass into the log filter so it shouldn't access config for warnings, so this should be fine
             // We definitely can't use any other code though, as that might access config and isn't safe
-            warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                "config instance was poisoned: a thread failed while holding the lock"
-            );
+            warn!(target: GENERAL_WARNING_NON_FATAL, "config instance was poisoned: a thread failed while holding the lock");
             poison.into_inner()
         }
     };
@@ -122,10 +110,7 @@ pub fn update_config<T, F: FnOnce(&mut AppConfig) -> T>(func: F) -> T {
             // Might recurse if we log warning and then logger tries to access config
             // But i've put a bypass into the log filter so it shouldn't access config for warnings, so this should be fine
             // We definitely can't use any other code though, as that might access config and isn't safe
-            warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                "config instance was poisoned: a thread failed while holding the lock"
-            );
+            warn!(target: GENERAL_WARNING_NON_FATAL, "config instance was poisoned: a thread failed while holding the lock");
             poison.into_inner()
         }
     };

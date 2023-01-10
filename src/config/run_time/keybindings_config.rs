@@ -59,15 +59,9 @@ impl KeyBinding {
         |No  | No | Yes   |
          */
         // true if we don't have the modifier, or either of the L/R shifts is held
-        let shift = !self.modifier_shift
-            || (ui.is_key_index_down(KeyCode::LShift as i32)
-                || ui.is_key_index_down(KeyCode::RShift as i32));
-        let ctrl = !self.modifier_ctrl
-            || (ui.is_key_index_down(KeyCode::LControl as i32)
-                || ui.is_key_index_down(KeyCode::RControl as i32));
-        let alt = !self.modifier_alt
-            || (ui.is_key_index_down(KeyCode::LAlt as i32)
-                || ui.is_key_index_down(KeyCode::RAlt as i32));
+        let shift = !self.modifier_shift || (ui.is_key_index_down(KeyCode::LShift as i32) || ui.is_key_index_down(KeyCode::RShift as i32));
+        let ctrl = !self.modifier_ctrl || (ui.is_key_index_down(KeyCode::LControl as i32) || ui.is_key_index_down(KeyCode::RControl as i32));
+        let alt = !self.modifier_alt || (ui.is_key_index_down(KeyCode::LAlt as i32) || ui.is_key_index_down(KeyCode::RAlt as i32));
 
         // If all modifiers are pressed (or not required), then we are happy
         ctrl && shift && alt

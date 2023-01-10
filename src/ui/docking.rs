@@ -45,13 +45,8 @@ impl DockNode {
     /// * [child_a] - Closure to build the first child (see [split_side]).
     /// * [child_b] - Closure to build the second child (opposite of [child_a])
     #[doc(alias = "DockBuilder::SplitNode")]
-    pub fn split<BuildChildA, BuildChildB>(
-        &self,
-        split_side: Direction,
-        size_ratio: f32,
-        child_a: BuildChildA,
-        child_b: BuildChildB,
-    ) where
+    pub fn split<BuildChildA, BuildChildB>(&self, split_side: Direction, size_ratio: f32, child_a: BuildChildA, child_b: BuildChildB)
+    where
         BuildChildA: FnOnce(DockNode),
         BuildChildB: FnOnce(DockNode),
     {
@@ -64,13 +59,7 @@ impl DockNode {
         let mut out_id_at_dir: sys::ImGuiID = 0;
         let mut out_id_at_opposite_dir: sys::ImGuiID = 0;
         unsafe {
-            sys::igDockBuilderSplitNode(
-                self.id,
-                split_side as i32,
-                size_ratio,
-                &mut out_id_at_dir,
-                &mut out_id_at_opposite_dir,
-            );
+            sys::igDockBuilderSplitNode(self.id, split_side as i32, size_ratio, &mut out_id_at_dir, &mut out_id_at_opposite_dir);
         }
 
         child_a(DockNode::new(out_id_at_dir));
@@ -99,12 +88,7 @@ impl UiDockingArea {
         let label = imgui::ImString::from(label.to_string());
         unsafe {
             let id = sys::igGetIDStr(label.as_ptr() as *const c_char);
-            sys::igDockSpace(
-                id,
-                [0.0, 0.0].into(),
-                0,
-                ::std::ptr::null::<sys::ImGuiWindowClass>(),
-            );
+            sys::igDockSpace(id, [0.0, 0.0].into(), 0, ::std::ptr::null::<sys::ImGuiWindowClass>());
             DockNode { id }
         }
     }
@@ -113,11 +97,7 @@ impl UiDockingArea {
     #[doc(alias = "DockSpaceOverViewport")]
     pub fn dockspace_over_viewport(&self) {
         unsafe {
-            sys::igDockSpaceOverViewport(
-                sys::igGetMainViewport(),
-                0,
-                ::std::ptr::null::<sys::ImGuiWindowClass>(),
-            );
+            sys::igDockSpaceOverViewport(sys::igGetMainViewport(), 0, ::std::ptr::null::<sys::ImGuiWindowClass>());
         }
     }
 }

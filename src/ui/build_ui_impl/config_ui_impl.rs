@@ -11,30 +11,19 @@ use imgui::Ui;
 use tracing::{debug, trace, trace_span, warn};
 
 pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
-    let span_render_config =
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_config").entered();
+    let span_render_config = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_config").entered();
     if !visible {
         trace!(target: UI_TRACE_BUILD_INTERFACE, "not visible");
         return Ok(());
     }
 
-    trace!(
-        target: UI_TRACE_BUILD_INTERFACE,
-        "[Button] Reload From Disk"
-    );
+    trace!(target: UI_TRACE_BUILD_INTERFACE, "[Button] Reload From Disk");
 
     if ui.button("Reload From Disk") {
-        debug!(
-            target: UI_DEBUG_USER_INTERACTION,
-            "[Button] Reload From Disk pressed"
-        );
+        debug!(target: UI_DEBUG_USER_INTERACTION, "[Button] Reload From Disk pressed");
         // Try loading, and if there was an error, log it and open a popup modal for the user
         if let Err(report) = load_config_from_disk() {
-            warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                report = format_report_display(&report),
-                "could not load config from disk"
-            );
+            warn!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report), "could not load config from disk");
             an_error_occurred(report);
             an_error_occurred(Report::msg("Test"))
         }
@@ -85,7 +74,8 @@ impl UiItem for RuntimeAppConfig {
        .build(&mut num_displayed_frames_compat);
        *displayed_frames = num_displayed_frames_compat as usize;
        if ui.is_item_hovered() {
-           ui.tooltip_text("The number of frames that will be displayed in the plot. Must be <= [Num Tracked Frames]. Will also be automatically limited if there are not enough frames stored to be displayed (until there are enough)");
+           ui.tooltip_text("The number of frames that will be displayed in the plot. Must be <= [Num Tracked Frames]. \
+           Will also be automatically limited if there are not enough frames stored to be displayed (until there are enough)");
        }
 
        let mut smoothing_compat: SliderType = self.scale_smoothing as SliderType; // Might fail on 128-bit systems, but eh

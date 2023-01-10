@@ -45,11 +45,7 @@ where
     let cursor_pos = ui.cursor_pos();
     ui.unindent_by(ui.current_font_size());
 
-    let maybe_tree_node = ui
-        .tree_node_config(id)
-        .label::<&str, &str>("")
-        .flags(TreeNodeFlags::SPAN_AVAIL_WIDTH)
-        .push();
+    let maybe_tree_node = ui.tree_node_config(id).label::<&str, &str>("").flags(TreeNodeFlags::SPAN_AVAIL_WIDTH).push();
 
     // Fancy colours are always better than simple ones right?
     ui.same_line_with_pos(cursor_pos[0]); // Reset pos to just after tree node

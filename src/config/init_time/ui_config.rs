@@ -23,10 +23,7 @@ pub struct UiConfig {
 impl std::default::Default for UiConfig {
     fn default() -> Self {
         Self {
-            default_window_size: Size::Logical(LogicalSize {
-                width: 1600.0,
-                height: 900.0,
-            }),
+            default_window_size: Size::Logical(LogicalSize { width: 1600.0, height: 900.0 }),
             start_maximised: true,
             vsync: false,
             hardware_acceleration: Some(true),

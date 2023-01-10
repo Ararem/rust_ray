@@ -41,10 +41,7 @@ fn main() -> FallibleFn {
 
     helper::panic_pill::red_or_blue_pill();
 
-    debug!(
-        target: MAIN_DEBUG_GENERAL,
-        "initialised [tracing] and [eyre], skipped cli args"
-    );
+    debug!(target: MAIN_DEBUG_GENERAL, "initialised [tracing] and [eyre], skipped cli args");
 
     let args = std::env::args();
     let args_os = std::env::args_os();
@@ -61,20 +58,12 @@ fn main() -> FallibleFn {
 
     match ret {
         Ok(program_return_value) => {
-            info!(
-                target: PROGRAM_INFO_LIFECYCLE,
-                ?program_return_value,
-                "program completed successfully"
-            );
+            info!(target: PROGRAM_INFO_LIFECYCLE, ?program_return_value, "program completed successfully");
             info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :)");
             Ok(program_return_value)
         }
         Err(report) => {
-            error!(
-                target: PROGRAM_INFO_LIFECYCLE,
-                report = format_report_display(&report),
-                "program exited unsuccessfully"
-            );
+            error!(target: PROGRAM_INFO_LIFECYCLE, report = format_report_display(&report), "program exited unsuccessfully");
             info!(target: PROGRAM_INFO_LIFECYCLE, "goodbye :(");
             Err(report)
         }
@@ -106,25 +95,17 @@ fn init_tracing() -> FallibleFn {
         .log_internal_errors(true)
         .event_format(standard_format)
         .with_writer(io::stdout)
-        .with_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::TRACE.into())
-                .from_env_lossy(),
-        )
+        .with_filter(EnvFilter::builder().with_default_directive(LevelFilter::TRACE.into()).from_env_lossy())
         .with_filter(FilterFn::new(|meta| {
             let target = meta.target();
 
             match target {
                 // If we encounter an error with the config, then we may try logging a warning while filtering a previous message
                 // This would recurse, so bypass and exit early if the target matches the warning/error targets
-                GENERAL_WARNING_NON_FATAL
-                | GENERAL_ERROR_FATAL
-                | REALLY_FUCKING_BAD_UNREACHABLE
-                | DOMINO_EFFECT_FAILURE => true,
+                GENERAL_WARNING_NON_FATAL | GENERAL_ERROR_FATAL | REALLY_FUCKING_BAD_UNREACHABLE | DOMINO_EFFECT_FAILURE => true,
                 // Otherwise (default), scan the config
                 _ => {
-                    let configured_targets =
-                        read_config_value(|config| config.runtime.tracing.target_filters.clone());
+                    let configured_targets = read_config_value(|config| config.runtime.tracing.target_filters.clone());
                     for filter in configured_targets {
                         if filter.target == target {
                             return filter.enabled;

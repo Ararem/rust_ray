@@ -36,9 +36,6 @@ pub fn display_c_const_pointer(ui: &Ui, colours: &Theme, ptr: *const c_void) {
     if ptr.is_null() {
         ui.text_colored(colours.value.missing_value, NULL_POINTER_TEXT);
     } else {
-        ui.text_colored(
-            colours.value.number,
-            format!("{ptr:#0X}", ptr = ptr as usize),
-        );
+        ui.text_colored(colours.value.number, format!("{ptr:#0X}", ptr = ptr as usize));
     }
 }

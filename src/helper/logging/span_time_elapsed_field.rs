@@ -4,7 +4,9 @@ use std::time::{Duration, Instant};
 
 /// A struct that can be used to time operations, and can be logged by [tracing] (just use % operator)
 ///
-/// Create this before the span, create the span with `timer=tracing::field::Empty`, and on exit of the span record the [SpanTimeElapsedField] `span.record("timer", my_span_time_elapsed_field_i_created_earlier);`
+/// Create this before the span, create the span with `timer=tracing::field::Empty`, and on exit of the span record the [SpanTimeElapsedField]:
+///
+/// `span.record("timer", my_span_time_elapsed_field_i_created_earlier);`
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SpanTimeElapsedField {
     pub start: Instant,
@@ -12,9 +14,7 @@ pub struct SpanTimeElapsedField {
 
 impl SpanTimeElapsedField {
     pub fn new() -> Self {
-        Self {
-            start: Instant::now(),
-        }
+        Self { start: Instant::now() }
     }
 
     pub fn elapsed(&self) -> Duration {

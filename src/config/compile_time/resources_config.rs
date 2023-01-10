@@ -11,5 +11,6 @@ lazy_static! {
     /// *  `base_font_name` (e.g. "Fira Code")
     /// *  `weight_name` (e.g. "Extra Bold")
     /// *  `file_extension` (e.g. "ttf")
-    pub static ref FONTS_FILE_NAME_EXTRACTOR : Regex = Regex::new(r"[\\/](?P<base_font_name>[\w \-_\.]*) \((?P<weight_name>[\w \-_\.]*)\)\.(?P<file_extension>\w+)").expect("compile-time regex constant should be valid");
+    pub static ref FONTS_FILE_NAME_EXTRACTOR : Regex = Regex::new(r"[\\/](?P<base_font_name>[\w \-_\.]*) \((?P<weight_name>[\w \-_\.]*)\)\.(?P<file_extension>\w+)")
+    .expect("compile-time regex constant should be valid");
 }

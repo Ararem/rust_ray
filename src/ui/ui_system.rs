@@ -36,7 +36,8 @@ pub(in crate::ui) struct UiManagers {
 /// In benchmarks, it was actually *much* faster that using any other collection types:
 /// * [VecDeque] - Wouldn't work because in order to plot, a slice `[f32]` needs to be passed, and this is very tricky to get from a [VecDeque]
 /// * [SliceDeque] - Worked almost identically to [Vec], but was orders of magnitudes slower (`~1 us` for [SliceDeque] vs `~22ns` for [Vec], at 120 frames stored).
-///     At extreme frame counts (`~12000` frames), it did gain a slight advantage (`1us` vs `1.4us`), indicating that [SliceDeque] has `O(1)` performance, but has a massive overhead comparatively to [Vec]
+/// At extreme frame counts (`~12000` frames), it did gain a slight advantage (`1us` vs `1.4us`),
+/// indicating that [SliceDeque] has `O(1)` performance, but has a massive overhead comparatively to [Vec]
 #[derive(Debug, Clone)]
 pub(in crate::ui) struct FrameInfo {
     /// ΔT values, in milliseconds

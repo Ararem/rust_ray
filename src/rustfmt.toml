@@ -1,5 +1,2 @@
 # rustfmt config file
-#max_width=300
-unstable_features = true
-error_on_line_overflow=true
-error_on_unformatted=true
+max_width=200 # I have a lot of long lines

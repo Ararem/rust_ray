@@ -34,19 +34,9 @@ pub(super) fn build_ui(
     _message_receiver: &BroadcastReceiver<ThreadMessage>,
 ) -> FallibleFn {
     //Makes it easier to separate out frames
-    trace!(
-        target: UI_TRACE_BUILD_INTERFACE,
-        "{0} BEGIN BUILD FRAME {frame} {0}",
-        str::repeat("=", 50),
-        frame = ui.frame_count()
-    );
+    trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} BEGIN BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = ui.frame_count());
     let timer = SpanTimeElapsedField::new();
-    let span_build_ui = trace_span!(
-        target: UI_TRACE_BUILD_INTERFACE,
-        "build_ui",
-        elapsed = Empty
-    )
-    .entered();
+    let span_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "build_ui", elapsed = Empty).entered();
 
     // refs to reduce clutter
     let show_demo_window = &mut data.windows.show_demo_window;
@@ -59,10 +49,7 @@ pub(super) fn build_ui(
         let main_menu_bar_token = match ui.begin_main_menu_bar() {
             None => {
                 //Menu bar isn't visible
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    "main menu bar not visible (should always be visible)"
-                );
+                warn!(target: GENERAL_WARNING_NON_FATAL, "main menu bar not visible (should always be visible)");
                 return Ok(()); //Skip drawing the main menu bar
             }
             Some(token) => token,
@@ -130,14 +117,8 @@ pub(super) fn build_ui(
                 "},
             )?;
             if exit {
-                debug!(
-                    target: UI_DEBUG_USER_INTERACTION,
-                    "user clicked quit menu item, sending quit signals"
-                );
-                send_message(
-                    Program(QuitAppNoError(QuitInteractionByUser)),
-                    message_sender,
-                )?;
+                debug!(target: UI_DEBUG_USER_INTERACTION, "user clicked quit menu item, sending quit signals");
+                send_message(Program(QuitAppNoError(QuitInteractionByUser)), message_sender)?;
                 debug!(target: UI_DEBUG_GENERAL, "ui should quit soon");
             }
 
@@ -149,14 +130,12 @@ pub(super) fn build_ui(
     })?; // end main menu
 
     if *show_demo_window {
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_demo_window")
-            .in_scope(|| ui.show_demo_window(show_demo_window));
+        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_demo_window").in_scope(|| ui.show_demo_window(show_demo_window));
     } else {
         trace!(target: UI_TRACE_BUILD_INTERFACE, "demo window hidden");
     }
     if *show_metrics_window {
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_metrics_window")
-            .in_scope(|| ui.show_metrics_window(show_metrics_window));
+        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "show_metrics_window").in_scope(|| ui.show_metrics_window(show_metrics_window));
     } else {
         trace!(target: UI_TRACE_BUILD_INTERFACE, "metrics window hidden");
     }
@@ -165,39 +144,14 @@ pub(super) fn build_ui(
     render_errors_popup(ui);
 
     trace_span!(target: UI_TRACE_USER_INPUT, "handle_input").in_scope(|| {
-        handle_shortcut(
-            ui,
-            "show demo window",
-            &keys.toggle_demo_window,
-            show_demo_window,
-        );
-        handle_shortcut(
-            ui,
-            "show config window",
-            &keys.toggle_config_window,
-            show_config_window,
-        );
-        handle_shortcut(
-            ui,
-            "show ui management window",
-            &keys.toggle_ui_managers_window,
-            show_ui_management_window,
-        );
-        handle_shortcut(
-            ui,
-            "show metrics window",
-            &keys.toggle_metrics_window,
-            show_metrics_window,
-        );
+        handle_shortcut(ui, "show demo window", &keys.toggle_demo_window, show_demo_window);
+        handle_shortcut(ui, "show config window", &keys.toggle_config_window, show_config_window);
+        handle_shortcut(ui, "show ui management window", &keys.toggle_ui_managers_window, show_ui_management_window);
+        handle_shortcut(ui, "show metrics window", &keys.toggle_metrics_window, show_metrics_window);
     });
 
     span_build_ui.record("elapsed", display(timer));
     span_build_ui.exit();
-    trace!(
-        target: UI_TRACE_BUILD_INTERFACE,
-        "{0} END BUILD FRAME {frame} {0}",
-        str::repeat("=", 50),
-        frame = ui.frame_count()
-    );
+    trace!(target: UI_TRACE_BUILD_INTERFACE, "{0} END BUILD FRAME {frame} {0}", str::repeat("=", 50), frame = ui.frame_count());
     Ok(())
 }

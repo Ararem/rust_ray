@@ -72,12 +72,7 @@ impl ThreadMessage {
             Program(_) => "program",
             Ui(_) => "ui",
         };
-        trace!(
-            target: THREAD_TRACE_MESSAGE_IGNORED,
-            ?self,
-            "ignoring message for {}",
-            target_thread
-        );
+        trace!(target: THREAD_TRACE_MESSAGE_IGNORED, ?self, "ignoring message for {}", target_thread);
     }
 }
 
@@ -95,8 +90,9 @@ pub(crate) fn error_recv_never_should_be_disconnected() -> Report {
     Report::msg(indoc::formatdoc! {
         "all message channel senders were dropped: [try_recv()] returned [{0:?}] \"{0}\"",
         ::std::sync::mpsc::TryRecvError::Disconnected
-    }).wrap_err("critical invalid state")
-      .note(indoc::formatdoc! {r"
+    })
+    .wrap_err("critical invalid state")
+    .note(indoc::formatdoc! {r"
             ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
             something probably went (badly) wrong somewhere else
     "})
@@ -115,8 +111,9 @@ pub(crate) fn error_send_never_should_be_disconnected() -> Report {
     Report::msg(indoc::formatdoc! {
         "all message channel senders were dropped: [try_recv()] returned [{0:?}] \"{0}\"",
         ::std::sync::mpsc::TryRecvError::Disconnected
-    }).wrap_err("critical invalid state")
-      .note(indoc::formatdoc! {r"
+    })
+    .wrap_err("critical invalid state")
+    .note(indoc::formatdoc! {r"
             ui/engine senders should only be dropped when exiting threads, and program sender should never be dropped.
             something probably went (badly) wrong somewhere else
     "})
@@ -135,12 +132,12 @@ pub(crate) fn error_never_should_be_full() -> Report {
     Report::msg(indoc::formatdoc! {
         "message channel was full: [try_send()] returned [{0:?}] \"{0}\"",
         ::std::sync::mpsc::TrySendError::Full(0) //argument is arbitrary
-    }).wrap_err("critical invalid state").note(
-        indoc::formatdoc! {r"
+    })
+    .wrap_err("critical invalid state")
+    .note(indoc::formatdoc! {r"
         message buffer should never be full - it has a high capacity and receivers should constantly be polling.
         most likely, one of the other threads crashed or deadlocked (and therefore can't receive)
-    "}
-    )
+    "})
 }
 
 /// Receives a [ThreadMessage] from a [BroadcastReceiver]
@@ -149,21 +146,13 @@ pub(crate) fn error_never_should_be_full() -> Report {
 /// `Ok(None)` => No messages waiting
 /// `Ok(Some(<message>))` => received a message
 /// `Err(<error>)` => Something bad happened. This cause should be considered fatal
-pub(crate) fn receive_message(
-    receiver: &BroadcastReceiver<ThreadMessage>,
-) -> eyre::Result<Option<ThreadMessage>> {
-    trace!(
-        target: THREAD_TRACE_MESSAGE_LOOP,
-        "message_receiver.try_recv()"
-    );
+pub(crate) fn receive_message(receiver: &BroadcastReceiver<ThreadMessage>) -> eyre::Result<Option<ThreadMessage>> {
+    trace!(target: THREAD_TRACE_MESSAGE_LOOP, "message_receiver.try_recv()");
     let maybe_message = receiver.try_recv();
     trace!(target: THREAD_TRACE_MESSAGE_LOOP, ?maybe_message);
     match maybe_message {
         Err(TryRecvError::Empty) => {
-            trace!(
-                target: THREAD_TRACE_MESSAGE_LOOP,
-                "no messages (Err::Empty)"
-            );
+            trace!(target: THREAD_TRACE_MESSAGE_LOOP, "no messages (Err::Empty)");
             Ok(None) // Exit the message loop, go into waiting
         }
         Err(TryRecvError::Disconnected) => Err(error_recv_never_should_be_disconnected()),
@@ -174,22 +163,17 @@ pub(crate) fn receive_message(
     }
 }
 
-pub(crate) fn send_message(
-    message: ThreadMessage,
-    sender: &BroadcastSender<ThreadMessage>,
-) -> FallibleFn {
+pub(crate) fn send_message(message: ThreadMessage, sender: &BroadcastSender<ThreadMessage>) -> FallibleFn {
     debug!(target: THREAD_DEBUG_MESSAGE_SEND, ?message);
     match sender.try_send(message) {
         Ok(()) => Ok(()),
 
         // Neither of these errors should happen ever, but better to be safe
         Err(Disconnected(_failed_message)) => {
-            return Err(error_recv_never_should_be_disconnected()
-                .section(format!("{_failed_message:?}").header("Message")));
+            return Err(error_recv_never_should_be_disconnected().section(format!("{_failed_message:?}").header("Message")));
         }
         Err(Full(_failed_message)) => {
-            return Err(error_never_should_be_full()
-                .section(format!("{_failed_message:?}").header("Message")));
+            return Err(error_never_should_be_full().section(format!("{_failed_message:?}").header("Message")));
         }
     }
 }

@@ -14,9 +14,7 @@ use std::ops::Deref;
 use tracing::warn;
 use tracing::{debug, debug_span, trace, trace_span};
 
-use crate::config::compile_time::resources_config::{
-    FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER,
-};
+use crate::config::compile_time::resources_config::{FONTS_FILE_NAME_EXTRACTOR, FONTS_FILE_PATH_FILTER};
 use crate::config::compile_time::ui_config::{MAX_FONT_SIZE, MIN_FONT_SIZE};
 use crate::config::read_config_value;
 use crate::helper::logging::event_targets::*;
@@ -42,8 +40,7 @@ pub struct FontManager {
 impl FontManager {
     /// Reloads the list of available fonts, from the resources folder (in the build directory)
     pub fn reload_list_from_resources(&mut self) -> FallibleFn {
-        let span_reload_fonts_list =
-            debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
+        let span_reload_fonts_list = debug_span!(target: RESOURCES_DEBUG_LOAD, "reload_fonts_list").entered();
 
         /*
         A bug I noticed is, since the font selection is kinda random, the font doesn't actually get updated when the list is reloaded.
@@ -52,15 +49,9 @@ impl FontManager {
         */
         self.dirty = true;
 
-        let fonts_directory_path =
-            get_main_resource_folder_path()?.join(read_config_value(|config| {
-                config.runtime.resources.fonts_path.clone()
-            }));
+        let fonts_directory_path = get_main_resource_folder_path()?.join(read_config_value(|config| config.runtime.resources.fonts_path.clone()));
 
-        debug!(
-            target: RESOURCES_DEBUG_LOAD,
-            "reloading fonts from resources folder {:?}", fonts_directory_path
-        );
+        debug!(target: RESOURCES_DEBUG_LOAD, "reloading fonts from resources folder {:?}", fonts_directory_path);
         let fonts_dir_content = dir::get_dir_content(&fonts_directory_path)
             .wrap_err("could not load fonts directory")
             .note(format!("Attempted to load from {:?}", fonts_directory_path))?;
@@ -79,7 +70,7 @@ impl FontManager {
         // First layer is [base font name]
         // Second layer contains [weight name] and font data
         let mut fonts: HashMap<&str, HashMap<&str, Vec<u8>>> = HashMap::new();
-        debug_span!(target: RESOURCES_DEBUG_LOAD, "iter_font_dir").in_scope(||
+        debug_span!(target: RESOURCES_DEBUG_LOAD, "iter_font_dir").in_scope(|| {
             for file_path in fonts_dir_content.files.iter() {
                 let span_internal_iter = trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "internal_iter", ?file_path).entered();
                 if !filter_regex.is_match(file_path) {
@@ -91,8 +82,7 @@ impl FontManager {
                 let mut file = match fs::File::open(file_path) {
                     Ok(file) => file,
                     Err(err) => {
-                        let report = Report::new(err)
-                            .wrap_err(format!("was not able to open font file at {file_path}"));
+                        let report = Report::new(err).wrap_err(format!("was not able to open font file at {file_path}"));
                         warn!(target: RESOURCES_WARNING_NON_FATAL, ?report);
                         continue;
                     }
@@ -102,9 +92,7 @@ impl FontManager {
                 match file.read_to_end(&mut font_data_buffer) {
                     Ok(_read) => {}
                     Err(error) => {
-                        let report = Report::new(error).wrap_err(format!(
-                            "could not read bytes from font file at {file_path}"
-                        ));
+                        let report = Report::new(error).wrap_err(format!("could not read bytes from font file at {file_path}"));
                         warn!(target: RESOURCES_WARNING_NON_FATAL, ?report);
                         continue;
                     }
@@ -113,13 +101,14 @@ impl FontManager {
                 // Extract font names from the file path using Regex
                 let mut base_font_name = "Unknown Fonts"; // Should be overwritten unless something goes wrong, this value is fallback
                 let mut weight_name = file_path.as_str(); // Should be overwritten unless something goes wrong, this value is fallback
-                // Try trim the file_path default value so it's not as long. Should always complete but just to be sure
+                                                          // Try trim the file_path default value so it's not as long. Should always complete but just to be sure
                 if let Some(pat) = fonts_directory_path.to_str() {
-                    weight_name = weight_name
-                        .trim_start_matches(pat)
-                        .trim_start_matches(['/', '\\']);
+                    weight_name = weight_name.trim_start_matches(pat).trim_start_matches(['/', '\\']);
                 } else {
-                    trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "could not trim file path: could not convert base resources path to valid  UTF-8 [&str]")
+                    trace!(
+                        target: FONT_MANAGER_TRACE_FONT_LOAD,
+                        "could not trim file path: could not convert base resources path to valid  UTF-8 [&str]"
+                    )
                 }
                 for capture in name_extractor_regex.captures_iter(file_path) {
                     if let Some(_match) = capture.name("base_font_name") {
@@ -130,37 +119,33 @@ impl FontManager {
                     }
                 }
 
-                let base_font_ref = fonts
-                    .entry(base_font_name)
-                    .or_insert_with_key(|key|
-                        {
-                            trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "inserting HashMap entry for base font {}", key);
-                            HashMap::new()
-                        });
+                let base_font_ref = fonts.entry(base_font_name).or_insert_with_key(|key| {
+                    trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "inserting HashMap entry for base font {}", key);
+                    HashMap::new()
+                });
 
                 trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, base_font_name, weight_name, "inserting font into map");
                 if let Some(old_data_buffer) = base_font_ref.insert(weight_name, font_data_buffer.clone()) {
                     let buffers_are_equal = old_data_buffer.eq(&font_data_buffer);
-                    warn!(target: RESOURCES_WARNING_NON_FATAL, "font entry already existed for {} @ {}, old {equal} new", base_font_name, weight_name, equal=if buffers_are_equal {"=="} else {"!="});
+                    warn!(
+                        target: RESOURCES_WARNING_NON_FATAL,
+                        "font entry already existed for {} @ {}, old {equal} new",
+                        base_font_name,
+                        weight_name,
+                        equal = if buffers_are_equal { "==" } else { "!=" }
+                    );
                 }
                 span_internal_iter.exit();
-            });
+            }
+        });
 
         // Now we have loaded file data, process into Font{} structs
-        trace!(
-            target: FONT_MANAGER_TRACE_FONT_LOAD,
-            "clearing self fonts list"
-        );
+        trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "clearing self fonts list");
         self.fonts.clear();
 
         debug_span!(target: RESOURCES_DEBUG_LOAD, "load_fonts").in_scope(|| {
             for font_entry in fonts {
-                let span_base_font_entry = trace_span!(
-                    target: FONT_MANAGER_TRACE_FONT_LOAD,
-                    "process_group",
-                    base_font = font_entry.0
-                )
-                .entered();
+                let span_base_font_entry = trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "process_group", base_font = font_entry.0).entered();
                 debug!(target: DATA_DEBUG_DUMP_OBJECT, ?font_entry);
                 //
                 let base_font_name = font_entry.0;
@@ -171,22 +156,15 @@ impl FontManager {
 
                 for weight_entry in font_entry.1 {
                     let weight_name = weight_entry.0;
-                    trace!(
-                        target: FONT_MANAGER_TRACE_FONT_LOAD,
-                        "processing font {base_font_name} weight {weight_name}"
-                    );
+                    trace!(target: FONT_MANAGER_TRACE_FONT_LOAD, "processing font {base_font_name} weight {weight_name}");
                     let data = weight_entry.1;
 
-                    let weight = FontWeight {
-                        name: weight_name.to_string(),
-                        data,
-                    };
+                    let weight = FontWeight { name: weight_name.to_string(), data };
                     font.weights.push(weight);
                 }
 
                 //Sort the fonts by their name
-                font.weights
-                    .sort_unstable_by(|w1, w2| w1.name.cmp(&w2.name));
+                font.weights.sort_unstable_by(|w1, w2| w1.name.cmp(&w2.name));
 
                 // Push the font once it's complete
                 self.fonts.push(font);
@@ -206,36 +184,35 @@ impl FontManager {
         index is 4, but list is now [4] (one font was removed)
         index isn't valid anymore, need to clamp to 3
         */
-        trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "validate_indices").in_scope(||
-            {
-                let font_index = &mut self.selected_font_index;
-                let fonts_len = self.fonts.len();
-                if fonts_len == 0 {
-                    warn!(target: GENERAL_WARNING_NON_FATAL, "font manager has no fonts after reloading");
-                    return; // Closure
-                }
-                if *font_index >= fonts_len {
-                    trace!(
-                        target: FONT_MANAGER_TRACE_FONT_LOAD,
-                        "had invalid font index: font_index ({font_index}) was >= fonts_len ({fonts_len}), clamping\nthis is fine, fonts list probably shrunk after reloading"
-                    );
-                    *font_index = fonts_len - 1;
-                }
+        trace_span!(target: FONT_MANAGER_TRACE_FONT_LOAD, "validate_indices").in_scope(|| {
+            let font_index = &mut self.selected_font_index;
+            let fonts_len = self.fonts.len();
+            if fonts_len == 0 {
+                warn!(target: GENERAL_WARNING_NON_FATAL, "font manager has no fonts after reloading");
+                return; // Closure
+            }
+            if *font_index >= fonts_len {
+                trace!(
+                    target: FONT_MANAGER_TRACE_FONT_LOAD,
+                    "had invalid font index: font_index ({font_index}) was >= fonts_len ({fonts_len}), clamping\nthis is fine, fonts list probably shrunk after reloading"
+                );
+                *font_index = fonts_len - 1;
+            }
 
-                let weight_index = &mut self.selected_weight_index;
-                let weights_len = self.fonts[*font_index].weights.len();
-                if weights_len == 0 {
-                    warn!(target: GENERAL_WARNING_NON_FATAL, "font manager has no weights for font {}", self.fonts[*font_index].name);
-                    return; // Closure
-                }
-                if *weight_index >= weights_len {
-                    trace!(
-                        target: FONT_MANAGER_TRACE_FONT_LOAD,
-                        "had invalid weight index: weight_index ({weight_index}) was >= weights_len ({weights_len}), clamping\nthis is fine, fonts list probably shrunk after reloading"
-                    );
-                    *weight_index = weights_len - 1;
-                }
-            });
+            let weight_index = &mut self.selected_weight_index;
+            let weights_len = self.fonts[*font_index].weights.len();
+            if weights_len == 0 {
+                warn!(target: GENERAL_WARNING_NON_FATAL, "font manager has no weights for font {}", self.fonts[*font_index].name);
+                return; // Closure
+            }
+            if *weight_index >= weights_len {
+                trace!(
+                    target: FONT_MANAGER_TRACE_FONT_LOAD,
+                    "had invalid weight index: weight_index ({weight_index}) was >= weights_len ({weights_len}), clamping\nthis is fine, fonts list probably shrunk after reloading"
+                );
+                *weight_index = weights_len - 1;
+            }
+        });
 
         span_reload_fonts_list.exit();
         Ok(())
@@ -302,12 +279,7 @@ impl FontManager {
         );
         debug!(target: DATA_DEBUG_DUMP_OBJECT, data = ?weight.data);
 
-        let full_name = format!(
-            "{name} - {weight} ({size}px)",
-            name = base_font.name,
-            weight = weight.name
-        )
-        .into();
+        let full_name = format!("{name} - {weight} ({size}px)", name = base_font.name, weight = weight.name).into();
         //TODO: What happens if a font file has invalid font data (or isn't a font file)
         let oversampling = read_config_value(|config| config.runtime.ui.font_oversampling);
         let font_id = font_atlas.add_font(&[FontSource::TtfData {
@@ -336,14 +308,12 @@ impl FontManager {
     pub fn get_font_id(&mut self) -> eyre::Result<&FontId> {
         return match &self.current_font {
             Some(font) => Ok(font),
-            None => Err(
-                Report::msg("could not get [FontId]: self.current_font was [None];")
-                    .note(formatdoc! {r"
+            None => Err(Report::msg("could not get [FontId]: self.current_font was [None];")
+                .note(formatdoc! {r"
                     `self.current_font` should be set when the font atlas is rebuilt.
                     It should be set by `rebuild_font_if_needed()`, so ensure that it gets called (before `get_font_id()`) and completes successfully
                     "})
-                    .suggestion("ensure the font and atlas are built by calling `rebuild_font_if_needed()` before attempting to get the font")
-            ),
+                .suggestion("ensure the font and atlas are built by calling `rebuild_font_if_needed()` before attempting to get the font")),
         };
     }
 }

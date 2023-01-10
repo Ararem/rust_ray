@@ -25,10 +25,7 @@ target!(
     Leave this off all the time. Like actually it's completely useless to enable it
 "
 );
-target!(
-    UI_DEBUG_USER_INTERACTION,
-    r"Event for when the user does something to the ui (but why would they want to do that?)"
-);
+target!(UI_DEBUG_USER_INTERACTION, r"Event for when the user does something to the ui (but why would they want to do that?)");
 target!(
     UI_TRACE_USER_INPUT,
     r"
@@ -45,32 +42,14 @@ target!(
 target!(UI_DEBUG_GENERAL, r"General debug events relating to the UI");
 
 // ===== Engine =====
-target!(
-    ENGINE_TRACE_GLOBAL_LOOP,
-    r"poll events when the engine does it's global loop"
-);
+target!(ENGINE_TRACE_GLOBAL_LOOP, r"poll events when the engine does it's global loop");
 
 // ===== Program/Main =====
-target!(
-    MAIN_DEBUG_GENERAL,
-    r#"main.rs general logs, like initialising something"#
-);
-target!(
-    PROGRAM_INFO_LIFECYCLE,
-    r#"program lifecycle events like "the app is starting" and "the app completed""#
-);
-target!(
-    PROGRAM_DEBUG_GENERAL,
-    r"general program events, initialising something"
-);
-target!(
-    PROGRAM_TRACE_THREAD_STATUS_POLL,
-    r"poll events when the program thread checks the status of all the other threads"
-);
-target!(
-    PROGRAM_TRACE_GLOBAL_LOOP,
-    r"poll events when the program does it's global loop"
-);
+target!(MAIN_DEBUG_GENERAL, r#"main.rs general logs, like initialising something"#);
+target!(PROGRAM_INFO_LIFECYCLE, r#"program lifecycle events like "the app is starting" and "the app completed""#);
+target!(PROGRAM_DEBUG_GENERAL, r"general program events, initialising something");
+target!(PROGRAM_TRACE_THREAD_STATUS_POLL, r"poll events when the program thread checks the status of all the other threads");
+target!(PROGRAM_TRACE_GLOBAL_LOOP, r"poll events when the program does it's global loop");
 
 // ===== Threads/Inter-thread communication =====
 target!(
@@ -85,10 +64,7 @@ target!(
     THREAD_DEBUG_MESSAGE_SEND,
     r"An event that is logged every time a inter-thread message is sent to another thread. not important unless debugging"
 );
-target!(
-    THREAD_DEBUG_GENERAL,
-    r"Event relating to inter-thread stuff, like barriers, thread spawns, and joining"
-);
+target!(THREAD_DEBUG_GENERAL, r"Event relating to inter-thread stuff, like barriers, thread spawns, and joining");
 target!(
     THREAD_DEBUG_MESSENGER_LIFETIME,
     r"
@@ -131,10 +107,7 @@ target!(
 );
 
 // ===== DATA/MEMORY =====
-target!(
-    DATA_DEBUG_DUMP_OBJECT,
-    r"a log event that dumps the value of some object or buffer"
-);
+target!(DATA_DEBUG_DUMP_OBJECT, r"a log event that dumps the value of some object or buffer");
 
 // ===== BAD THINGS =====
 target!(

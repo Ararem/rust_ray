@@ -14,8 +14,7 @@ impl UiItem for FontManager {
     /// Renders the font selector, and returns the selected font
     fn render(&mut self, ui: &Ui, mut visible: bool) -> FallibleFn {
         //TODO: Move the validation code out from the UI code, and put it before the visible check
-        let span_render_font_manager =
-            trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager").entered();
+        let span_render_font_manager = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_font_manager").entered();
         // NOTE: We could get away with a lot of this code, but it's safer to have it, and more informative when something happens
         visible &= ui.collapsing_header("Font Manager", TreeNodeFlags::empty());
         if !visible {
@@ -23,21 +22,13 @@ impl UiItem for FontManager {
             return Ok(());
         }
 
-        trace!(
-            target: UI_TRACE_BUILD_INTERFACE,
-            "[Button] reload fonts list"
-        );
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "[Button] reload fonts list");
         if ui.button("Reload fonts list") {
             match self.reload_list_from_resources() {
                 Ok(_) => info!(target: UI_DEBUG_GENERAL, "font list reloaded"),
                 Err(err) => {
-                    let report = err
-                        .wrap_err("could not reload fonts list from resources")
-                        .note("called manually by user in font manager UI");
-                    warn!(
-                        target: GENERAL_WARNING_NON_FATAL,
-                        report = format_report_display(&report)
-                    );
+                    let report = err.wrap_err("could not reload fonts list from resources").note("called manually by user in font manager UI");
+                    warn!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report));
                 }
             }
         }
@@ -52,14 +43,8 @@ impl UiItem for FontManager {
 
         if fonts_len == 0 {
             //Check we have at least one font, or else code further down fails (index out of bounds)
-            ui.text_colored(
-                read_config_value(|config| config.runtime.ui.colours.severity.warning),
-                "No fonts loaded",
-            );
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "exiting early: no fonts (`fonts_len==0`)"
-            );
+            ui.text_colored(read_config_value(|config| config.runtime.ui.colours.severity.warning), "No fonts loaded");
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "exiting early: no fonts (`fonts_len==0`)");
             return Ok(());
         }
         if *font_index >= fonts_len {
@@ -69,19 +54,12 @@ impl UiItem for FontManager {
              But better be safe
             */
             let clamped = fonts_len - 1;
-            warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                "font_index ({font_index}) was >= fonts.len() ({fonts_len}), clamping ({clamped})"
-            );
+            warn!(target: GENERAL_WARNING_NON_FATAL, "font_index ({font_index}) was >= fonts.len() ({fonts_len}), clamping ({clamped})");
             *font_index = clamped;
         }
         trace!(target: UI_TRACE_BUILD_INTERFACE, "[combo] font selector");
         if ui.combo("Font", font_index, fonts, |f| Borrowed(&f.name)) {
-            debug!(
-                target: UI_DEBUG_USER_INTERACTION,
-                "changed font to [{font_index}]: {font_name}",
-                font_name = fonts[*font_index].name
-            );
+            debug!(target: UI_DEBUG_USER_INTERACTION, "changed font to [{font_index}]: {font_name}", font_name = fonts[*font_index].name);
             *dirty = true;
         }
         trace!(target: UI_TRACE_BUILD_INTERFACE, "[tooltip] font selector");
@@ -96,24 +74,16 @@ impl UiItem for FontManager {
         let weights_len = weights.len();
 
         if weights_len == 0 {
-            ui.text_colored(
-                read_config_value(|config| config.runtime.ui.colours.severity.warning),
-                "(Bad) No weights loaded for the selected font.",
-            );
+            ui.text_colored(read_config_value(|config| config.runtime.ui.colours.severity.warning), "(Bad) No weights loaded for the selected font.");
             /*
              * The way it's done is by getting the font and weight name from font file, and then placing the file into nested hashmaps (`fonts[base_font].insert(weight)`).
              * We should never get an empty font, since the entry for a font only ever gets created when we have to insert a weight and don't have a parent font entry already
              * If we get to here, something has gone seriously wrong
              */
-            let report = Report::msg("had no weights loaded for the selected font").note("this *REALLY* shouldn't happen (due to the internals of font loading and creation)\nperhaps some errors happened when loading the fonts?");
-            error!(
-                target: GENERAL_WARNING_NON_FATAL,
-                report = format_report_display(&report)
-            );
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "exiting early: `weights.len() == 0`"
-            );
+            let report = Report::msg("had no weights loaded for the selected font")
+                .note("this *REALLY* shouldn't happen (due to the internals of font loading and creation)\nperhaps some errors happened when loading the fonts?");
+            error!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report));
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "exiting early: `weights.len() == 0`");
             return Ok(());
         }
         if *weight_index >= weights_len {
@@ -135,15 +105,9 @@ impl UiItem for FontManager {
             );
             *dirty = true;
         }
-        trace!(
-            target: UI_TRACE_BUILD_INTERFACE,
-            "[tooltip] weight selector"
-        );
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "[tooltip] weight selector");
         if ui.is_item_hovered() {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "[hovered] weight selector"
-            );
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "[hovered] weight selector");
             ui.tooltip_text("Customise the weight of the UI font (how bold it is)");
         }
 
@@ -151,22 +115,13 @@ impl UiItem for FontManager {
         let size = &mut self.selected_size;
         trace!(target: UI_TRACE_BUILD_INTERFACE, "[slider] font size");
         if ui.slider("Size (px)", MIN_FONT_SIZE, MAX_FONT_SIZE, size) {
-            trace!(
-                target: UI_DEBUG_USER_INTERACTION,
-                "changed font size to {size} px"
-            );
+            trace!(target: UI_DEBUG_USER_INTERACTION, "changed font size to {size} px");
             if *size < MIN_FONT_SIZE {
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    "font size ({size}) was < MIN_FONT_SIZE ({MIN_FONT_SIZE}), clamping"
-                );
+                warn!(target: GENERAL_WARNING_NON_FATAL, "font size ({size}) was < MIN_FONT_SIZE ({MIN_FONT_SIZE}), clamping");
                 *size = MIN_FONT_SIZE;
             }
             if *size > MAX_FONT_SIZE {
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    "font size ({size}) was > MAX_FONT_SIZE ({MAX_FONT_SIZE}), clamping"
-                );
+                warn!(target: GENERAL_WARNING_NON_FATAL, "font size ({size}) was > MAX_FONT_SIZE ({MAX_FONT_SIZE}), clamping");
                 *size = MAX_FONT_SIZE;
             }
             *dirty = true;

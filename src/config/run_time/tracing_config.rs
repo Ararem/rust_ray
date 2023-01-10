@@ -52,10 +52,7 @@ impl LogTargetFilter {
     /// Creates a filter that matches if the target starts with a specified string. The input can be regex
     /// Creates a new filter from a regex string
     pub fn new(val: &str, enabled: bool) -> LogTargetFilter {
-        LogTargetFilter {
-            target: val.to_string(),
-            enabled,
-        }
+        LogTargetFilter { target: val.to_string(), enabled }
     }
 }
 

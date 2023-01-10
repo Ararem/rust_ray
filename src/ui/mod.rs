@@ -50,22 +50,13 @@ pub(crate) fn ui_thread(
     message_sender: BroadcastSender<ThreadMessage>,
     message_receiver: BroadcastReceiver<ThreadMessage>,
 ) -> FallibleFn {
-    let span_ui_thread =
-        info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
+    let span_ui_thread = info_span!(target: THREAD_DEBUG_GENERAL, parent: None, "ui_thread").entered();
 
     {
-        let span_sync_thread_start =
-            debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start").entered();
-        trace!(
-            target: THREAD_DEBUG_GENERAL,
-            "waiting for {}",
-            name_of!(thread_start_barrier)
-        );
+        let span_sync_thread_start = debug_span!(target: THREAD_DEBUG_GENERAL, "sync_thread_start").entered();
+        trace!(target: THREAD_DEBUG_GENERAL, "waiting for {}", name_of!(thread_start_barrier));
         thread_start_barrier.wait();
-        trace!(
-            target: THREAD_DEBUG_GENERAL,
-            "wait complete, running ui thread"
-        );
+        trace!(target: THREAD_DEBUG_GENERAL, "wait complete, running ui thread");
         span_sync_thread_start.exit();
     }
 
@@ -73,21 +64,18 @@ pub(crate) fn ui_thread(
     Init ui
     If we fail here, it is considered a fatal error (an so the thread exits), since I don't have any good way of fixing the errors
     */
-    let system =
-        init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str())
-            .wrap_err("failed while initialising ui system")?;
+    let system = init_ui_system(format!("{} v{} - {}", PROJECT_NAME, PKG_VERSION, BUILD_TARGET).as_str()).wrap_err("failed while initialising ui system")?;
 
     // Pulling out the separate variables is the only way I found to avoid getting "already borrowed" errors everywhere
     // Probably because I was borrowing the whole struct when I only needed one field of it
     let UiSystem {
-        backend:
-            UiBackend {
-                mut display,
-                mut event_loop,
-                mut imgui_context,
-                mut platform,
-                mut renderer,
-            },
+        backend: UiBackend {
+            mut display,
+            mut event_loop,
+            mut imgui_context,
+            mut platform,
+            mut renderer,
+        },
         mut managers,
     } = system;
 
@@ -103,8 +91,7 @@ pub(crate) fn ui_thread(
     let mut last_frame = Instant::now();
 
     debug!(target: UI_DEBUG_GENERAL, "running event loop");
-    let span_event_loop_internal =
-        debug_span!(target: UI_DEBUG_GENERAL, "event_loop_internal").entered();
+    let span_event_loop_internal = debug_span!(target: UI_DEBUG_GENERAL, "event_loop_internal").entered();
     event_loop.run_return(|event, _window_target, control_flow| {
         /// Macro that makes the event loop exit with a specified value
         macro_rules! event_loop_return {
@@ -127,11 +114,7 @@ pub(crate) fn ui_thread(
                 let delta = last_frame - old_last_frame;
                 imgui_context.io_mut().update_delta_time(delta);
 
-                trace!(
-                    target: UI_TRACE_EVENT_LOOP,
-                    "updated deltaT: {}",
-                    humantime::format_duration(delta)
-                );
+                trace!(target: UI_TRACE_EVENT_LOOP, "updated deltaT: {}", humantime::format_duration(delta));
             }
 
             glutin::event::Event::MainEventsCleared => {
@@ -158,7 +141,7 @@ pub(crate) fn ui_thread(
                 let mut program_data = {
                     const MUTEX_LOCK_RETRY_DELAY: Duration = Duration::from_millis(1);
 
-                    let span_obtain_data = trace_span!(target:THREAD_TRACE_MUTEX_SYNC, "obtain_data", ?MUTEX_LOCK_RETRY_DELAY, tries = Empty, time_taken_to_obtain = Empty).entered();
+                    let span_obtain_data = trace_span!(target: THREAD_TRACE_MUTEX_SYNC, "obtain_data", ?MUTEX_LOCK_RETRY_DELAY, tries = Empty, time_taken_to_obtain = Empty).entered();
 
                     let mut tries = 0;
                     let start = Instant::now();
@@ -167,7 +150,11 @@ pub(crate) fn ui_thread(
                         match program_data_wrapped.try_lock() {
                             //Shouldn't get here, since the engine/main threads shouldn't panic (and the app should quit if they do)
                             Err(TryLockError::Poisoned(_)) => {
-                                let report = Report::msg("program data mutex poisoned").note("another thread panicked while holding the lock").suggestion("the error did not occur here (and has nothing to do with here), check the other threads and their logs").wrap_err("could not lock program data mutex").wrap_err("could not obtain program data");
+                                let report = Report::msg("program data mutex poisoned")
+                                    .note("another thread panicked while holding the lock")
+                                    .suggestion("the error did not occur here (and has nothing to do with here), check the other threads and their logs")
+                                    .wrap_err("could not lock program data mutex")
+                                    .wrap_err("could not obtain program data");
                                 error!(target: DOMINO_EFFECT_FAILURE, ?report);
                                 event_loop_return!(Err(report));
                             }
@@ -189,10 +176,14 @@ pub(crate) fn ui_thread(
                     program_data
                 };
 
-
                 // Makes it easier to separate out frames
                 // Add 1 to the frame count, since "technically" we're in the previous frame, as we haven't started the next one yet (call `new_frame()`)
-                trace!(target: UI_TRACE_RENDER, "{0} BEGIN RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count() + 1);
+                trace!(
+                    target: UI_TRACE_RENDER,
+                    "{0} BEGIN RENDER FRAME {frame} {0}",
+                    str::repeat("=", 50),
+                    frame = imgui_context.frame_count() + 1
+                );
 
                 let render_frame_result = outer_render_a_frame(
                     &mut display,
@@ -202,15 +193,13 @@ pub(crate) fn ui_thread(
                     &mut managers,
                     &mut program_data.ui_data,
                     &message_sender,
-                    &message_receiver
+                    &message_receiver,
                 );
 
                 trace!(target: UI_TRACE_RENDER, "{0} END RENDER FRAME {frame} {0}", str::repeat("=", 50), frame = imgui_context.frame_count());
 
-
                 if let Err(error) = render_frame_result {
-                    let error = error.wrap_err("errored while rendering frame")
-                                     .note("the program should exit");
+                    let error = error.wrap_err("errored while rendering frame").note("the program should exit");
                     error!(target: GENERAL_ERROR_FATAL, ?error);
                     event_loop_return!(Err(error));
                 }
@@ -232,7 +221,7 @@ pub(crate) fn ui_thread(
                     match message_sender.try_send(message) {
                         Ok(()) => {
                             // We have signalled the thread, wait till the next loop when the main thread wants us to exit
-                            debug!(target:THREAD_DEBUG_MESSAGE_SEND, "program thread signalled, should exit soon");
+                            debug!(target: THREAD_DEBUG_MESSAGE_SEND, "program thread signalled, should exit soon");
                             debug!(target: UI_DEBUG_GENERAL, "see you on the other side!");
                         }
 
@@ -268,15 +257,9 @@ pub(crate) fn ui_thread(
     // If we get to here, it's time to exit the thread and shutdown
     info!(target: THREAD_DEBUG_GENERAL, "ui thread exiting");
 
-    trace!(
-        target: THREAD_DEBUG_MESSENGER_LIFETIME,
-        "unsubscribing message receiver"
-    );
+    trace!(target: THREAD_DEBUG_MESSENGER_LIFETIME, "unsubscribing message receiver");
     message_receiver.unsubscribe();
-    trace!(
-        target: THREAD_DEBUG_MESSENGER_LIFETIME,
-        "unsubscribing message sender"
-    );
+    trace!(target: THREAD_DEBUG_MESSENGER_LIFETIME, "unsubscribing message sender");
     message_sender.unsubscribe();
 
     debug!(target: THREAD_DEBUG_GENERAL, "ui thread done");
@@ -312,38 +295,22 @@ fn outer_render_a_frame(
         match managers.font_manager.rebuild_font_if_needed(fonts) {
             Err(report) => {
                 let report = report.wrap_err("font manager was not able to rebuild font");
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    report = format_report_display(&report)
-                );
+                warn!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report));
             }
             // Font atlas was rebuilt
             Ok(true) => {
-                trace!(
-                    target: UI_TRACE_RENDER,
-                    "font was rebuilt, reloading renderer texture"
-                );
+                trace!(target: UI_TRACE_RENDER, "font was rebuilt, reloading renderer texture");
                 let result = renderer.reload_font_texture(imgui_context);
                 match result {
-                    Ok(()) => trace!(
-                        target: UI_TRACE_RENDER,
-                        "renderer font texture reloaded successfully"
-                    ),
+                    Ok(()) => trace!(target: UI_TRACE_RENDER, "renderer font texture reloaded successfully"),
                     Err(err) => {
-                        let report =
-                            Report::new(err).wrap_err("renderer could not reload font texture");
-                        warn!(
-                            target: GENERAL_WARNING_NON_FATAL,
-                            report = format_report_display(&report)
-                        );
+                        let report = Report::new(err).wrap_err("renderer could not reload font texture");
+                        warn!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report));
                     }
                 }
             }
             Ok(false) => {
-                trace!(
-                    target: UI_TRACE_RENDER,
-                    "font not rebuilt (probably not dirty)"
-                )
+                trace!(target: UI_TRACE_RENDER, "font not rebuilt (probably not dirty)")
             }
         }
     });
@@ -354,53 +321,34 @@ fn outer_render_a_frame(
     trace!(target: UI_TRACE_RENDER, new_frame=?ui);
     //Build the UI
     {
-        let span_outer_build_ui =
-            trace_span!(target: UI_TRACE_BUILD_INTERFACE, "outer_build_ui").entered();
+        let span_outer_build_ui = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "outer_build_ui").entered();
         // Try to set our custom font
-        let maybe_font_token = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "apply_custom_font")
-            .in_scope(|| match managers.font_manager.get_font_id() {
-                Err(report) => {
-                    let report = report.wrap_err("font manager failed to return font");
-                    warn!(
-                        target: GENERAL_WARNING_NON_FATAL,
-                        report = format_report_display(&report)
-                    );
-                    trace!(
-                        target: UI_TRACE_BUILD_INTERFACE,
-                        "could not get custom font"
-                    );
-                    None
-                }
-                Ok(font_id) => {
-                    trace!(
-                        target: UI_TRACE_BUILD_INTERFACE,
-                        ?font_id,
-                        "got custom font, applying"
-                    );
-                    Some(ui.push_font(*font_id))
-                }
-            });
+        let maybe_font_token = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "apply_custom_font").in_scope(|| match managers.font_manager.get_font_id() {
+            Err(report) => {
+                let report = report.wrap_err("font manager failed to return font");
+                warn!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report));
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "could not get custom font");
+                None
+            }
+            Ok(font_id) => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, ?font_id, "got custom font, applying");
+                Some(ui.push_font(*font_id))
+            }
+        });
 
-        let main_window_flags =
-            // No borders etc for top-level window
-            WindowFlags::NO_DECORATION
-                | WindowFlags::NO_MOVE
-                // Show menu bar
-                | WindowFlags::MENU_BAR
-                // Don't raise window on focus (as it'll clobber floating windows)
-                | WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS | WindowFlags::NO_NAV_FOCUS
-                // Don't want the dock area's parent to be dockable!
-                | WindowFlags::NO_DOCKING;
+        let mut main_window_flags = WindowFlags::empty();
+        main_window_flags |= WindowFlags::NO_DECORATION; // No borders etc for top-level window
+        main_window_flags |= WindowFlags::NO_MOVE; // Don't allow the window to be moved (should always cover full screen)
+        main_window_flags |= WindowFlags::MENU_BAR; // Show menu bar
+        main_window_flags |= WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS | WindowFlags::NO_NAV_FOCUS; // Don't raise window on focus (as it'll clobber floating windows)
+        main_window_flags |= WindowFlags::NO_DOCKING; // Don't want the dock area's parent to be dockable!
+
         let main_window_padding = StyleVar::WindowPadding([0.0, 0.0]);
         let main_window_position = [0.0, 0.0];
         let main_window_size = ui.io().display_size;
         let main_window_name = "Main Window";
 
-        trace!(
-            target: UI_TRACE_BUILD_INTERFACE,
-            ?main_window_padding,
-            "push window padding"
-        );
+        trace!(target: UI_TRACE_BUILD_INTERFACE, ?main_window_padding, "push window padding");
         let window_padding_token = ui.push_style_var(main_window_padding);
         trace!(
             target: UI_TRACE_BUILD_INTERFACE,
@@ -424,8 +372,7 @@ fn outer_render_a_frame(
         let docking_area = UiDockingArea {};
         let _dock_node = docking_area.dockspace("Main Dock Area");
 
-        build_ui(ui, managers, ui_data, message_sender, message_receiver)
-            .wrap_err("building ui failed")?;
+        build_ui(ui, managers, ui_data, message_sender, message_receiver).wrap_err("building ui failed")?;
 
         // Technically we should only build the UI if [maybe_window_token] is [Some] ([None] means the window is hidden)
         // The window should never be hidden though, so this is a non-issue and we ignore it
@@ -433,20 +380,14 @@ fn outer_render_a_frame(
             trace!(target: UI_TRACE_BUILD_INTERFACE, "end main window");
             token.end();
         } else {
-            warn!(
-                target: GENERAL_WARNING_NON_FATAL,
-                "ui main window is hidden (should always be visible)"
-            );
+            warn!(target: GENERAL_WARNING_NON_FATAL, "ui main window is hidden (should always be visible)");
         }
 
         if let Some(token) = maybe_font_token {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "pop custom font token");
             token.pop();
         } else {
-            trace!(
-                target: UI_TRACE_BUILD_INTERFACE,
-                "no custom font token to pop"
-            );
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "no custom font token to pop");
         }
 
         span_outer_build_ui.exit();
@@ -456,37 +397,20 @@ fn outer_render_a_frame(
     {
         let span_draw_frame = trace_span!(target: UI_TRACE_RENDER, "draw_frame").entered();
         let gl_window = display.gl_window();
-        trace!(
-            target: UI_TRACE_RENDER,
-            "start drawing frame to backbuffer: `display.draw()`"
-        );
+        trace!(target: UI_TRACE_RENDER, "start drawing frame to backbuffer: `display.draw()`");
         let mut target = display.draw();
-        trace!(
-            target: UI_TRACE_RENDER,
-            "clearing buffer: `target.clear_color_srgb()`"
-        );
+        trace!(target: UI_TRACE_RENDER, "clearing buffer: `target.clear_color_srgb()`");
         target.clear_color_srgb(0.0, 0.0, 0.0, 0.0); //Clear background so we don't get any leftovers from previous frames
 
         // Render our imgui frame now we've written to it
-        trace!(
-            target: UI_TRACE_RENDER,
-            "preparing platform for render: `platform.prepare_render()`"
-        );
+        trace!(target: UI_TRACE_RENDER, "preparing platform for render: `platform.prepare_render()`");
         platform.prepare_render(ui, gl_window.window());
-        trace!(
-            target: UI_TRACE_RENDER,
-            "rendering imgui frame: `imgui_context.render()`"
-        );
+        trace!(target: UI_TRACE_RENDER, "rendering imgui frame: `imgui_context.render()`");
         let draw_data = imgui_context.render();
 
         trace!(target: UI_TRACE_RENDER, "gl render: `renderer.render()`");
-        renderer
-            .render(&mut target, draw_data)
-            .wrap_err("could not render draw data")?;
-        trace!(
-            target: UI_TRACE_RENDER,
-            "swapping buffers: `target.finish()`"
-        );
+        renderer.render(&mut target, draw_data).wrap_err("could not render draw data")?;
+        trace!(target: UI_TRACE_RENDER, "swapping buffers: `target.finish()`");
         target.finish().wrap_err("failed to swap buffers")?;
 
         trace!(target: UI_TRACE_RENDER, "render complete");
@@ -504,15 +428,8 @@ fn outer_render_a_frame(
 /// # Return Value
 /// [None] - Do nothing
 /// [Some<T>] - UI thread main function should return the value of type T (either [Err()] or [Ok()])
-fn process_messages_with_return(
-    _message_sender: &BroadcastSender<ThreadMessage>,
-    message_receiver: &BroadcastReceiver<ThreadMessage>,
-) -> Option<FallibleFn> {
-    let span_process_messages = trace_span!(
-        target: THREAD_TRACE_MESSAGE_LOOP,
-        name_of!(process_messages_with_return)
-    )
-    .entered();
+fn process_messages_with_return(_message_sender: &BroadcastSender<ThreadMessage>, message_receiver: &BroadcastReceiver<ThreadMessage>) -> Option<FallibleFn> {
+    let span_process_messages = trace_span!(target: THREAD_TRACE_MESSAGE_LOOP, name_of!(process_messages_with_return)).entered();
     // Loops until [message_receiver] is empty (tries to 'flush' out all messages)
     'process_messages: loop {
         match receive_message(message_receiver) {
@@ -527,17 +444,10 @@ fn process_messages_with_return(
                         continue 'process_messages;
                     }
                     Ui(ui_message) => {
-                        debug!(
-                            target: THREAD_DEBUG_MESSAGE_RECEIVED,
-                            ?ui_message,
-                            "got ui message"
-                        );
+                        debug!(target: THREAD_DEBUG_MESSAGE_RECEIVED, ?ui_message, "got ui message");
                         return match ui_message {
                             UiThreadMessage::ExitUiThread => {
-                                debug!(
-                                    target: THREAD_DEBUG_GENERAL,
-                                    "got exit message for Ui thread"
-                                );
+                                debug!(target: THREAD_DEBUG_GENERAL, "got exit message for Ui thread");
                                 Some(Ok(())) //Ui thread should return with Ok
                             }
                         };
@@ -570,118 +480,72 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     let title = title.to_owned();
     debug!(target: UI_DEBUG_GENERAL, title);
 
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        "creating [winit] event loop with [any_thread]=`true`"
-    );
+    debug!(target: UI_DEBUG_GENERAL, "creating [winit] event loop with [any_thread]=`true`");
     event_loop = EventLoopBuilder::with_any_thread(&mut EventLoopBuilder::new(), true).build();
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?event_loop,
-        "[winit] event loop created"
-    );
+    debug!(target: UI_DEBUG_GENERAL, ?event_loop, "[winit] event loop created");
 
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        "creating [glutin] context builder"
-    );
+    debug!(target: UI_DEBUG_GENERAL, "creating [glutin] context builder");
     let glutin_context_builder = glutin::ContextBuilder::new() //TODO: Configure
         .with_vsync(config.vsync)
         .with_hardware_acceleration(config.hardware_acceleration)
         .with_srgb(true)
         .with_multisampling(config.multisampling);
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?glutin_context_builder,
-        "created [glutin] context builder"
-    );
+    debug!(target: UI_DEBUG_GENERAL, ?glutin_context_builder, "created [glutin] context builder");
 
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] window builder");
     let window_builder = WindowBuilder::new()
         .with_title(title)
         .with_inner_size(config.default_window_size)
         .with_maximized(config.start_maximised);
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?window_builder,
-        "created [winit] window builder"
-    );
+    debug!(target: UI_DEBUG_GENERAL, ?window_builder, "created [winit] window builder");
     //TODO: Configure
     debug!(target: UI_DEBUG_GENERAL, "creating [glium] display");
     let gl_display: Display = Display::new(window_builder, glutin_context_builder, &event_loop)
         .wrap_err("could not initialise display")
-        .note(format!("if the error is [NoAvailablePixelFormat] (`{}`), try checking the [glutin::ContextBuilder] settings: vsync, hardware acceleration and srgb may not be a compatible combination on your system", NoAvailablePixelFormat))?;
+        .note(format!(
+        "if the error is [NoAvailablePixelFormat] (`{}`), try checking the [glutin::ContextBuilder] settings: vsync, hardware acceleration and srgb may not be a compatible combination on your system",
+        NoAvailablePixelFormat
+    ))?;
     debug!(target: UI_DEBUG_GENERAL, display=?gl_display, "created [glium] display");
 
     debug!(target: UI_DEBUG_GENERAL, "creating [imgui] context");
     imgui_context = Context::create();
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?imgui_context,
-        "created [imgui] context"
-    );
+    debug!(target: UI_DEBUG_GENERAL, ?imgui_context, "created [imgui] context");
 
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        "setting DOCKING_ENABLE flag for [imgui]"
-    );
+    debug!(target: UI_DEBUG_GENERAL, "setting DOCKING_ENABLE flag for [imgui]");
     imgui_context.io_mut().config_flags |= imgui::ConfigFlags::DOCKING_ENABLE;
     debug!(target: UI_DEBUG_GENERAL, config_flags=?imgui_context.io().config_flags);
 
-    let font_manager =
-        debug_span!(target: UI_DEBUG_GENERAL, "create_font_manager").in_scope(|| {
-            let mut font_manager = FontManager::new().wrap_err("failed to create font manager")?;
-            debug!(target: UI_DEBUG_GENERAL, "loading font manager fonts list"); //Need to call it now or else we don't have any fonts loaded and the manager craps itself later
-            font_manager.reload_list_from_resources()?;
-            debug!(
-                target: UI_DEBUG_GENERAL,
-                ?font_manager,
-                "created font manager"
-            );
-            eyre::Result::<FontManager>::Ok(font_manager)
-        })?;
+    let font_manager = debug_span!(target: UI_DEBUG_GENERAL, "create_font_manager").in_scope(|| {
+        let mut font_manager = FontManager::new().wrap_err("failed to create font manager")?;
+        debug!(target: UI_DEBUG_GENERAL, "loading font manager fonts list"); //Need to call it now or else we don't have any fonts loaded and the manager craps itself later
+        font_manager.reload_list_from_resources()?;
+        debug!(target: UI_DEBUG_GENERAL, ?font_manager, "created font manager");
+        eyre::Result::<FontManager>::Ok(font_manager)
+    })?;
 
     //TODO: High DPI setting
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] platform");
     platform = WinitPlatform::init(&mut imgui_context);
-    debug!(
-        target: UI_DEBUG_GENERAL,
-        ?platform,
-        "created [winit] platform"
-    );
+    debug!(target: UI_DEBUG_GENERAL, ?platform, "created [winit] platform");
 
     debug!(target: UI_DEBUG_GENERAL, "attaching window to platform");
-    platform.attach_window(
-        imgui_context.io_mut(),
-        gl_display.gl_window().window(),
-        HiDpiMode::Default,
-    );
+    platform.attach_window(imgui_context.io_mut(), gl_display.gl_window().window(), HiDpiMode::Default);
     debug!(target: UI_DEBUG_GENERAL, "attached window to platform");
 
     debug!(target: UI_DEBUG_GENERAL, "creating [glium] renderer");
-    renderer =
-        Renderer::init(&mut imgui_context, &gl_display).wrap_err("failed to create renderer")?;
+    renderer = Renderer::init(&mut imgui_context, &gl_display).wrap_err("failed to create renderer")?;
     debug!(target: UI_DEBUG_GENERAL, "created [glium] renderer");
 
-    debug_span!(target: UI_DEBUG_GENERAL, "clipboard_init").in_scope(|| {
-        match clipboard_integration::clipboard_init() {
-            Ok(clipboard_backend) => {
-                debug!(
-                    target: UI_DEBUG_GENERAL,
-                    ?clipboard_backend,
-                    "have clipboard support"
-                );
-                imgui_context.set_clipboard_backend(clipboard_backend);
-                debug!(target: UI_DEBUG_GENERAL, "clipboard backend set");
-            }
-            Err(report) => {
-                let report = report.wrap_err("could not initialise clipboard");
-                warn!(
-                    target: GENERAL_WARNING_NON_FATAL,
-                    report = format_report_display(&report),
-                    "could not init clipboard"
-                );
-            }
+    debug_span!(target: UI_DEBUG_GENERAL, "clipboard_init").in_scope(|| match clipboard_integration::clipboard_init() {
+        Ok(clipboard_backend) => {
+            debug!(target: UI_DEBUG_GENERAL, ?clipboard_backend, "have clipboard support");
+            imgui_context.set_clipboard_backend(clipboard_backend);
+            debug!(target: UI_DEBUG_GENERAL, "clipboard backend set");
+        }
+        Err(report) => {
+            let report = report.wrap_err("could not initialise clipboard");
+            warn!(target: GENERAL_WARNING_NON_FATAL, report = format_report_display(&report), "could not init clipboard");
         }
     });
 
