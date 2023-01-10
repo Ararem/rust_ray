@@ -3,7 +3,7 @@ use crate::config::run_time::RuntimeAppConfig;
 use crate::config::{load_config_from_disk, read_config_value};
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_report_display;
-use crate::ui::build_ui_impl::shared::error_display::display_eyre_report;
+use crate::ui::build_ui_impl::shared::error_display::{an_error_occurred, display_eyre_report};
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
 use color_eyre::Report;
@@ -18,16 +18,10 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
         return Ok(());
     }
 
-    unsafe {
         trace!(
             target: UI_TRACE_BUILD_INTERFACE,
             "[Button] Reload From Disk"
         );
-
-        // I need this to be shared across frames somehow, so i have to make it static mut :(
-        // The way this is written is weird and I don't like it, but I'm constrained by ImGUI and how it wants it's functions called
-        static mut LOAD_CONFIG_ERROR: Option<Report> = None;
-        const MODAL_NAME: &str = "Could not reload from disk";
 
         if ui.button("Reload From Disk") {
             debug!(
@@ -41,51 +35,9 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
                     report = format_report_display(&report),
                     "could not load config from disk"
                 );
-                ui.open_popup(MODAL_NAME);
-                LOAD_CONFIG_ERROR = Some(report);
+               an_error_occurred(report);
             }
         }
-
-        trace_span!(target: UI_TRACE_BUILD_INTERFACE, "config_error_modal").in_scope(||{
-        // If we have an error, its modal time....
-        // Also demonstrate passing a bool, this will create a regular close button which
-        // will close the popup. Note that the visibility state of popups is owned by imgui, so the input value
-        // of the bool actually doesn't matter here.
-        let mut opened_sesame = true;
-        let maybe_token = ui.modal_popup_config(MODAL_NAME).opened(&mut opened_sesame).begin_popup();
-        match maybe_token {
-            None => {
-                // Modal closed, clear the current error
-                LOAD_CONFIG_ERROR = None;
-                trace!(
-                    target: UI_TRACE_BUILD_INTERFACE,
-                    "modal not visible"
-                );
-            }
-            Some(token) => {
-                if let Some(ref report) = LOAD_CONFIG_ERROR {
-                    trace!(target: UI_TRACE_BUILD_INTERFACE, "displaying error");
-                    display_eyre_report(ui, report);
-                } else {
-                    trace!(target: UI_TRACE_BUILD_INTERFACE, "don't have a config error!?!?");
-                    warn!(target: GENERAL_WARNING_NON_FATAL, "config error modal was opened but we don't have an error to display. this probably shouldn't have happened");
-                    ui.text_colored(
-                        read_config_value(|config| config.runtime.ui.colours.severity.warning),
-                        "This popup shouldn't be visible, sorry about that. Normally it would show you an error that happened with reloading the config, but we don't have any error to display (yay)",
-                        );
-                    ui.close_current_popup();
-                }
-
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "Close button");
-                ui.spacing();
-                if ui.button("Close") {
-                    debug!(target: UI_DEBUG_USER_INTERACTION, "[Button] Pressed Close config error modal");
-                    ui.close_current_popup();
-                }
-                token.end();
-            }
-        };});
-    }
 
     span_render_config.exit();
     Ok(())

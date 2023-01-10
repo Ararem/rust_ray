@@ -18,9 +18,113 @@ use imgui::{Condition, TableFlags, TreeNodeId, Ui};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::ffi::c_void;
-use tracing::{trace, trace_span, warn, Metadata};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Mutex;
+use tracing::{debug, trace, trace_span, warn, Metadata};
 use tracing_error::SpanTraceStatus;
 
+lazy_static! {
+    /// Vector of errors we are currently displaying
+    static ref ERRORS: Mutex<Vec<Report>> = Mutex::new(Vec::default());
+}
+/// Atomic (because it's static) boolean
+static SHOW_ERRORS_POPUP: AtomicBool = AtomicBool::new(false);
+
+/// Call this function whenever an error occurs (only call once) and you want to display the error
+pub fn an_error_occurred(report: Report) {
+    let mut errors_vec = match ERRORS.lock() {
+        Ok(lock) => lock,
+        Err(err) => {
+            warn!(
+                target: GENERAL_WARNING_NON_FATAL,
+                "errors Vec mutex was poisoned by some other thread"
+            );
+            err.into_inner()
+        }
+    };
+    errors_vec.push(report);
+    SHOW_ERRORS_POPUP.store(true, Relaxed);
+}
+
+pub fn render_errors_popup(ui: &Ui) {
+    const MODAL_NAME: &str = "Error(s)";
+
+    // Open the popup if we need to
+    // This is because ImGui owns the popups, not us
+    if SHOW_ERRORS_POPUP.swap(false, Relaxed) {
+        ui.open_popup(MODAL_NAME);
+    }
+
+    trace_span!(target: UI_TRACE_BUILD_INTERFACE, "error_modal").in_scope(||{
+        // If we have an error, its modal time....
+        // Also demonstrate passing a bool, this will create a regular close button which
+        // will close the popup. Note that the visibility state of popups is owned by imgui, so the input value
+        // of the bool actually doesn't matter here.
+        let mut opened_sesame = true;
+        let maybe_token = ui.modal_popup_config(MODAL_NAME).opened(&mut opened_sesame).begin_popup();
+        let mut errors_vec = match ERRORS.lock() {
+            Ok(lock) => lock,
+            Err(err) => {
+                warn!(
+                target: GENERAL_WARNING_NON_FATAL,
+                "errors Vec mutex was poisoned by some other thread"
+            );
+                err.into_inner()
+            }
+        };
+        let colours = read_config_value(|config| config.runtime.ui.colours);
+        match maybe_token {
+            None => {
+                // Modal closed, clear the current error
+                errors_vec.clear();
+                trace!(
+                    target: UI_TRACE_BUILD_INTERFACE,
+                    "errors modal not visible"
+                );
+            }
+            Some(token) => {
+
+                if errors_vec.is_empty(){
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "don't have any errors but errors modal is open!?!?");
+                    warn!(target: GENERAL_WARNING_NON_FATAL, "error modal was opened but we don't have an error to display. this probably shouldn't have happened");
+                    ui.text_colored(
+                        colours.severity.warning,
+                        "This popup shouldn't be visible, sorry about that. Normally it would show you an error that happened with reloading the config, but we don't have any error to display (yay)",
+                    );
+                    ui.close_current_popup();
+                    return;
+                }
+
+                // This is wacky, but I need to remove elements while iterating over them
+                // Can't use a second vec and check for equality later, since `Report` doesn't implement Equals
+                // So gotta do this wacky thing
+                let mut first_item = true;
+                errors_vec.retain_mut(|report| {
+                    if !first_item{
+                        ui.separator();
+                        ui.separator();
+                    }
+                    first_item = false;
+                    let _id = ui.push_id_ptr(report); // So the button doesn't get shared across all errors cause the id is the same
+                    display_eyre_report(ui, report);
+                    !ui.button("Hide Error")
+                });
+
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "close button");
+                ui.spacing();
+                if ui.button("Close") {
+                    debug!(target: UI_DEBUG_USER_INTERACTION, "[Button] Pressed Close Error modal");
+                    ui.close_current_popup();
+                }
+                token.end();
+            }
+        };});
+}
+
+/// Function that displays an [eyre::Report] in [imgui]
+///
+/// This doesn't create any windows or popups, just renders the error information.
 pub fn display_eyre_report(ui: &Ui, report: &Report) {
     /*
     A note on how I've structured this:
