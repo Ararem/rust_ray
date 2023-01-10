@@ -59,7 +59,7 @@ These are the default fonts provided with the application. They are copied to th
 | [`fs_extra`][fs_extra]                                                                                   | Extends the standard library support for filesystem stuff                                                                                                                    |
 | [`path-clean`][path-clean]                                                                               | Cleans up file paths, and removes redundant parts                                                                                                                            |
 | [`slice-deque`][slice-deque]                                                                             | Implementation of [alloc::collections::vec_deque::VecDeque] that can be directly mapped to a slice                                                                           |
-| [`multiqueue2`][multiqueue2]                                                                             | Fork of [multiqueue]. Allows for inter-thread messaging with multiple senders and receivers all bundled together                                                             |
+| [`multiqueue2`][multiqueue2]                                                                             | Fork of `multiqueue`. Allows for inter-thread messaging with multiple senders and receivers all bundled together                                                             |
 | [`clipboard`][clipboard]                                                                                 | Can you guess?                                                                                                                                                               |
 | [`rand`][rand]                                                                                           | See above                                                                                                                                                                    |
 | [`humantime`][humantime]                                                                                 | Makes the `std::time` structs much more readable for us poor humans when formatted                                                                                           |
@@ -73,7 +73,7 @@ These are the default fonts provided with the application. They are copied to th
 | [`imgui-winit-support`][imgui-winit-support]                                                             | Provides a backend for [`imgui`][imgui] (handles window management, IO, etc)                                                                                                 |
 | [`winit`][winit]                                                                                         | OS Window interaction library. Required by [`imgui-winit-support`][imgui-winit-support]                                                                                      |
 |                                                                                                          |                                                                                                                                                                              |
-| [`vek`][vek]                                                                                             | > Generic 2D-3D math swiss army knife for game engines, with SIMD support and focus on convenience.                                                                                                                                                                           |
+| [`vek`][vek]                                                                                             | > Generic 2D-3D math swiss army knife for game engines, with SIMD support and focus on convenience.                                                                          |
 
 [shadow-rs]: https://docs.rs/crate/shadow-rs
 [color-eyre]: https://docs.rs/crate/color-eyre
@@ -92,3 +92,19 @@ These are the default fonts provided with the application. They are copied to th
 [regex]: https://docs.rs/crate/regex
 [fs_extra]: https://docs.rs/crate/fs_extra
 [itertools]: https://docs.rs/crate/itertools
+[nameof]: https://docs.rs/crate/nameof
+[backtrace]: https://docs.rs/crate/backtrace
+[tracing-flame]: https://docs.rs/crate/tracing-flame
+[criterion]: https://docs.rs/crate/criterion
+[fancy-regex]: https://docs.rs/crate/fancy-regex
+[path-clean]: https://docs.rs/crate/path-clean
+[slice-deque]: https://docs.rs/crate/slice-deque
+[multiqueue2]: https://docs.rs/crate/multiqueue2
+[multiqueue]: https://docs.rs/crate/multiqueue
+[rand]: https://docs.rs/crate/rand
+[humantime]: https://docs.rs/crate/humantime
+[serde]: https://docs.rs/crate/serde
+[mint]: https://docs.rs/crate/mint
+[throttle]: https://docs.rs/crate/throttle
+[winit]: https://docs.rs/crate/winit
+[vek]: https://docs.rs/crate/vek
