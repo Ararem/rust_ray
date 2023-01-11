@@ -1,14 +1,15 @@
-use backtrace::trace;
 use crate::config::init_time::InitTimeAppConfig;
-use crate::config::{load_config_from_disk, read_config_value, save_config_to_disk, update_config};
 use crate::config::run_time::RuntimeAppConfig;
+use crate::config::{load_config_from_disk, read_config_value, save_config_to_disk, update_config};
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_report_display;
 use crate::ui::build_ui_impl::shared::error_display::an_error_occurred;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
+use backtrace::trace;
 use color_eyre::Report;
 use imgui::{TreeNodeFlags, Ui};
+use tracing::subscriber::with_default;
 use tracing::{debug, trace, trace_span, warn};
 
 pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
@@ -52,15 +53,16 @@ pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
     modified_config.init.render(ui, true)?;
     modified_config.runtime.render(ui, true)?;
 
-
-    update_config(|cfg|{
+    update_config(|cfg| {
         //Do a check to make sure we aren't overwriting any other external changes
-        if cfg != &original_config{
-            warn!(target: GENERAL_WARNING_NON_FATAL, "original and current config didn't match: something modified config externally while config UI was being rendered");
+        if cfg != &original_config {
+            warn!(
+                target: GENERAL_WARNING_NON_FATAL,
+                "original and current config didn't match: something modified config externally while config UI was being rendered"
+            );
         }
         *cfg = modified_config;
     });
-
 
     span_render_config.exit();
     Ok(())
@@ -70,43 +72,51 @@ impl UiItem for InitTimeAppConfig {
     fn render(&mut self, ui: &Ui, _visible: bool) -> FallibleFn {
         let span_render = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_init_config", init_config=?self).entered();
         trace!(target: UI_TRACE_BUILD_INTERFACE, "init config collapsing header");
-        if !ui.collapsing_header("Init Config", TreeNodeFlags::empty()){
-            trace!(target: UI_TRACE_BUILD_INTERFACE, "init config collapsed");
-            return Ok(());
-        }
-        if ui.collapsing_header("UI", TreeNodeFlags::empty()){
+        let init_config_node = match ui.tree_node("Init Config") {
+            None => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "init config collapsed");
+                return Ok(());
+            }
+            Some(node) => node,
+        };
+
+        if let Some(ui_config_node) = ui.tree_node("UI") {
+            // With longer labels, the labels don't fit on the screen unless we give them a bit more width
+            let width_token = ui.push_item_width(ui.content_region_avail()[0] * 0.5);
             let cfg = &mut self.ui_config;
-            if ui.checkbox("VSync", &mut cfg.vsync){
+            if ui.checkbox("VSync", &mut cfg.vsync) {
                 trace!(target: UI_DEBUG_USER_INTERACTION, "changed vsync => {}", cfg.vsync);
             }
-            if ui.checkbox("Start Maximised", &mut cfg.start_maximised){
+            if ui.checkbox("Start Maximised", &mut cfg.start_maximised) {
                 trace!(target: UI_DEBUG_USER_INTERACTION, "changed start_maximised => {}", cfg.start_maximised);
             }
             // Since we only have 3 possible values here, I find it acceptable to use hardcoded values
             // This does mean that everything has to match perfectly, or bugs will happen
-            const HARDWARE_ACCELERATION_OPTIONS: [&'static str;3] = ["Automatic", "Enabled", "Disabled"];
-            let mut hw_accel_idx = match cfg.hardware_acceleration{
+            const HARDWARE_ACCELERATION_OPTIONS: [&'static str; 3] = ["Automatic", "Enabled", "Disabled"];
+            let mut hw_accel_idx = match cfg.hardware_acceleration {
                 None => 0,
                 Some(true) => 1,
-                Some(false) => 2
+                Some(false) => 2,
             };
-            if ui.list_box("Hardware acceleration", &mut hw_accel_idx, &HARDWARE_ACCELERATION_OPTIONS, 3){
-                let accel = match hw_accel_idx{
+            if ui.combo_simple_string("Hardware acceleration", &mut hw_accel_idx, &HARDWARE_ACCELERATION_OPTIONS) {
+                let accel = match hw_accel_idx {
                     0 => None,
                     1 => Some(true),
                     2 => Some(false),
-                    bad_value => unreachable!("There are only 3 option for hardware acceleration, but the value was out of range: {bad_value}")
+                    bad_value => unreachable!("There are only 3 option for hardware acceleration, but the value was out of range: {}", bad_value),
                 };
                 cfg.hardware_acceleration = accel;
                 trace!(target: UI_DEBUG_USER_INTERACTION, "changed hardware acceleration => {:?}", cfg.hardware_acceleration);
             }
             ui.label_text("Default window size", /*TODO: Impl*/ "TODO");
             ui.label_text("Multisampling", /*TODO: Impl*/ "TODO");
-        }
-        else{
+            width_token.end();
+            ui_config_node.end();
+        } else {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "ui config collapsed")
         }
 
+        init_config_node.end();
         span_render.exit();
         Ok(())
     }

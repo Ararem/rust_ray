@@ -172,10 +172,10 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
             Ok(thread_return) => {
                 let formatted_thread_return = match thread_return {
                     Ok(()) => "Ok(())".to_string(),
-                    Err(report) => format_report_string(&report).replace("\n", "\n\t\t"),
+                    Err(report) => format_report_string(&report).replace("\n", "\n||\t\t"),
                 };
                 let error = Report::msg("ui thread finished early")
-                    .section(format!("Return Value:\n{formatted_thread_return}", ));
+                    .section(format!("Return Value:\n{formatted_thread_return}"));
                 Err(error)
             }
             Err(boxed_panic) => {
@@ -195,10 +195,10 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
             Ok(thread_return) => {
                 let formatted_thread_return = match thread_return {
                     Ok(()) => "Ok(())".to_string(),
-                    Err(report) => format_report_string(&report).replace("\n", "\n\t\t"),
+                    Err(report) => format_report_string(&report).replace("\n", "\n||\t\t"),
                 };
                 let error = Report::msg("engine thread finished early")
-                    .section(format!("Return Value:\n{formatted_thread_return}", ));
+                    .section(format!("Return Value:\n{formatted_thread_return}"));
                 Err(error)
             }
             Err(boxed_panic) => {
