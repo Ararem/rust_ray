@@ -17,7 +17,7 @@ use QuitAppNoErrorReason::QuitInteractionByUser;
 
 use crate::engine::*;
 use crate::helper::logging::event_targets::*;
-use crate::helper::logging::{dyn_panic_to_report, format_report_display};
+use crate::helper::logging::{dyn_panic_to_report, format_report_display, format_report_string};
 use crate::program::thread_messages::ThreadMessage::*;
 use crate::program::thread_messages::*;
 use crate::ui::ui_data::UiData;
@@ -169,12 +169,17 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
         error!(target: THREAD_DEBUG_GENERAL, "ui thread finished early when it shouldn't have, joining to get return value");
         // Thread finished so .join() should be wait-free
         return match threads.ui.join() {
-            Ok(ret) => {
-                let error = Report::msg("ui thread finished early").section(format!("Return Value:\n{ret:#?}"));
+            Ok(thread_return) => {
+                let formatted_thread_return = match thread_return {
+                    Ok(()) => "Ok(())".to_string(),
+                    Err(report) => format_report_string(&report).replace("\n", "\n\t\t"),
+                };
+                let error = Report::msg("ui thread finished early")
+                    .section(format!("Return Value:\n{formatted_thread_return}", ));
                 Err(error)
             }
-            Err(boxed_error) => {
-                let error = dyn_panic_to_report(&boxed_error).wrap_err("ui thread panicked while running");
+            Err(boxed_panic) => {
+                let error = dyn_panic_to_report(&boxed_panic).wrap_err("ui thread panicked while running");
                 Err(error)
             }
         };
@@ -187,13 +192,17 @@ fn check_threads_are_running(threads: Threads) -> eyre::Result<Threads> {
         error!(target: THREAD_DEBUG_GENERAL, "engine thread finished early when it shouldn't have, joining to get return value");
         // Thread finished so .join() should be wait-free
         return match threads.engine.join() {
-            Ok(ret) => {
-                let error = Report::msg("engine thread exited early").section(format!("Return Value:\n{ret:#?}"));
-                debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
+            Ok(thread_return) => {
+                let formatted_thread_return = match thread_return {
+                    Ok(()) => "Ok(())".to_string(),
+                    Err(report) => format_report_string(&report).replace("\n", "\n\t\t"),
+                };
+                let error = Report::msg("engine thread finished early")
+                    .section(format!("Return Value:\n{formatted_thread_return}", ));
                 Err(error)
             }
-            Err(boxed_error) => {
-                let error = dyn_panic_to_report(&boxed_error).wrap_err("engine thread panicked while running");
+            Err(boxed_panic) => {
+                let error = dyn_panic_to_report(&boxed_panic).wrap_err("engine thread panicked while running");
                 debug!(target: THREAD_DEBUG_GENERAL, report=%format_report_display(&error));
                 Err(error)
             }
