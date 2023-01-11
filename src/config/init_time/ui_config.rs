@@ -4,8 +4,6 @@ use winit::dpi::{LogicalSize, Size};
 /// Base configuration struct that contains options that configure the entire app
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UiConfig {
-    /// Default value for the size of the main operating system window
-    pub default_window_size: Size,
     /// Whether the main OS window should start maximised (when created initially)
     pub start_maximised: bool,
     /// flag for if the renderer should enable VSync
@@ -23,7 +21,6 @@ pub struct UiConfig {
 impl std::default::Default for UiConfig {
     fn default() -> Self {
         Self {
-            default_window_size: Size::Logical(LogicalSize { width: 1600.0, height: 900.0 }),
             start_maximised: true,
             vsync: false,
             hardware_acceleration: Some(true),

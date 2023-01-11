@@ -495,7 +495,6 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] window builder");
     let window_builder = WindowBuilder::new()
         .with_title(title)
-        .with_inner_size(config.default_window_size)
         .with_maximized(config.start_maximised);
     debug!(target: UI_DEBUG_GENERAL, ?window_builder, "created [winit] window builder");
     //TODO: Configure

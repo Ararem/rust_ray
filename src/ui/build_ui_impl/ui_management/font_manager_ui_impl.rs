@@ -32,6 +32,10 @@ impl UiItem for FontManager {
                 }
             }
         }
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "[Button] regenerate font atlas");
+        if ui.button("Regenerate font atlas") {
+            self.dirty = true;
+        }
 
         // Whether the manager needs to rebuild the font next frame
         let dirty = &mut self.dirty;

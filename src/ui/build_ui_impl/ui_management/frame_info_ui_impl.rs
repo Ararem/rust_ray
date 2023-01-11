@@ -108,7 +108,7 @@ impl UiItem for FrameInfo {
 
         ui.plot_histogram(format!("{:0>5.2} .. {:0>5.2} ms", smooth_delta_min, smooth_delta_max), &deltas[0..info_range_end])
             .overlay_text("ms/frame")
-            .scale_min(smooth_delta_min)
+            .scale_min(if config.min_always_at_zero { 0.0 } else { smooth_delta_min })
             .scale_max(smooth_delta_max)
             .build();
 
@@ -142,7 +142,7 @@ impl UiItem for FrameInfo {
 
         ui.plot_histogram(format!("{:0>6.2} .. {:>6.2} fps", smooth_fps_min, smooth_fps_max), &fps[0..info_range_end])
             .overlay_text("frames/s")
-            .scale_min(smooth_fps_min * 0.0)
+            .scale_min(if config.min_always_at_zero { 0.0 } else { smooth_fps_min })
             .scale_max(smooth_fps_max)
             .build();
 

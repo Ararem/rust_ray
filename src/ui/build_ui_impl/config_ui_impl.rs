@@ -1,3 +1,4 @@
+use crate::config::compile_time::ui_config::MAX_FRAMES_TO_TRACK;
 use crate::config::init_time::InitTimeAppConfig;
 use crate::config::run_time::RuntimeAppConfig;
 use crate::config::{load_config_from_disk, read_config_value, save_config_to_disk, update_config};
@@ -8,9 +9,12 @@ use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
 use backtrace::trace;
 use color_eyre::Report;
-use imgui::{TreeNodeFlags, Ui};
+use criterion::AxisScale::Logarithmic;
+use imgui::{SliderFlags, TreeNodeFlags, Ui};
+use indoc::{formatdoc, indoc};
 use tracing::subscriber::with_default;
 use tracing::{debug, trace, trace_span, warn};
+use vek::num_traits::real::Real;
 
 pub(super) fn render_config_ui(ui: &Ui, visible: bool) -> FallibleFn {
     let span_render_config = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_config").entered();
@@ -108,8 +112,17 @@ impl UiItem for InitTimeAppConfig {
                 cfg.hardware_acceleration = accel;
                 trace!(target: UI_DEBUG_USER_INTERACTION, "changed hardware acceleration => {:?}", cfg.hardware_acceleration);
             }
-            ui.label_text("Default window size", /*TODO: Impl*/ "TODO");
-            ui.label_text("Multisampling", /*TODO: Impl*/ "TODO");
+            // Multisampling must be a power of 2, so fake it by showing the exponent
+            let mut multisampling_exponent: u16 = (cfg.multisampling as f32).log2() as u16;
+            if ui
+                .slider_config("Multisampling", 0, 4)
+                .display_format(format!("{}", 1u16 << multisampling_exponent))
+                .build(&mut multisampling_exponent)
+            {
+                cfg.multisampling = 1u16 << multisampling_exponent;
+                trace!(target: UI_DEBUG_USER_INTERACTION, "changed multisampling => {}", cfg.multisampling);
+            }
+
             width_token.end();
             ui_config_node.end();
         } else {
@@ -122,9 +135,117 @@ impl UiItem for InitTimeAppConfig {
     }
 }
 impl UiItem for RuntimeAppConfig {
-    fn render(&mut self, _ui: &Ui, _visible: bool) -> FallibleFn {
+    fn render(&mut self, ui: &Ui, _visible: bool) -> FallibleFn {
+        let span_render = trace_span!(target: UI_TRACE_BUILD_INTERFACE, "render_runtime_config", runtime_config=?self).entered();
+        trace!(target: UI_TRACE_BUILD_INTERFACE, "runtime config collapsing header");
+        let init_config_node = match ui.tree_node("Runtime Config") {
+            None => {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "runtime config collapsed");
+                return Ok(());
+            }
+            Some(node) => node,
+        };
+
+        if let Some(ui_config_node) = ui.tree_node("UI") {
+            // With longer labels, the labels don't fit on the screen unless we give them a bit more width
+            let width_token = ui.push_item_width(ui.content_region_avail()[0] * 0.5);
+            let ui_cfg = &mut self.ui;
+
+            if ui.slider("Font Oversampling", 1, 4, &mut ui_cfg.font_oversampling) {
+                trace!(target: UI_DEBUG_USER_INTERACTION, "changed font_oversampling => {}", ui_cfg.font_oversampling);
+            }
+            if let Some(ui_config_node) = ui.tree_node("Frame Info") {
+                // With longer labels, the labels don't fit on the screen unless we give them a bit more width
+                let width_token = ui.push_item_width(ui.content_region_avail()[0] * 0.5);
+                let frame_cfg = &mut ui_cfg.frame_info;
+
+                if ui.checkbox("Always show 0", &mut frame_cfg.min_always_at_zero) {
+                    trace!(target: UI_DEBUG_USER_INTERACTION, "changed min_always_at_zero => {}", frame_cfg.min_always_at_zero);
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text("When displaying frame rate and frame time graphs, whether to always have the bottom of the graph be at 0 (rather than the approximate smallest value)");
+                }
+
+                if slider_usize(ui, &mut frame_cfg.num_frames_to_track, SliderFlags::LOGARITHMIC, 69, MAX_FRAMES_TO_TRACK, "Max Tracked Frames", None) {
+                    trace!(target: UI_DEBUG_USER_INTERACTION, "changed num_frames_to_track => {}", frame_cfg.num_frames_to_track);
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text(indoc! {r"
+                    The maximum amount of frames that can be stored at one time.\
+                    You probably want to leave this alone and modify [Num Displayed Frames] instead
+                    "});
+                }
+
+                if slider_usize(
+                    ui,
+                    &mut frame_cfg.num_frames_to_display,
+                    SliderFlags::LOGARITHMIC,
+                    1,
+                    frame_cfg.num_frames_to_track,
+                    "Num Displayed Frames",
+                    None,
+                ) {
+                    trace!(target: UI_DEBUG_USER_INTERACTION, "changed num_frames_to_display => {}", frame_cfg.num_frames_to_display);
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text(indoc! {r"
+                    The maximum amount of frames that will be displayed in the frame info interface.
+                    Cannot be set higher than [Max Tracked Frames], and will be soft-limited if there are insufficient frames to display
+                    (i.e. if only X frames are stored, only X will be shown, until X is at least this value)
+                    "});
+                }
+
+                if slider_usize(ui, &mut frame_cfg.chunked_average_smoothing_size, SliderFlags::LOGARITHMIC, 1, 256, "Frame Smoothing Interval", None) {
+                    trace!(
+                        target: UI_DEBUG_USER_INTERACTION,
+                        "changed chunked_average_smoothing_size => {}",
+                        frame_cfg.chunked_average_smoothing_size
+                    );
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text(indoc! {r"
+                    When calculating the value range for plotting, the chunk size in which to average values.
+                    Higher values increase average more values, smoothing the min/max calculation (by reducing outliers), and de-focusing peaks and spikes
+                    "});
+                }
+
+                if ui.slider_config("Lerp speed", 0.00001, 0.1).flags(SliderFlags::LOGARITHMIC).build(&mut frame_cfg.smooth_speed) {
+                    trace!(target: UI_DEBUG_USER_INTERACTION, "changed smooth_speed => {}", frame_cfg.smooth_speed);
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text(indoc! {r#"
+                    The amount by which to lerp between old values and new values, each frame. Smaller values will result in a smaller interpolation per-frame,
+                    Which will "slow down" the effect and result in more gradual changes
+                    "#});
+                }
+
+                width_token.end();
+                ui_config_node.end();
+            } else {
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "ui config collapsed")
+            }
+
+            width_token.end();
+            ui_config_node.end();
+        } else {
+            trace!(target: UI_TRACE_BUILD_INTERFACE, "ui config collapsed")
+        }
+
+        init_config_node.end();
+        span_render.exit();
         Ok(())
     }
+}
+
+fn slider_usize(ui: &Ui, val: &mut usize, flags: SliderFlags, min: usize, max: usize, label: &str, display_format: Option<&str>) -> bool {
+    let mut compat_u64 = *val as u64;
+    let mut slider = ui.slider_config(label, min as u64, max as u64).flags(flags);
+    if let Some(fmt) = display_format {
+        slider = slider.display_format(fmt);
+    }
+    let changed = slider.build(&mut compat_u64);
+    *val = compat_u64 as usize;
+    changed
 }
 
 /*
