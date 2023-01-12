@@ -120,7 +120,7 @@ impl Default for SeverityColours {
         Self {
             good: [0.3, 1.0, 0.3, 1.0].into(),       // Green
             neutral: [0.75, 0.75, 0.75, 1.0].into(), // Grey
-            note: [0.75, 0.75, 0.75, 1.0].into(),    // Grey
+            note: [0.38, 0.51, 0.85, 1.0].into(),    // Grey-ish blue
             warning: [1.0, 0.5, 0.0, 1.0].into(),    // Amber
             very_bad: [1.0, 0.0, 0.0, 1.0].into(),   // Red
         }

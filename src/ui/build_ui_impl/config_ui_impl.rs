@@ -1,5 +1,6 @@
 use crate::config::compile_time::ui_config::MAX_FRAMES_TO_TRACK;
 use crate::config::init_time::InitTimeAppConfig;
+use crate::config::run_time::ui_config::theme::Colour;
 use crate::config::run_time::RuntimeAppConfig;
 use crate::config::{load_config_from_disk, read_config_value, save_config_to_disk, update_config};
 use crate::helper::logging::event_targets::*;
@@ -10,7 +11,7 @@ use crate::FallibleFn;
 use backtrace::trace;
 use color_eyre::Report;
 use criterion::AxisScale::Logarithmic;
-use imgui::{SliderFlags, TreeNodeFlags, Ui};
+use imgui::{ColorEditFlags, ColorFormat, ColorPreview, SliderFlags, TreeNodeFlags, Ui};
 use indoc::{formatdoc, indoc};
 use tracing::subscriber::with_default;
 use tracing::{debug, trace, trace_span, warn};
@@ -154,7 +155,8 @@ impl UiItem for RuntimeAppConfig {
             if ui.slider("Font Oversampling", 1, 4, &mut ui_cfg.font_oversampling) {
                 trace!(target: UI_DEBUG_USER_INTERACTION, "changed font_oversampling => {}", ui_cfg.font_oversampling);
             }
-            if let Some(ui_config_node) = ui.tree_node("Frame Info") {
+
+            if let Some(frame_info_node) = ui.tree_node("Frame Info") {
                 // With longer labels, the labels don't fit on the screen unless we give them a bit more width
                 let width_token = ui.push_item_width(ui.content_region_avail()[0] * 0.5);
                 let frame_cfg = &mut ui_cfg.frame_info;
@@ -220,11 +222,80 @@ impl UiItem for RuntimeAppConfig {
                 }
 
                 width_token.end();
-                ui_config_node.end();
+                frame_info_node.end();
             } else {
-                trace!(target: UI_TRACE_BUILD_INTERFACE, "ui config collapsed")
+                trace!(target: UI_TRACE_BUILD_INTERFACE, "frame info config collapsed")
             }
 
+            if let Some(colours_node) = ui.tree_node("Colours") {
+                let col_cfg = &mut ui_cfg.colours;
+                macro_rules! colour {
+                    ($name:expr, $field:expr) => {
+                        colour(ui, &mut $field, $name);
+                    };
+                }
+                fn colour(ui: &Ui, field: &mut Colour, name: &str) {
+                    //TODO: Should this be another part of the config?
+                    let picker = ui
+                        .color_picker4_config(name, field)
+                        .format(ColorFormat::Float)
+                        .tooltip(true)
+                        .alpha(true)
+                        .alpha_bar(true)
+                        .display_hex(true)
+                        .display_hsv(true)
+                        .display_rgb(true)
+                        .side_preview(true)
+                        .small_preview(false)
+                        .preview(ColorPreview::HalfAlpha)
+                        .options(true);
+                    if picker.build() {
+                        trace!(target: UI_DEBUG_USER_INTERACTION, "changed ui colour {name} => {field:?}");
+                    }
+                }
+
+                if ui.collapsing_header("Text Colours", TreeNodeFlags::empty()) {
+                    colour!("Normal", col_cfg.text.normal);
+                    colour!("Subtle", col_cfg.text.subtle);
+                    colour!("Accent", col_cfg.text.accent);
+                } else {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "text colours header collapsed");
+                }
+                if ui.collapsing_header("Severity Colours", TreeNodeFlags::empty()) {
+                    colour!("Good", col_cfg.severity.good);
+                    colour!("Neutral", col_cfg.severity.neutral);
+                    colour!("Note", col_cfg.severity.note);
+                    colour!("Warning", col_cfg.severity.warning);
+                    colour!("Very Bad", col_cfg.severity.very_bad);
+                } else {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "severity colours header collapsed");
+                }
+                if ui.collapsing_header("Value Colours", TreeNodeFlags::empty()) {
+                    colour!("Error Event", col_cfg.value.level_error);
+                    colour!("Warn Event", col_cfg.value.level_warn);
+                    colour!("Info Event", col_cfg.value.level_info);
+                    colour!("Debug Event", col_cfg.value.level_debug);
+                    colour!("Trace Event", col_cfg.value.level_trace);
+                    ui.separator();
+                    colour!("Tracing Event Name", col_cfg.value.tracing_event_name);
+                    colour!("Tracing Field Name", col_cfg.value.tracing_event_field_name);
+                    colour!("Tracing Field Value", col_cfg.value.tracing_event_field_value);
+                    ui.separator();
+                    colour!("Function", col_cfg.value.function_name);
+                    colour!("File Path", col_cfg.value.file_location);
+                    ui.separator();
+                    colour!("Error Message", col_cfg.value.error_message);
+                    ui.separator();
+                    colour!("Value Label", col_cfg.value.value_label);
+                    ui.separator();
+                    colour!("Misc Value", col_cfg.value.misc_value);
+                    colour!("Missing Value", col_cfg.value.missing_value);
+                    colour!("Symbols", col_cfg.value.symbol);
+                    colour!("Numbers", col_cfg.value.number);
+                } else {
+                    trace!(target: UI_TRACE_BUILD_INTERFACE, "value colours header collapsed");
+                }
+            }
             width_token.end();
             ui_config_node.end();
         } else {
