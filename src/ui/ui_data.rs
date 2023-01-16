@@ -18,7 +18,7 @@ impl Default for UiData {
                 show_demo_window: true,
                 show_metrics_window: true,
                 show_ui_management_window: true,
-                show_config_window: false,
+                show_config_window: true,
             },
         }
     }

@@ -1,6 +1,6 @@
 use crate::config::compile_time::ui_config::MAX_FRAMES_TO_TRACK;
 use crate::config::init_time::InitTimeAppConfig;
-use crate::config::run_time::ui_config::theme::Colour;
+use crate::config::run_time::ui_config::theme::{Colour, Theme};
 use crate::config::run_time::RuntimeAppConfig;
 use crate::config::{load_config_from_disk, read_config_value, save_config_to_disk, update_config};
 use crate::helper::logging::event_targets::*;
@@ -8,12 +8,9 @@ use crate::helper::logging::format_report_display;
 use crate::ui::build_ui_impl::shared::error_display::an_error_occurred;
 use crate::ui::build_ui_impl::UiItem;
 use crate::FallibleFn;
-use backtrace::trace;
 use color_eyre::Report;
-use criterion::AxisScale::Logarithmic;
-use imgui::{ColorEditFlags, ColorFormat, ColorPreview, SliderFlags, TreeNodeFlags, Ui};
-use indoc::{formatdoc, indoc};
-use tracing::subscriber::with_default;
+use imgui::{ColorPreview, SliderFlags, TreeNodeFlags, Ui};
+use indoc::indoc;
 use tracing::{debug, trace, trace_span, warn};
 use vek::num_traits::real::Real;
 
@@ -237,40 +234,43 @@ impl UiItem for RuntimeAppConfig {
                 fn colour(ui: &Ui, field: &mut Colour, name: &str) {
                     //TODO: Should this be another part of the config?
                     let picker = ui
-                        .color_picker4_config(name, field)
-                        .format(ColorFormat::Float)
+                        .color_edit4_config(name, field)
+                        .options(true)
+                        .alpha_bar(true)
+                        .small_preview(true)
+                        .hdr(false)
+                        .picker(true)
+                        .label(false)
                         .tooltip(true)
                         .alpha(true)
-                        .alpha_bar(true)
-                        .display_hex(true)
-                        .display_hsv(true)
-                        .display_rgb(true)
-                        .side_preview(true)
-                        .small_preview(false)
-                        .preview(ColorPreview::HalfAlpha)
-                        .options(true);
+                        .preview(ColorPreview::HalfAlpha);
                     if picker.build() {
                         trace!(target: UI_DEBUG_USER_INTERACTION, "changed ui colour {name} => {field:?}");
                     }
+                    // Colour the label of the colour picker, so we get a bit of an example
+                    ui.same_line();
+                    ui.text_colored(*field,name);
                 }
 
-                if ui.collapsing_header("Text Colours", TreeNodeFlags::empty()) {
+                if let Some(token) = ui.tree_node("Text Colours") {
                     colour!("Normal", col_cfg.text.normal);
                     colour!("Subtle", col_cfg.text.subtle);
                     colour!("Accent", col_cfg.text.accent);
+                    token.end();
                 } else {
                     trace!(target: UI_TRACE_BUILD_INTERFACE, "text colours header collapsed");
                 }
-                if ui.collapsing_header("Severity Colours", TreeNodeFlags::empty()) {
+                if let Some(token) = ui.tree_node("Severity Colours") {
                     colour!("Good", col_cfg.severity.good);
                     colour!("Neutral", col_cfg.severity.neutral);
                     colour!("Note", col_cfg.severity.note);
                     colour!("Warning", col_cfg.severity.warning);
                     colour!("Very Bad", col_cfg.severity.very_bad);
+                    token.end();
                 } else {
                     trace!(target: UI_TRACE_BUILD_INTERFACE, "severity colours header collapsed");
                 }
-                if ui.collapsing_header("Value Colours", TreeNodeFlags::empty()) {
+                if let Some(token) = ui.tree_node("Value Colours") {
                     colour!("Error Event", col_cfg.value.level_error);
                     colour!("Warn Event", col_cfg.value.level_warn);
                     colour!("Info Event", col_cfg.value.level_info);
@@ -292,6 +292,7 @@ impl UiItem for RuntimeAppConfig {
                     colour!("Missing Value", col_cfg.value.missing_value);
                     colour!("Symbols", col_cfg.value.symbol);
                     colour!("Numbers", col_cfg.value.number);
+                    token.end();
                 } else {
                     trace!(target: UI_TRACE_BUILD_INTERFACE, "value colours header collapsed");
                 }
