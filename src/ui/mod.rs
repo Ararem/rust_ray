@@ -10,19 +10,24 @@ use glium::glutin::platform::run_return::EventLoopExtRunReturn;
 use glium::glutin::platform::windows::EventLoopBuilderExtWindows;
 use glium::glutin::CreationError::NoAvailablePixelFormat;
 use glium::{glutin, Display, Surface};
+use imgui::sys::{igColorConvertHSVtoRGB, igColorConvertRGBtoHSV};
 use imgui::Condition::Always;
-use imgui::{Context, StyleVar, WindowFlags};
+use imgui::{ColorStackToken, Context, StyleColor, StyleVar, WindowFlags};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::winit::event_loop::EventLoopBuilder;
 use imgui_winit_support::winit::window::WindowBuilder;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use mint::Vector4;
 use multiqueue2::{BroadcastReceiver, BroadcastSender};
 use nameof::name_of;
 use tracing::field::{debug, Empty};
 use tracing::{debug, debug_span, error, info, info_span, trace, trace_span, warn};
+use vek::num_integer::div_rem;
+use vek::num_traits::clamp;
 
 use crate::build::*;
 use crate::config::read_config_value;
+use crate::config::run_time::ui_config::theme::Theme;
 use crate::helper::logging::event_targets::*;
 use crate::helper::logging::format_report_display;
 use crate::program::program_data::ProgramData;
@@ -336,6 +341,9 @@ fn outer_render_a_frame(
             }
         });
 
+        // Apply the theme to the default Dear ImGUI style colours
+        let style_tokens = apply_theme_style_colours(ui, &read_config_value(|config| config.runtime.ui.colours));
+
         let mut main_window_flags = WindowFlags::empty();
         main_window_flags |= WindowFlags::NO_DECORATION; // No borders etc for top-level window
         main_window_flags |= WindowFlags::NO_MOVE; // Don't allow the window to be moved (should always cover full screen)
@@ -388,6 +396,9 @@ fn outer_render_a_frame(
             token.pop();
         } else {
             trace!(target: UI_TRACE_BUILD_INTERFACE, "no custom font token to pop");
+        }
+        for token in style_tokens {
+            token.pop();
         }
 
         span_outer_build_ui.exit();
@@ -493,9 +504,7 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
     debug!(target: UI_DEBUG_GENERAL, ?glutin_context_builder, "created [glutin] context builder");
 
     debug!(target: UI_DEBUG_GENERAL, "creating [winit] window builder");
-    let window_builder = WindowBuilder::new()
-        .with_title(title)
-        .with_maximized(config.start_maximised);
+    let window_builder = WindowBuilder::new().with_title(title).with_maximized(config.start_maximised);
     debug!(target: UI_DEBUG_GENERAL, ?window_builder, "created [winit] window builder");
     //TODO: Configure
     debug!(target: UI_DEBUG_GENERAL, "creating [glium] display");
@@ -563,4 +572,79 @@ fn init_ui_system(title: &str) -> eyre::Result<UiSystem> {
             frame_info: FrameInfo::new(),
         },
     })
+}
+
+/// Applies the [Theme]'s colours to the UI, as [StyleColor]s
+fn apply_theme_style_colours<'ui>(ui: &'ui imgui::Ui, theme: &Theme) -> Vec<ColorStackToken<'ui>> {
+    fn modify_col(colour: Vector4<f32>, saturation: f32, value: f32, alpha: f32) -> Vector4<f32> {
+        let mut colour = colour;
+        let (mut h, mut s, mut v) = (0.0, 0.0, 0.0);
+        let (r, g, b, a) = (&mut colour.x, &mut colour.y, &mut colour.z, &mut colour.w);
+        unsafe {
+            igColorConvertRGBtoHSV(*r, *g, *b, &mut h, &mut s, &mut v);
+            s = clamp(s * saturation, 0.0, 1.0);
+            v = clamp(v * value, 0.0, 1.0);
+            igColorConvertHSVtoRGB(h, s, v, r, g, b);
+            *a *= alpha;
+        }
+        colour
+    }
+    // As a side note, most of these values were chosen to be similar to the original Dear ImGui's default style
+    // That way, the user would have more customisation, but it wouldn't be too dissimilar at first
+    let mut vec = vec![];
+    // Text
+    vec.push(ui.push_style_color(StyleColor::Text, theme.text.normal));
+
+    //TODO: Share these a little more if possible
+
+    // Frames
+    vec.push(ui.push_style_color(StyleColor::FrameBg, modify_col(theme.text.accent, 0.45, 0.55, 0.54)));
+    vec.push(ui.push_style_color(StyleColor::FrameBgHovered, modify_col(theme.text.accent, 0.735, 0.98, 0.4)));
+    vec.push(ui.push_style_color(StyleColor::FrameBgActive, modify_col(theme.text.accent, 0.735, 0.98, 0.67)));
+
+    // Titles and tabs
+    vec.push(ui.push_style_color(StyleColor::TitleBgActive, modify_col(theme.text.accent, 0.667, 0.48, 1.0)));
+
+    let widget_normal = modify_col(theme.text.accent, 0.6, 0.98, 0.5);
+    let widget_bright = modify_col(theme.text.accent, 1.0, 1.0, 1.0);
+    let widget_hovered = modify_col(theme.text.accent, 0.7, 0.8, 0.8);
+    let widget_active = modify_col(theme.text.accent, 0.8, 0.9, 1.0);
+
+    vec.push(ui.push_style_color(StyleColor::ScrollbarGrab, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::ScrollbarGrabActive, widget_active));
+    vec.push(ui.push_style_color(StyleColor::ScrollbarGrabHovered, widget_hovered));
+
+    vec.push(ui.push_style_color(StyleColor::CheckMark, widget_bright));
+    vec.push(ui.push_style_color(StyleColor::SliderGrab, widget_bright));
+    vec.push(ui.push_style_color(StyleColor::SliderGrabActive, widget_active));
+
+    vec.push(ui.push_style_color(StyleColor::Button, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::ButtonActive, widget_active));
+    vec.push(ui.push_style_color(StyleColor::ButtonHovered, widget_hovered));
+
+    vec.push(ui.push_style_color(StyleColor::Header, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::HeaderActive, widget_active));
+    vec.push(ui.push_style_color(StyleColor::HeaderHovered, widget_hovered));
+
+    vec.push(ui.push_style_color(StyleColor::ResizeGrip, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::ResizeGripActive, widget_active));
+    vec.push(ui.push_style_color(StyleColor::ResizeGripHovered, widget_hovered));
+
+    vec.push(ui.push_style_color(StyleColor::Separator, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::SeparatorActive, widget_active));
+    vec.push(ui.push_style_color(StyleColor::SeparatorHovered, widget_hovered));
+
+    vec.push(ui.push_style_color(StyleColor::Tab, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::TabActive, widget_active));
+    vec.push(ui.push_style_color(StyleColor::TabHovered, widget_hovered));
+    vec.push(ui.push_style_color(StyleColor::TabUnfocused, widget_normal));
+    vec.push(ui.push_style_color(StyleColor::TabUnfocusedActive, widget_hovered));
+
+    vec.push(ui.push_style_color(StyleColor::DockingPreview, widget_hovered));
+    vec.push(ui.push_style_color(StyleColor::DockingEmptyBg, modify_col(theme.text.accent, 0.1, 0.2, 1.0)));
+
+    vec.push(ui.push_style_color(StyleColor::NavHighlight, widget_normal));
+
+    vec.push(ui.push_style_color(StyleColor::Border, modify_col(theme.text.accent, 0.14, 0.5, 0.5)));
+    vec
 }
