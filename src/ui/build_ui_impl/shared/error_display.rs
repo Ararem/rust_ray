@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Mutex;
 use tracing::field::Empty;
-use tracing::{trace, trace_span, warn, Metadata};
+use tracing::{trace, trace_span, warn, Metadata, debug};
 use tracing_error::SpanTraceStatus;
 
 lazy_static! {
@@ -33,6 +33,7 @@ static SHOW_ERRORS_POPUP: AtomicBool = AtomicBool::new(false);
 
 /// Call this function whenever an error occurs (only call once) and you want to display the error
 pub fn an_error_occurred(report: Report) {
+    debug!(target: GENERAL_WARNING_NON_FATAL, "received error to display in ui: {report:#}");
     let mut errors_vec = match ERRORS.lock() {
         Ok(lock) => lock,
         Err(err) => {
